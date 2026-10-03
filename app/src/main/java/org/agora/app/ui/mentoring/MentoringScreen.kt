@@ -1,6 +1,7 @@
 package org.agora.app.ui.mentoring
 
 import org.agora.app.ui.components.containerTransform
+import org.agora.app.ui.components.pagePadding
 import org.agora.app.ui.components.openFrom
 import org.agora.app.ui.components.AvatarRings
 import org.agora.app.ui.components.AgoraSheet
@@ -121,7 +122,7 @@ fun MentoringScreen(user: User, contentPadding: PaddingValues, onOpenThread: (St
 
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { store.refreshInBackground(true); mentorsKey++ }, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = PaddingValues(20.dp, contentPadding.calculateTopPadding() + 4.dp, 20.dp, contentPadding.calculateBottomPadding() + 24.dp),
+            contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // `.mentoring-header-card`: centred heading, subtitle and one call to action

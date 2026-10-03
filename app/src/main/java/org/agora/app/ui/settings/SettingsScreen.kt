@@ -1,6 +1,10 @@
 package org.agora.app.ui.settings
 
 import org.agora.app.ui.components.AvatarRings
+import androidx.compose.foundation.lazy.items
+import org.agora.app.ui.components.isWide
+import org.agora.app.ui.components.pagePadding
+import org.agora.app.ui.components.TwoPane
 import org.agora.app.ui.components.rememberSheetController
 import org.agora.app.ui.components.SheetActions
 import org.agora.app.ui.components.AgoraSheet
@@ -244,13 +248,9 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp, padding.calculateTopPadding() + 4.dp, 20.dp, padding.calculateBottomPadding() + 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Profile
-            item {
+        // Three sections like the web: general settings first, administration, then calendar, privacy and account
+        val blocks = buildList<SettingsBlock> {
+            add(SettingsBlock(0, "profile") {
                 SettingsCard(stringResource(R.string.profile_picture)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         androidx.compose.runtime.key(avatarVersion) { UserAvatar(user.userId, user.fullName, 72.dp, ring = AvatarRings.of(user)) }
@@ -266,10 +266,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                     }
                     Text(stringResource(R.string.profile_pic_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-
-            // Invite code
-            if (user.canManageRegistrationCode) item {
+            })
+            if (user.canManageRegistrationCode) add(SettingsBlock(1, "invite") {
                 SettingsCard(stringResource(R.string.invite_title), Icons.Outlined.Lock) {
                   Column(
                     Modifier
@@ -298,10 +296,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                     }
                   }
                 }
-            }
-
-            // Notifications & push
-            item {
+            })
+            add(SettingsBlock(0, "notifications") {
                 SettingsCard(stringResource(R.string.notif_channels_title), Icons.Outlined.NotificationsNone, contentPadding = PaddingValues(top = 18.dp, bottom = 8.dp), titlePadding = 18.dp) {
                     SwitchItem(stringResource(R.string.notif_duties_title), stringResource(R.string.notif_duties_desc), prefs.duties, !runner.busy) {
                         saveNotifications(prefs.copy(duties = it))
@@ -316,8 +312,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         saveNotifications(prefs.copy(finances = it))
                     }
                 }
-            }
-            item {
+            })
+            add(SettingsBlock(0, "push") {
                 AgoraCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.NotificationsActive, null, tint = if (pushStatus.registered) Agora.colors.success else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -346,10 +342,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         }
                     }
                 }
-            }
-
-            // Appearance & language
-            item {
+            })
+            add(SettingsBlock(0, "appearance") {
                 SettingsCard(stringResource(R.string.appearance), Icons.Outlined.Palette) {
                     CapsLabel(stringResource(R.string.theme_title))
                     val modes = ThemeMode.entries
@@ -374,16 +368,12 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-            }
-
-            // Monthly fees (admins)
-            if (user.isAdmin) item {
+            })
+            if (user.isAdmin) add(SettingsBlock(1, "fees") {
                 SectionTitle(stringResource(R.string.monthly_fees))
                 FeeEditor(data.fees.rates) { rates -> runner.run(savedMsg) { container.repo.saveFeeSettings(rates); container.store.refreshAll() } }
-            }
-
-            // Password
-            item {
+            })
+            add(SettingsBlock(0, "password") {
                 SettingsCard(stringResource(R.string.change_password_title), Icons.Outlined.Key) {
                     AgoraTextField(oldPassword, { oldPassword = it }, label = { Text(stringResource(R.string.old_password)) }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -401,10 +391,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         Text(stringResource(R.string.change_password_title))
                     }
                 }
-            }
-
-            // Calendar subscription
-            item {
+            })
+            add(SettingsBlock(2, "calendar") {
                 SettingsCard(stringResource(R.string.calendar_sub_title), Icons.Outlined.CalendarMonth) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary)
@@ -426,10 +414,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         }
                     }
                 }
-            }
-
-            // Account
-            item {
+            })
+            add(SettingsBlock(2, "account") {
                 SettingsCard(stringResource(R.string.account), Icons.Outlined.AccountCircle, contentPadding = PaddingValues(top = 18.dp, bottom = 8.dp), titlePadding = 18.dp) {
                     ListItem(
                         headlineContent = { Text(stringResource(R.string.open_in_browser)) },
@@ -466,6 +452,23 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                 }
                 Text("Agora Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, start = 4.dp))
+            })
+        }
+        val wide = isWide()
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = pagePadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            SETTINGS_SECTIONS.forEachIndexed { section, title ->
+                val cards = blocks.filter { it.section == section }
+                if (cards.isEmpty()) return@forEachIndexed
+                item(key = "section-$section") { SectionTitle(stringResource(title)) }
+                // Tablets: the cards of a section in two columns
+                if (wide) item(key = "pane-$section") {
+                    TwoPane(true, left = { cards.filterIndexed { i, _ -> i % 2 == 0 }.forEach { it.content() } },
+                        right = { cards.filterIndexed { i, _ -> i % 2 == 1 }.forEach { it.content() } })
+                } else items(cards, key = { it.key }) { it.content() }
             }
         }
     }
@@ -523,6 +526,11 @@ private fun DeleteAccountSheet(onDismiss: () -> Unit) {
         )
     }
 }
+
+/** One card of the settings page and the section it belongs to (see [SETTINGS_SECTIONS]). */
+private class SettingsBlock(val section: Int, val key: String, val content: @Composable () -> Unit)
+
+private val SETTINGS_SECTIONS = listOf(R.string.settings_section_general, R.string.settings_section_admin, R.string.settings_section_more)
 
 @Composable
 private fun FeeEditor(rates: Map<String, Double>, onSave: (Map<String, Double>) -> Unit) {

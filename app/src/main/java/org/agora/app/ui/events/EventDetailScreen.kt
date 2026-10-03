@@ -36,6 +36,11 @@ import org.agora.app.ui.components.SecondaryStyle
 import org.agora.app.ui.components.SubPageHeader
 import org.agora.app.ui.components.GlassBackButton
 import org.agora.app.ui.components.GlassChip
+import org.agora.app.ui.components.ImmersiveStatusBar
+import org.agora.app.ui.components.isTablet
+import org.agora.app.ui.components.readingPadding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
 import org.agora.app.ui.components.AgoraMarkdown
 import org.agora.app.ui.components.fullBleed
 import androidx.compose.animation.AnimatedVisibility
@@ -171,7 +176,15 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     var confirmDelete by remember { mutableStateOf(false) }
     var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val hasCover = event?.imageUrl?.isNotBlank() == true
+    val hasPicture = event?.imageUrl?.isNotBlank() == true
+    // Phones: the cover runs edge to edge under the status bar. Tablets: a readable column with the normal header,
+    // the cover rounded inside it
+    val tablet = isTablet()
+    val hasCover = hasPicture && !tablet
+    val listState = rememberLazyListState()
+    // While the cover is under the status bar: no fade, white icons (the cover is darkened at the top)
+    val coverUnderStatusBar by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    ImmersiveStatusBar(hasCover && coverUnderStatusBar)
     Scaffold(
         // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header
         topBar = { if (!hasCover) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) },
@@ -192,9 +205,18 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
         val cancelled = stringResource(R.string.event_cancelled)
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp, if (hasCover) 0.dp else padding.calculateTopPadding() + 4.dp, 20.dp, padding.calculateBottomPadding() + 32.dp),
+            state = listState,
+            contentPadding = readingPadding(if (hasCover) 0.dp else padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (hasPicture && tablet) item {
+                Box(Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainer)) {
+                    AsyncImage(
+                        model = container.api.absolute(event.imageUrl), contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
             if (hasCover) item {
                 // Full-bleed 16:9 cover with frosted tags on it; the back button floats above the list (see below)
                 Box(Modifier.fullBleed(20.dp).aspectRatio(16f / 9f).background(MaterialTheme.colorScheme.surfaceContainer)) {

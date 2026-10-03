@@ -487,4 +487,7 @@
     <string name="editor_multiday_hint">Mehrtägig – Uhrzeit entfällt</string>
     <string name="editor_publish">Veröffentlichen</string>
     <string name="edit_termin">Termin bearbeiten</string>
+    <string name="settings_section_general">Allgemein</string>
+    <string name="settings_section_admin">Verwaltung</string>
+    <string name="settings_section_more">Kalender, Datenschutz &amp; Konto</string>
 </resources>

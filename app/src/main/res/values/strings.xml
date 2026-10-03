@@ -489,4 +489,7 @@
     <string name="editor_multiday_hint">Multi-day – no time of day</string>
     <string name="editor_publish">Publish</string>
     <string name="edit_termin">Edit appointment</string>
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_admin">Administration</string>
+    <string name="settings_section_more">Calendar, privacy &amp; account</string>
 </resources>

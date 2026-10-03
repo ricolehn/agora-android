@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -34,13 +38,29 @@ import androidx.core.view.WindowCompat
  * status bar, where a soft fade in the page colour keeps clock and icons readable.
  */
 
+/** Pages with a picture right under the status bar register here: no fade there, light icons on the picture. */
+object StatusBarOverlay {
+    internal var immersive by mutableIntStateOf(0)
+}
+
+/** While [enabled] (e.g. the event cover is under the status bar), the status bar shows the page as it is. */
+@Composable
+fun ImmersiveStatusBar(enabled: Boolean) {
+    if (!enabled) return
+    DisposableEffect(Unit) {
+        StatusBarOverlay.immersive++
+        onDispose { StatusBarOverlay.immersive-- }
+    }
+}
+
 /** Fade behind the status bar, drawn above all content; it takes no touches. */
 @Composable
 fun StatusBarScrim(modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val inset = WindowInsets.statusBars.getTop(density)
-    if (inset == 0) return
-    val color = MaterialTheme.colorScheme.background
+    val visible by animateFloatAsState(if (StatusBarOverlay.immersive > 0) 0f else 1f, tween(200), label = "scrim")
+    if (inset == 0 || visible == 0f) return
+    val color = MaterialTheme.colorScheme.background.copy(alpha = visible)
     val fade = with(density) { 12.dp.toPx() }
     Spacer(
         modifier
@@ -50,8 +70,8 @@ fun StatusBarScrim(modifier: Modifier = Modifier) {
                 val bar = inset / size.height
                 drawRect(
                     Brush.verticalGradient(
-                        0f to color.copy(alpha = 0.92f),
-                        bar to color.copy(alpha = 0.72f),
+                        0f to color.copy(alpha = 0.92f * visible),
+                        bar to color.copy(alpha = 0.72f * visible),
                         1f to color.copy(alpha = 0f)
                     )
                 )
@@ -64,11 +84,13 @@ fun StatusBarScrim(modifier: Modifier = Modifier) {
 fun SystemBarAppearance() {
     val view = LocalView.current
     val light = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    // Over a cover picture the icons are white (the picture is darkened at the top)
+    val immersive = StatusBarOverlay.immersive > 0
     if (view.isInEditMode) return
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
-            isAppearanceLightStatusBars = light
+            isAppearanceLightStatusBars = light && !immersive
             isAppearanceLightNavigationBars = light
         }
     }

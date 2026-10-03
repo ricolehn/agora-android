@@ -12,6 +12,7 @@ import org.agora.app.ui.components.rememberCollapsingHeader
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -28,6 +29,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.activity.BackEventCompat
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -312,6 +318,20 @@ private fun NavHostController.navigateTab(route: String) = navigate(route) {
 /** Opened from a card with the container transform (see ContainerTransform.kt). */
 private val NavBackStackEntry.fromCard: Boolean get() = arguments?.getString("ct") != null
 
+private val TAB_ROUTES = setOf("home", "finances", "events", "mentoring", "ai")
+
+/** Switching between the bottom bar tabs (also "back" to the start tab) only fades. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs(): Boolean =
+    initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES
+
+/**
+ * Pages (settings, editor, opened without a card) slide in from the right and out to the right again. With
+ * predictive back the page follows the finger while the page below comes in from a quarter to the left, like a
+ * stack of sheets, instead of shrinking and vanishing.
+ */
+private val pageSpec = tween<androidx.compose.ui.unit.IntOffset>(350, easing = FastOutSlowInEasing)
+private val pageFade = tween<Float>(350, easing = FastOutSlowInEasing)
+
 /** Hands the destination's animation scope to the cards and pages inside (container transform). */
 @Composable
 private fun AnimatedVisibilityScope.Shared(content: @Composable () -> Unit) =
@@ -333,10 +353,51 @@ private fun AgoraNavHost(
         navController = nav,
         startDestination = "home",
         // The container transform animates on its own: the screen below stays put, the page needs no fade
-        enterTransition = { if (targetState.fromCard) EnterTransition.None else fadeIn() },
-        exitTransition = { if (targetState.fromCard) ExitTransition.KeepUntilTransitionsFinished else fadeOut() },
-        popEnterTransition = { if (initialState.fromCard) EnterTransition.None else fadeIn() },
-        popExitTransition = { if (initialState.fromCard) ExitTransition.KeepUntilTransitionsFinished else fadeOut() }
+        enterTransition = {
+            when {
+                targetState.fromCard -> EnterTransition.None
+                betweenTabs() -> fadeIn()
+                else -> slideInHorizontally(pageSpec) { it }
+            }
+        },
+        exitTransition = {
+            when {
+                targetState.fromCard -> ExitTransition.KeepUntilTransitionsFinished
+                betweenTabs() -> fadeOut()
+                else -> slideOutHorizontally(pageSpec) { -it / 4 } + fadeOut(pageFade, targetAlpha = 0.7f)
+            }
+        },
+        popEnterTransition = {
+            when {
+                initialState.fromCard -> EnterTransition.None
+                betweenTabs() -> fadeIn()
+                else -> slideInHorizontally(pageSpec) { -it / 4 } + fadeIn(pageFade, initialAlpha = 0.7f)
+            }
+        },
+        popExitTransition = {
+            when {
+                initialState.fromCard -> ExitTransition.KeepUntilTransitionsFinished
+                betweenTabs() -> fadeOut()
+                else -> slideOutHorizontally(pageSpec) { it } + fadeOut(pageFade)
+            }
+        },
+        // The back gesture has its own transitions (the default shrinks the page and drops it): the page follows
+        // the finger away from the edge it was swiped from and fades out softly, the page below fades in behind it
+        predictivePopEnterTransition = { edge ->
+            when {
+                initialState.fromCard -> EnterTransition.None
+                betweenTabs() -> fadeIn()
+                else -> slideInHorizontally(pageSpec) { if (edge == BackEventCompat.EDGE_RIGHT) it / 4 else -it / 4 } +
+                    fadeIn(pageFade, initialAlpha = 0.6f)
+            }
+        },
+        predictivePopExitTransition = { edge ->
+            when {
+                initialState.fromCard -> ExitTransition.KeepUntilTransitionsFinished
+                betweenTabs() -> fadeOut()
+                else -> slideOutHorizontally(pageSpec) { if (edge == BackEventCompat.EDGE_RIGHT) -it else it } + fadeOut(pageFade)
+            }
+        }
     ) {
         composable("home") { Shared { chrome("home") { padding ->
             HomeScreen(user, padding, onOpenFinances = { nav.navigateTab("finances") }, onOpenEvent = openEvent, onOpenThread = openThread,

@@ -65,6 +65,17 @@ import org.agora.app.ui.events.myGroupDuty
 import org.agora.app.ui.finance.FinanceStatusCard
 import org.agora.app.ui.theme.Agora
 import org.agora.app.util.Dates
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.ui.unit.Dp
+import org.agora.app.ui.components.isTablet
+import org.agora.app.ui.components.columnCount
+import org.agora.app.ui.components.isWide
+import org.agora.app.ui.components.pageGutter
+import org.agora.app.ui.components.screenWidthDp
+import org.agora.app.ui.components.TwoPane
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -134,10 +145,31 @@ fun HomeScreen(
     val acceptedMsg = stringResource(R.string.duty_accepted)
     val declinedMsg = stringResource(R.string.duty_declined)
 
+    val gutter = if (isTablet()) pageGutter() else 16.dp
+    val wide = isWide()
+    val unread = data.unreadThreads
+    val dutyColumns = columnCount(420.dp)
+    val duties: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            HomeSectionHead(stringResource(R.string.your_duties))
+            // Tablets: several duty cards per row (one column next to the messages)
+            val columns = if (wide && unread.isNotEmpty()) 1 else dutyColumns
+            myDutyEvents.chunked(columns).forEach { row ->
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { event ->
+                        EventRow(event, user, modifier = Modifier.weight(1f).fillMaxHeight().containerTransform("duty-${event.id}"),
+                            onClick = openFrom("duty-${event.id}") { onOpenEvent(event.id) })
+                    }
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { store.refreshInBackground(showIndicator = true) }, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             contentPadding = PaddingValues(
-                start = 16.dp, end = 16.dp,
+                start = gutter, end = gutter,
                 top = contentPadding.calculateTopPadding() + 4.dp,
                 bottom = contentPadding.calculateBottomPadding() + 24.dp
             ),
@@ -158,17 +190,14 @@ fun HomeScreen(
                     onOpenEvent = onOpenEvent
                 )
             }
-            if (data.loaded || upcoming.isNotEmpty()) item(key = "upcoming") { UpcomingRow(upcoming, user, today, onOpenEvent, onOpenTermine) }
-            if (myDutyEvents.isNotEmpty()) item(key = "my-duties") {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HomeSectionHead(stringResource(R.string.your_duties))
-                    myDutyEvents.forEach { event ->
-                        EventRow(event, user, modifier = Modifier.containerTransform("duty-${event.id}"), onClick = openFrom("duty-${event.id}") { onOpenEvent(event.id) })
-                    }
-                }
+            if (data.loaded || upcoming.isNotEmpty()) item(key = "upcoming") { UpcomingRow(upcoming, user, today, gutter, onOpenEvent, onOpenTermine) }
+            // Tablets: own duties and new messages side by side
+            if (wide && myDutyEvents.isNotEmpty() && unread.isNotEmpty()) item(key = "duties-messages") {
+                TwoPane(true, gap = 22.dp, left = { duties() }, right = { NewMessagesCard(unread, onOpenThread, onOpenMentoring) })
+            } else {
+                if (myDutyEvents.isNotEmpty()) item(key = "my-duties") { duties() }
+                if (unread.isNotEmpty()) item(key = "mentoring") { NewMessagesCard(unread, onOpenThread, onOpenMentoring) }
             }
-            val unread = data.unreadThreads
-            if (unread.isNotEmpty()) item(key = "mentoring") { NewMessagesCard(unread, onOpenThread, onOpenMentoring) }
             if (payState == PayState.Soon && person != null) item(key = "pay-soon") { HomePayment(person, payState, onOpenFinances) }
         }
     }
@@ -261,7 +290,7 @@ private fun HomePayment(person: Person, state: PayState, onClick: () -> Unit) {
 
 /** "Als Nächstes": the next appointments and events as a swipeable row of small cards. */
 @Composable
-private fun UpcomingRow(upcoming: List<AgoraEvent>, user: User, today: String, onOpenEvent: (String) -> Unit, onOpenTermine: () -> Unit) {
+private fun UpcomingRow(upcoming: List<AgoraEvent>, user: User, today: String, gutter: Dp, onOpenEvent: (String) -> Unit, onOpenTermine: () -> Unit) {
     Column {
         HomeSectionHead(stringResource(R.string.home_next), link = if (upcoming.isNotEmpty()) stringResource(R.string.home_messages_all) else null, onLink = onOpenTermine)
         Spacer(Modifier.height(10.dp))
@@ -274,20 +303,30 @@ private fun UpcomingRow(upcoming: List<AgoraEvent>, user: User, today: String, o
             )
             return@Column
         }
-        // Cards side by side over the full width, all as tall as the tallest one
-        Row(
-            Modifier.fullBleed(16.dp).horizontalScroll(rememberScrollState()).height(IntrinsicSize.Max)
-                .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        // Cards side by side over the full width; a fling always stops with a card at the left edge (snapping, like
+        // the web and iOS). Tablets: five cards share the width, the picture grows in width, not in height
+        val gap = 12.dp
+        val cardWidth = if (isTablet()) maxOf(236.dp, (screenWidthDp().dp - gutter * 2 - gap * 4) / 5) else 236.dp
+        val coverHeight = minOf((cardWidth - 12.dp) * 9f / 16f, 200.dp)
+        val listState = rememberLazyListState()
+        LazyRow(
+            Modifier.fullBleed(gutter),
+            state = listState,
+            contentPadding = PaddingValues(start = gutter, end = gutter, top = 2.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            flingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Start)
         ) {
-            upcoming.forEach { event -> NextCard(event, user, today, Modifier.fillMaxHeight(), onOpenEvent) }
+            items(upcoming, key = { it.id }) { event ->
+                // Fixed height: all cards equally tall, the chip sits at the bottom
+                NextCard(event, user, today, Modifier.width(cardWidth).height(coverHeight + 12.dp + 136.dp), coverHeight, onOpenEvent)
+            }
         }
     }
 }
 
 /** One card of the "Als Nächstes" row: picture or colour mesh with the day on it, time, title, place, one chip. */
 @Composable
-private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Modifier, onOpenEvent: (String) -> Unit) {
+private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Modifier, coverHeight: Dp, onOpenEvent: (String) -> Unit) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val locale = Dates.locale(context)
@@ -301,13 +340,13 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
     val isToday = start <= today
     val key = "next-${event.id}"
     AgoraCard(
-        modifier.width(236.dp).containerTransform(key),
+        modifier.containerTransform(key),
         onClick = openFrom(key) { onOpenEvent(event.id) },
         contentPadding = PaddingValues(6.dp),
         shape = RoundedCornerShape(20.dp),
         elevation = 5.dp
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(15.dp)).background(Agora.colors.surfaceAlt)) {
+        Box(Modifier.fillMaxWidth().height(coverHeight).clip(RoundedCornerShape(15.dp)).background(Agora.colors.surfaceAlt)) {
             if (event.imageUrl.isNotBlank()) AsyncImage(container.api.absolute(event.imageUrl), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             else Box(
                 Modifier.fillMaxSize().colorMesh(

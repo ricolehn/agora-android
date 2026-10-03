@@ -1,6 +1,7 @@
 package org.agora.app.ui.finance
 
 import androidx.compose.material.icons.outlined.Edit
+import org.agora.app.ui.components.pagePadding
 import org.agora.app.data.model.StandingOrder
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.border
@@ -213,7 +214,7 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
     Box(Modifier.fillMaxSize()) {
         PullToRefreshBox(isRefreshing = state.loading && state.transactions.isNotEmpty(), onRefresh = vm::reload, modifier = Modifier.fillMaxSize()) {
             LazyColumn(
-                contentPadding = PaddingValues(20.dp, contentPadding.calculateTopPadding() + 4.dp, 20.dp, contentPadding.calculateBottomPadding() + 96.dp),
+                contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {

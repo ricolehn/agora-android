@@ -60,6 +60,9 @@ import org.agora.app.ui.components.containerTransform
 import org.agora.app.ui.components.openFrom
 import org.agora.app.ui.components.rememberActionRunner
 import org.agora.app.util.Dates
+import org.agora.app.ui.components.columnCount
+import org.agora.app.ui.components.gridItems
+import org.agora.app.ui.components.pagePadding
 import java.time.YearMonth
 
 /** Search over title, location, description and duty names (like the PWA). */
@@ -119,11 +122,13 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
     }
 
     val searched = data.events.filter { it.matches(query) }
+    val termineColumns = columnCount(420.dp)
+    val coverColumns = columnCount(300.dp, 16.dp)
 
     Box(Modifier.fillMaxSize()) {
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { store.refreshInBackground(true) }, modifier = Modifier.fillMaxSize()) {
             LazyColumn(
-                contentPadding = PaddingValues(20.dp, contentPadding.calculateTopPadding() + 4.dp, 20.dp, contentPadding.calculateBottomPadding() + 96.dp),
+                contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item { PageTitle(stringResource(R.string.events_page_title)) }
@@ -156,8 +161,9 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                         if (month != null) item(key = "m-$month") {
                             SectionTitle(Dates.monthYear(month, locale), count = days.size)
                         }
-                        items(days, key = { (event, day) -> "t-${event.id}-$day" }) { (event, day) ->
-                            EventRow(event, user, day = day, showRegistered = false, Modifier.containerTransform("termin-${event.id}-$day"),
+                        // Tablets: several day cards per row
+                        gridItems(days, termineColumns, key = { (event, day) -> "t-${event.id}-$day" }) { (event, day), cell ->
+                            EventRow(event, user, day = day, showRegistered = false, cell.containerTransform("termin-${event.id}-$day"),
                                 openFrom("termin-${event.id}-$day") { onOpenEvent(event.id) })
                         }
                     }
@@ -169,14 +175,14 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                     if (upcoming.isEmpty()) item { EmptyState(Icons.Outlined.Celebration, stringResource(R.string.events_empty_events)) }
                     if (highlights.isNotEmpty()) {
                         item(key = "hl") { SectionTitle(stringResource(R.string.events_highlights)) }
-                        items(highlights, key = { "h-${it.id}" }) { event ->
-                            EventCoverCard(event, user, Modifier.containerTransform("hl-${event.id}"), openFrom("hl-${event.id}") { onOpenEvent(event.id) })
+                        gridItems(highlights, coverColumns, key = { "h-${it.id}" }) { event, cell ->
+                            EventCoverCard(event, user, cell.containerTransform("hl-${event.id}"), openFrom("hl-${event.id}") { onOpenEvent(event.id) })
                         }
                     }
                     upcoming.filterNot { it.isPinned }.groupBy { Dates.parse(it.date)?.let(YearMonth::from) }.forEach { (month, events) ->
                         if (month != null) item(key = "em-$month") { SectionTitle(Dates.monthYear(month, locale)) }
-                        items(events, key = { "e-${it.id}" }) { event ->
-                            EventCoverCard(event, user, Modifier.containerTransform("ev-${event.id}"), openFrom("ev-${event.id}") { onOpenEvent(event.id) })
+                        gridItems(events, coverColumns, key = { "e-${it.id}" }) { event, cell ->
+                            EventCoverCard(event, user, cell.containerTransform("ev-${event.id}"), openFrom("ev-${event.id}") { onOpenEvent(event.id) })
                         }
                     }
                     if (past.isNotEmpty()) {
@@ -185,8 +191,8 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                                 Text(stringResource(if (showPast) R.string.events_hide_past else R.string.events_show_past, past.size))
                             }
                         }
-                        if (showPast) items(past, key = { "p-${it.id}" }) { event ->
-                            EventCoverCard(event, user, Modifier.containerTransform("past-${event.id}"), openFrom("past-${event.id}") { onOpenEvent(event.id) })
+                        if (showPast) gridItems(past, coverColumns, key = { "p-${it.id}" }) { event, cell ->
+                            EventCoverCard(event, user, cell.containerTransform("past-${event.id}"), openFrom("past-${event.id}") { onOpenEvent(event.id) })
                         }
                     }
                 }

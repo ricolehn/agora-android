@@ -1,6 +1,7 @@
 package org.agora.app.ui.events
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import org.agora.app.ui.components.readingPadding
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -318,7 +319,8 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            // Tablets: a readable column in the middle of the window
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(readingPadding(8.dp, 8.dp, maxWidth = 820.dp)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Cover: the picture with frosted buttons at its bottom right, or a drop zone

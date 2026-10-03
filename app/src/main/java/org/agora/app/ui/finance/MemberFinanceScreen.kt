@@ -106,6 +106,10 @@ import org.agora.app.ui.components.todayIso
 import org.agora.app.ui.theme.Agora
 import org.agora.app.util.Dates
 import org.agora.app.util.Money
+import org.agora.app.ui.components.isWide
+import org.agora.app.ui.components.pagePadding
+import org.agora.app.ui.components.TwoPane
+import org.agora.app.data.model.StandingOrder
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,50 +121,69 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
     var requestType by rememberSaveable { mutableStateOf<String?>(null) }
     val person = data.ownPerson
 
+    val status: @Composable () -> Unit = { FinanceStatusCard(user, person, data.fees, showDetails = true, onStatusClick = { requestType = "status" }) }
+    val requestsHead: @Composable () -> Unit = {
+        // `.user-finances-card-header`: heavy title + gradient "Neue Anfrage"
+        PageTitle(stringResource(R.string.user_requests_title), Modifier.padding(top = 10.dp)) {
+            PrimaryButton(onClick = { requestType = "payment" }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                ButtonLabel(stringResource(R.string.user_new_request), Icons.Outlined.Add)
+            }
+        }
+    }
+    val noRequests: @Composable () -> Unit = { EmptyState(Icons.Outlined.Inbox, stringResource(R.string.no_requests)) }
+    val standingOrder: @Composable (StandingOrder) -> Unit = { so ->
+        AgoraCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Autorenew, null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(so.note.ifBlank { stringResource(R.string.standing_order) }, style = MaterialTheme.typography.titleSmall)
+                    val locale = Dates.locale(LocalContext.current)
+                    Text(
+                        stringResource(R.string.since_date, Dates.short(so.startDate, locale)) + (so.endDate?.let { " – " + Dates.short(it, locale) } ?: ""),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(Money.format(so.amount), style = MaterialTheme.typography.titleSmall)
+            }
+        }
+    }
+    // "Verlauf" like the PWA: payments and status changes in one timeline
+    val history: @Composable (Person) -> Unit = { p ->
+        AgoraCard {
+            Text(stringResource(R.string.history_label), style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading,
+                modifier = Modifier.padding(bottom = 14.dp))
+            FinanceTimeline(p)
+        }
+    }
+    val wide = isWide()
+
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { store.refreshInBackground(true) }, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = PaddingValues(20.dp, contentPadding.calculateTopPadding() + 4.dp, 20.dp, contentPadding.calculateBottomPadding() + 24.dp),
+            contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item { FinanceStatusCard(user, person, data.fees, showDetails = true, onStatusClick = { requestType = "status" }) }
-            item {
-                // `.user-finances-card-header`: heavy title + gradient "Neue Anfrage"
-                PageTitle(stringResource(R.string.user_requests_title), Modifier.padding(top = 10.dp)) {
-                    PrimaryButton(onClick = { requestType = "payment" }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-                        ButtonLabel(stringResource(R.string.user_new_request), Icons.Outlined.Add)
+            if (wide) item(key = "two-pane") {
+                // Tablets: status and requests on the left, the history on the right (like the web)
+                TwoPane(true, gap = 20.dp, leftWeight = 1.15f, left = {
+                    status()
+                    requestsHead()
+                    if (data.ownRequests.isEmpty()) noRequests()
+                    data.ownRequests.forEach { RequestItem(it) }
+                    if (person != null && person.standingOrders.isNotEmpty()) {
+                        SectionTitle(stringResource(R.string.standing_orders))
+                        person.standingOrders.forEach { standingOrder(it) }
                     }
+                }, right = { if (person != null) history(person) })
+            } else {
+                item { status() }
+                item { requestsHead() }
+                if (data.ownRequests.isEmpty()) item { noRequests() }
+                items(data.ownRequests, key = { "req-${it.id}" }) { RequestItem(it) }
+                if (person != null && person.standingOrders.isNotEmpty()) {
+                    item { SectionTitle(stringResource(R.string.standing_orders)) }
+                    items(person.standingOrders, key = { "so-${it.id}" }) { standingOrder(it) }
                 }
-            }
-            if (data.ownRequests.isEmpty()) item {
-                EmptyState(Icons.Outlined.Inbox, stringResource(R.string.no_requests))
-            }
-            items(data.ownRequests, key = { "req-${it.id}" }) { RequestItem(it) }
-            if (person != null && person.standingOrders.isNotEmpty()) {
-                item { SectionTitle(stringResource(R.string.standing_orders)) }
-                items(person.standingOrders, key = { "so-${it.id}" }) { so ->
-                    AgoraCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Autorenew, null, tint = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                Text(so.note.ifBlank { stringResource(R.string.standing_order) }, style = MaterialTheme.typography.titleSmall)
-                                val locale = Dates.locale(LocalContext.current)
-                                Text(
-                                    stringResource(R.string.since_date, Dates.short(so.startDate, locale)) + (so.endDate?.let { " – " + Dates.short(it, locale) } ?: ""),
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(Money.format(so.amount), style = MaterialTheme.typography.titleSmall)
-                        }
-                    }
-                }
-            }
-            // "Verlauf" like the PWA: payments and status changes in one timeline
-            if (person != null) item {
-                AgoraCard {
-                    Text(stringResource(R.string.history_label), style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading,
-                        modifier = Modifier.padding(bottom = 14.dp))
-                    FinanceTimeline(person)
-                }
+                if (person != null) item { history(person) }
             }
         }
     }

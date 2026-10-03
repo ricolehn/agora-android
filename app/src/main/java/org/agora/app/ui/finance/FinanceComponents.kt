@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -113,11 +114,11 @@ fun FinanceStatusCard(user: User, person: Person?, fees: FeeSettings, onClick: (
             // Centred status card of the PWA (`.user-status-card`): heavy coloured title, inner amount box, stat tiles
             val color = personStatusColor(person)
             val meta = person.statusMeta
-            TintedCard(color, onClick = onClick) {
+            TintedCard(color, onClick = onClick, contentPadding = PaddingValues(16.dp)) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         statusMetaText(meta.text.ifBlank { "Alles in Ordnung" }),
-                        style = MaterialTheme.typography.headlineMedium, color = color, textAlign = TextAlign.Center
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold), color = color, textAlign = TextAlign.Center
                     )
                     Text(
                         buildAnnotatedString {
@@ -127,30 +128,30 @@ fun FinanceStatusCard(user: User, person: Person?, fees: FeeSettings, onClick: (
                                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading)) { append(paidUntilText(person)) }
                             }
                         },
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
                 if (meta.isOverdue && person.overdueAmount > 0) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     Column(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
                             .background(color.copy(alpha = 0.08f))
                             .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CapsLabel(stringResource(R.string.user_open_amount), color = color)
-                        Text(Money.format(person.overdueAmount), color = color, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp),
+                        Text(Money.format(person.overdueAmount), color = color, style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold),
                             modifier = Modifier.padding(top = 4.dp))
                     }
                 }
                 if (showDetails) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -160,7 +161,9 @@ fun FinanceStatusCard(user: User, person: Person?, fees: FeeSettings, onClick: (
                     ) {
                         StatTile(stringResource(R.string.user_monthly_rate), Money.format(fees.rateFor(person.effectiveStatus)), Modifier.weight(1f))
                         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
-                        StatTile(stringResource(R.string.user_current_status), statusLabel(person.effectiveStatus), Modifier.weight(1f), onStatusClick)
+                        // Plain status name: the emoji of the label made it too wide for the tile
+                        StatTile(stringResource(R.string.user_current_status), statusLabel(person.effectiveStatus).dropWhile { !it.isLetter() }.trim(),
+                            Modifier.weight(1f), onStatusClick)
                     }
                 }
             }
@@ -174,11 +177,12 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, onClic
     Column(
         modifier
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 14.dp, horizontal = 8.dp),
+            .padding(vertical = 10.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CapsLabel(label)
-        Text(value, style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 2.dp))
     }
 }
