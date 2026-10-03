@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PWA design tokens (assets/style.css) -->
+    <color name="brand_primary">#06B6D4</color>
+    <color name="brand_secondary">#10B981</color>
+    <color name="window_bg">#E6F2FA</color>
+    <color name="ic_launcher_background">#E6F2FA</color>
+</resources>
