@@ -38,7 +38,8 @@ import org.agora.app.data.model.Group
 import org.agora.app.data.model.Mentor
 import org.agora.app.data.model.MentoringThread
 import org.agora.app.data.model.MyMentorProfile
-import org.agora.app.data.model.NotificationSettings
+import org.agora.app.data.model.NotificationKinds
+import org.agora.app.data.model.NotificationPrefs
 import org.agora.app.data.model.Person
 import org.agora.app.data.model.StatusResponse
 import org.agora.app.data.model.TransactionPage
@@ -140,19 +141,33 @@ class AgoraRepository(val api: AgoraApi) {
 
     fun profilePictureUrl(uid: String): String = api.absolute("/api/profile/picture/$uid")
 
-    suspend fun saveNotificationSettings(uid: String, settings: NotificationSettings) {
-        val any = settings.duties || settings.events || settings.messages || settings.finances
+    /** Saves channels and kinds like the web (flat keys = push choice, for older servers). */
+    suspend fun saveNotificationSettings(uid: String, prefs: NotificationPrefs) {
+        fun kinds(k: NotificationKinds) = buildJsonObject {
+            put("duties", k.duties); put("events", k.events); put("messages", k.messages)
+            put("requests", k.requests); put("finances", k.finances); put("reports", k.reports)
+        }
         api.patch<JsonObject>("/api/db", buildJsonObject {
             put("path", "users/$uid")
             putJsonObject("value") {
-                putJsonObject("notificationSettings") {
-                    put("duties", settings.duties)
-                    put("events", settings.events)
-                    put("messages", settings.messages)
-                    put("finances", settings.finances)
-                }
-                put("emailNotifications", any)
+                put("notificationSettings", buildJsonObject {
+                    kinds(prefs.push).forEach { (key, value) -> put(key, value) }
+                    putJsonObject("channels") { put("push", prefs.channels.push); put("email", prefs.channels.email) }
+                    put("push", kinds(prefs.push))
+                    put("email", kinds(prefs.email))
+                })
+                put("emailNotifications", prefs.channels.push || prefs.channels.email)
             }
+        })
+    }
+
+    /** Reports the device time zone, so the server times duty reminders in local time (only when it changed). */
+    suspend fun syncTimeZone(user: User) {
+        val zone = java.time.ZoneId.systemDefault().id
+        if (zone.isBlank() || zone == user.timeZone) return
+        api.patch<JsonObject>("/api/db", buildJsonObject {
+            put("path", "users/${user.userId}")
+            putJsonObject("value") { put("timeZone", zone) }
         })
     }
 
@@ -196,10 +211,6 @@ class AgoraRepository(val api: AgoraApi) {
     suspend fun person(personId: String): Person? =
         api.call("GET", "/api/db", Person.serializer().nullable, query = mapOf("path" to "people/$personId"))
 
-    suspend fun ownRequests(uid: String): List<FinanceRequest> =
-        api.call("GET", "/api/db", requestsSerializer, query = mapOf("path" to "requests", "orderByChild" to "userId", "equalTo" to uid))
-            .values.sortedByDescending { it.timestamp }
-
     suspend fun allRequests(): List<FinanceRequest> =
         api.call("GET", "/api/db", requestsSerializer, query = mapOf("path" to "requests")).values.sortedByDescending { it.timestamp }
 
@@ -211,7 +222,11 @@ class AgoraRepository(val api: AgoraApi) {
             addFormDataPart("receipt", fileName, AgoraApi.fileBody(bytes, mime))
         }.filename
 
-    fun receiptUrl(filename: String): String = api.absolute("/api/receipts/$filename")
+    /** Receipt names come from request data members write: only a plain file name, encoded, stays in the path. */
+    fun receiptUrl(filename: String): String {
+        val name = filename.substringAfterLast('/').substringAfterLast('\\').takeUnless { it == "." || it == ".." }.orEmpty()
+        return api.absolute("/api/receipts/" + android.net.Uri.encode(name))
+    }
 
     /** Member â†’ treasurer application; the client has to notify the admins itself afterwards. */
     suspend fun submitRequest(user: User, person: Person?, type: String, data: JsonObject) {
@@ -244,6 +259,18 @@ class AgoraRepository(val api: AgoraApi) {
 
     suspend fun transactions(page: Int, search: String): TransactionPage =
         api.get("/api/transactions", mapOf("page" to page.toString(), "perPage" to "50", "search" to search))
+
+    /** Every booking (all pages), for the financial report. */
+    suspend fun allTransactions(): List<org.agora.app.data.model.Transaction> {
+        val all = mutableListOf<org.agora.app.data.model.Transaction>()
+        var page = 1
+        do {
+            val result = api.get<TransactionPage>("/api/transactions", mapOf("page" to page.toString(), "perPage" to "500"))
+            all += result.items
+            page++
+        } while (page <= result.totalPages)
+        return all
+    }
 
     /** Optimistic-locking update of a person record, like the PWA's runTransaction (3 attempts). */
     suspend fun mutatePerson(personId: String, mutate: (JsonObject) -> JsonObject) {
@@ -336,7 +363,9 @@ class AgoraRepository(val api: AgoraApi) {
             "expense" -> mutateCollection("expenses") { it + buildJsonObject {
                 put("id", System.currentTimeMillis().toString())
                 put("amount", amount)
-                put("description", "${request.field("description").orEmpty()} (Von: ${request.personName})")
+                // The requester is the issuer of the expense, like for expenses booked by hand (web beta18)
+                put("description", request.field("description").orEmpty())
+                put("issuer", request.personName)
                 put("date", date)
                 put("receipt", request.data["receipt"] ?: JsonNull)
             } }

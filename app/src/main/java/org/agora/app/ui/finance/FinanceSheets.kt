@@ -127,7 +127,8 @@ internal fun ChangeStatusSheet(person: Person, onDismiss: () -> Unit, onSaved: (
             )
         }
     ) {
-        DropdownField(stringResource(R.string.new_status), MEMBER_STATUSES, status, { statusLabel(it) }, { status = it })
+        // Opened from the fee list: plain status names like the list itself
+        DropdownField(stringResource(R.string.new_status), MEMBER_STATUSES, status, { statusName(it) }, { status = it })
         DateField(stringResource(R.string.change_status_date), date, { date = it })
         Text(stringResource(R.string.change_status_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

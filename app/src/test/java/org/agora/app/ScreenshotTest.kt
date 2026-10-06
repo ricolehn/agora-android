@@ -3,6 +3,7 @@ package org.agora.app
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -81,7 +82,9 @@ class ScreenshotTest {
             // ">Label": bring the label on screen first (items further down a list)
             val text = entry.removePrefix(">")
             if (entry.startsWith(">")) scrollToText(text)
-            compose.onAllNodesWithText(text).onFirst().performClick()
+            // "@Label": a node by its content description (icon buttons like the FAB)
+            if (text.startsWith("@")) compose.onAllNodesWithContentDescription(text.removePrefix("@")).onFirst().performClick()
+            else compose.onAllNodesWithText(text).onFirst().performClick()
             repeat(4) {
                 Thread.sleep(250)
                 compose.waitForIdle()
@@ -167,7 +170,7 @@ class ScreenshotTest {
     @Test fun ownerEventDetailCoverScrolled() = shoot("owner-event-detail-cover-scrolled", "owner", eventIndex = 2, cover = true, scroll = true)
 
     // Pull-up sheets
-    @Test fun maxNewRequestSheet() = shoot("sheet-new-request", "max", "finances", tap = listOf("New request"), sheet = true)
+    @Test fun maxNewRequestSheet() = shoot("sheet-new-request", "max", "finances", tap = listOf("Report a payment"), sheet = true)
     @Test fun ownerBookPaymentSheet() = shoot("sheet-book-payment", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", "Record payment"), sheet = true)
     @Test fun ownerChangeStatusSheet() = shoot("sheet-change-status", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", "Status"), sheet = true)
     @Test fun maxDeleteAccountSheet() = shoot("sheet-delete-account", "max", "settings", scrollTo = "Delete account", tap = listOf("Delete account"), sheet = true)
@@ -210,7 +213,7 @@ class ScreenshotTest {
     }
     @Test fun ownerEventDescriptionCollapsed() = shoot("owner-event-description", "owner", eventIndex = 1, longDescription = true)
     @Test fun ownerDeleteEventSheet() = shoot("sheet-delete-event", "owner", eventIndex = 1, tap = listOf("Delete"), sheet = true)
-    @Test fun ownerNewRequestSheetDark() = shoot("sheet-new-request-dark", "max", "finances", dark = true, tap = listOf("New request"), sheet = true)
+    @Test fun ownerNewRequestSheetDark() = shoot("sheet-new-request-dark", "max", "finances", dark = true, tap = listOf("Report a payment"), sheet = true)
 
     // Crop step with a generated test picture (no server needed)
     // beta16 parity: cover cards, editor, start page
@@ -237,6 +240,53 @@ class ScreenshotTest {
     @Test fun tabletEventDetailCover() = shoot("tablet-event-detail-cover", "owner", eventIndex = 2, cover = true)
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
     @Test fun tabletEventEdit() = shoot("tablet-event-edit", "owner", eventIndex = 1, tap = listOf("Edit"))
+    // beta3: settings in sub-pages, notifications per channel
+    @Test fun ownerSettingsNotifications() = shoot("settings-notifications", "owner", "settings", tap = listOf("Notifications"))
+    @Test fun maxSettingsNotifications() = shoot("settings-notifications-max", "max", "settings", tap = listOf("Notifications"))
+    @Test fun ownerSettingsAccount() = shoot("settings-account", "owner", "settings", tap = listOf("Account & privacy"))
+    @Test fun maxSettings() = shoot("max-settings", "max", "settings")
+    // beta3: native M3 FAB menu
+    @Test fun ownerFinancesFabMenu() = shoot("owner-finances-fab", "owner", "finances", tap = listOf("@Add"))
+    @Test fun ownerEventsFabMenu() = shoot("owner-events-fab", "owner", "events", tap = listOf("@Create"))
+    // Members without the event permission: single "+" (must look and sit like the menu button)
+    @Test fun maxEventsFab() = shoot("max-events-fab", "max", "events")
+    @Test fun ownerFinancesFab() = shoot("owner-finances-fab-closed", "owner", "finances")
+    // beta3: financial report like the web (beta19) - the sheet, and the drawn PDF pages without a server
+    @Test fun ownerReportSheet() = shoot("sheet-report", "owner", "finances", tap = listOf(">Create report"), sheet = true)
+    @Test fun reportPages() {
+        val stats = listOf(
+            org.agora.app.ui.finance.ReportStat("Einnahmen", "+3.465,50 €", "8 Buchungen", org.agora.app.ui.finance.REPORT_STRIPE_INCOME, org.agora.app.ui.finance.REPORT_VALUE_INCOME),
+            org.agora.app.ui.finance.ReportStat("Ausgaben", "-208,49 €", "7 Buchungen", org.agora.app.ui.finance.REPORT_STRIPE_EXPENSE, org.agora.app.ui.finance.REPORT_VALUE_EXPENSE),
+            org.agora.app.ui.finance.ReportStat("Saldo", "+3.257,01 €", "15 Buchungen", org.agora.app.ui.finance.REPORT_STRIPE_BALANCE, org.agora.app.ui.finance.REPORT_NAVY)
+        )
+        val rows = (1..34).map { i ->
+            val kind = listOf("pay", "don", "exp")[i % 3]
+            org.agora.app.ui.finance.ReportRow("%02d.10.2026".format(i % 28 + 1), kind, mapOf("pay" to "Beitrag", "don" to "Spende", "exp" to "Ausgabe").getValue(kind),
+                if (kind == "exp") "Kerzen für den Jugendabend" else "Max Mitglied", if (kind == "exp") "Max Mitglied" else null,
+                if (kind == "exp") "-23,40 €" else "+50,00 €", kind != "exp", note = if (kind == "don") "Für die Jugend" else null, receipt = kind == "exp")
+        }
+        val content = org.agora.app.ui.finance.ReportContent(
+            appName = "Agora", logo = null, createdLabel = "Erstellt am", createdDate = "06.10.2026", kicker = "Jahresübersicht",
+            title = "Finanzbericht", period = "Jahr: 2026", stats = stats, sectionTitle = "Buchungen", compact = false, detailed = true,
+            headers = listOf("Datum", "Art", "Beschreibung / Partner", "Betrag"), rows = rows, kinds = emptyList(),
+            balanceLabel = "Saldo", balance = "+3.257,01 €", balancePositive = true, receiptLabel = "Beleg vorhanden",
+            footerLeft = "Agora · Finanzbericht", footerRight = "Jahr: 2026"
+        )
+        File(outDir).mkdirs()
+        org.agora.app.ui.finance.renderReportPages(content, 794).forEachIndexed { i, page ->
+            File(outDir, "report-page-${i + 1}.png").outputStream().use { page.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        // (writeReportPdf draws the same pages into a PdfDocument, which Robolectric cannot run: it has no native PDF library)
+    }
+    // beta3: requests like the web (beta18)
+    @Test fun ownerRequestDetail() = shoot("sheet-request-detail", "owner", "finances", tap = listOf("Max Mitglied"), sheet = true)
+    @Test fun maxRequestDetail() = shoot("sheet-my-request", "max", "finances", tap = listOf(">Expense"), sheet = true)
+    @Test fun maxFinancesRequests() = shoot("max-finances-requests", "max", "finances", scroll = true)
+    @Test fun ownerFinanceHistory() = shoot("owner-finance-history", "owner", "finances", scrollTo = "History")
+    @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
+    @Test fun tabletFinancesOwner() = shoot("tablet-finances-owner", "owner", "finances")
+    @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
+    @Test fun tabletTermineScrolled() = shoot("tablet-termine-scrolled", "owner", "events", scroll = true)
     @Config(qualifiers = "w800dp-h1280dp-port-mdpi")
     @Test fun tabletPortraitHome() = shoot("tablet-portrait-home", "owner")
 

@@ -240,21 +240,6 @@ fun ButtonLabel(text: String, icon: ImageVector? = null) {
     Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-/** Square gradient FAB of the PWA (`.mobile-fab`). */
-@Composable
-fun GradientFab(icon: ImageVector, contentDescription: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(18.dp)
-    Box(
-        modifier
-            .size(52.dp)
-            .softShadow(Color(0xFF10B981).copy(alpha = 0.38f), blur = 14.dp, shape = shape, offsetY = 5.dp)
-            .clip(shape)
-            .background(Agora.colors.heroGradient)
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) { Icon(icon, contentDescription, Modifier.size(28.dp), tint = Color.White) }
-}
-
 /**
  * Chip on top of a cover image, like the PWA's frosted badges (`.has-hero-image .event-detail-type-badge`):
  * translucent slate with a light rim; highlights in amber. (Compose can't blur what lies behind a view,

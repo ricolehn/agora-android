@@ -68,6 +68,11 @@ fun statusLabel(status: String?): String = when (status) {
     else -> status
 }
 
+/** Status name without its emoji (fee list, tiles, request amounts). */
+@Composable
+@ReadOnlyComposable
+fun statusName(status: String?): String = statusLabel(status).dropWhile { !it.isLetter() }.trim()
+
 /** The server sends German status texts; translate the known ones. */
 @Composable
 @ReadOnlyComposable
@@ -162,7 +167,7 @@ fun FinanceStatusCard(user: User, person: Person?, fees: FeeSettings, onClick: (
                         StatTile(stringResource(R.string.user_monthly_rate), Money.format(fees.rateFor(person.effectiveStatus)), Modifier.weight(1f))
                         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
                         // Plain status name: the emoji of the label made it too wide for the tile
-                        StatTile(stringResource(R.string.user_current_status), statusLabel(person.effectiveStatus).dropWhile { !it.isLetter() }.trim(),
+                        StatTile(stringResource(R.string.user_current_status), statusName(person.effectiveStatus),
                             Modifier.weight(1f), onStatusClick)
                     }
                 }
@@ -194,7 +199,7 @@ private data class TimelineEntry(val date: String, val payment: Payment? = null,
  * Status entries come from the history plus the current status since the last change (or since joining).
  */
 @Composable
-fun FinanceTimeline(person: Person, modifier: Modifier = Modifier) {
+fun FinanceTimeline(person: Person, modifier: Modifier = Modifier, plainStatus: Boolean = false) {
     val locale = Dates.locale(LocalContext.current)
     val entries = buildList {
         person.statusHistory.forEach { add(TimelineEntry(it.startDate, status = it.status)) }
@@ -220,7 +225,7 @@ fun FinanceTimeline(person: Person, modifier: Modifier = Modifier) {
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        Text(stringResource(R.string.timeline_status, statusLabel(entry.status)), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
+                        Text(stringResource(R.string.timeline_status, if (plainStatus) statusName(entry.status) else statusLabel(entry.status)), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
                         Text(stringResource(R.string.timeline_valid_from, date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

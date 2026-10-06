@@ -34,7 +34,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -119,18 +119,13 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
     val data by store.data.collectAsStateWithLifecycle()
     val refreshing by store.refreshing.collectAsStateWithLifecycle()
     var requestType by rememberSaveable { mutableStateOf<String?>(null) }
+    var openRequest by remember { mutableStateOf<FinanceRequest?>(null) }
     val person = data.ownPerson
 
     val status: @Composable () -> Unit = { FinanceStatusCard(user, person, data.fees, showDetails = true, onStatusClick = { requestType = "status" }) }
-    val requestsHead: @Composable () -> Unit = {
-        // `.user-finances-card-header`: heavy title + gradient "Neue Anfrage"
-        PageTitle(stringResource(R.string.user_requests_title), Modifier.padding(top = 10.dp)) {
-            PrimaryButton(onClick = { requestType = "payment" }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-                ButtonLabel(stringResource(R.string.user_new_request), Icons.Outlined.Add)
-            }
-        }
-    }
-    val noRequests: @Composable () -> Unit = { EmptyState(Icons.Outlined.Inbox, stringResource(R.string.no_requests)) }
+    // What can be submitted (one tile per kind), then the own requests with their state (web beta18)
+    val actions: @Composable () -> Unit = { RequestActions { requestType = it } }
+    val myRequests: @Composable () -> Unit = { MyRequestsCard(data.ownRequests) { openRequest = it } }
     val standingOrder: @Composable (StandingOrder) -> Unit = { so ->
         AgoraCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,9 +161,8 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
                 // Tablets: status and requests on the left, the history on the right (like the web)
                 TwoPane(true, gap = 20.dp, leftWeight = 1.15f, left = {
                     status()
-                    requestsHead()
-                    if (data.ownRequests.isEmpty()) noRequests()
-                    data.ownRequests.forEach { RequestItem(it) }
+                    actions()
+                    myRequests()
                     if (person != null && person.standingOrders.isNotEmpty()) {
                         SectionTitle(stringResource(R.string.standing_orders))
                         person.standingOrders.forEach { standingOrder(it) }
@@ -176,9 +170,8 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
                 }, right = { if (person != null) history(person) })
             } else {
                 item { status() }
-                item { requestsHead() }
-                if (data.ownRequests.isEmpty()) item { noRequests() }
-                items(data.ownRequests, key = { "req-${it.id}" }) { RequestItem(it) }
+                item(key = "actions") { actions() }
+                item(key = "my-requests") { myRequests() }
                 if (person != null && person.standingOrders.isNotEmpty()) {
                     item { SectionTitle(stringResource(R.string.standing_orders)) }
                     items(person.standingOrders, key = { "so-${it.id}" }) { standingOrder(it) }
@@ -191,64 +184,15 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
     requestType?.let { type ->
         NewRequestSheet(user, person, type, onDismiss = { requestType = null })
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RequestItem(request: FinanceRequest) {
-    val locale = Dates.locale(LocalContext.current)
-    val (icon, title) = requestTypeInfo(request.type)
-    val (statusText, statusColor) = when (request.status) {
-        "approved" -> stringResource(R.string.req_status_approved) to Agora.colors.success
-        "rejected" -> stringResource(R.string.req_status_rejected) to Agora.colors.danger
-        else -> stringResource(R.string.req_status_pending) to Agora.colors.warning
-    }
-    // `.user-request-item`: type + date, status pill, details in a soft grey box
-    AgoraCard(elevation = 0.dp) {
-        Row(verticalAlignment = Alignment.Top) {
-            IconTile(icon, MaterialTheme.colorScheme.primary, size = 38.dp)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading)
-                if (request.timestamp > 0) Text(
-                    Dates.short(java.time.Instant.ofEpochMilli(request.timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString(), locale),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Pill(statusText, statusColor, icon = when (request.status) {
-                "approved" -> Icons.Outlined.CheckCircle
-                "rejected" -> Icons.Outlined.Cancel
-                else -> Icons.Outlined.HourglassEmpty
-            })
-        }
-        val chips = requestChips(request)
-        if (chips.isNotEmpty()) {
-            FlowRow(
-                Modifier
-                    .padding(top = 12.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Agora.colors.surfaceAlt)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                chips.forEachIndexed { i, chip ->
-                    Text(chip, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal)
-                }
-            }
-        }
-        if (request.status == "rejected" && !request.rejectionReason.isNullOrBlank()) {
-            Text(stringResource(R.string.rejection_reason, request.rejectionReason), color = Agora.colors.danger,
-                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
-        }
+    openRequest?.let { request ->
+        RequestDetailSheet(request, canDecide = false, onDismiss = { openRequest = null }, onDecided = {})
     }
 }
 
 @Composable
 fun requestTypeInfo(type: String): Pair<ImageVector, String> = when (type) {
     "status" -> Icons.Outlined.SwapHoriz to stringResource(R.string.user_req_type_status)
-    "expense" -> Icons.Outlined.ReceiptLong to stringResource(R.string.user_req_type_expense)
+    "expense" -> Icons.AutoMirrored.Outlined.ReceiptLong to stringResource(R.string.user_req_type_expense)
     "standing_order" -> Icons.Outlined.Autorenew to stringResource(R.string.standing_order)
     else -> Icons.Outlined.Payments to stringResource(R.string.user_req_type_payment)
 }
@@ -262,7 +206,7 @@ fun requestChips(request: FinanceRequest): List<String> {
     request.field("newStatus")?.let { chips += statusLabel(it) }
     request.field("note")?.takeIf { it.isNotBlank() }?.let { chips += it }
     request.field("description")?.takeIf { it.isNotBlank() }?.let { chips += it }
-    val receiptCount = request.field("receipt")?.let { raw -> Regex("\"([^\"]+)\"").findAll(raw).count() } ?: 0
+    val receiptCount = request.receipts().size
     if (receiptCount > 0) chips += stringResource(R.string.receipts_count, receiptCount)
     return chips
 }
@@ -276,7 +220,7 @@ private fun NewRequestSheet(user: User, person: Person?, initialType: String, on
     val sheet = rememberSheetController(onDismiss)
     val scope = rememberCoroutineScope()
     val runner = rememberActionRunner()
-    var type by rememberSaveable { mutableStateOf(if (initialType == "status") "status" else "payment") }
+    var type by rememberSaveable { mutableStateOf(initialType.takeIf { it in listOf("payment", "status", "expense") } ?: "payment") }
     var amount by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable { mutableStateOf(todayIso()) }
     var note by rememberSaveable { mutableStateOf("") }

@@ -16,11 +16,57 @@ data class AuthResponse(val token: String? = null, val user: User? = null)
 
 @Serializable
 data class NotificationSettings(
+    // Flat keys: the push choice in the format of older servers / app versions
     val duties: Boolean = true,
     val events: Boolean = true,
     val messages: Boolean = true,
-    val finances: Boolean = true
+    val finances: Boolean = true,
+    val requests: Boolean = true,
+    val reports: Boolean = true,
+    // Since server v3.0.0: master switches per channel and the kinds per channel
+    val channels: NotificationChannels? = null,
+    val push: NotificationKinds? = null,
+    val email: NotificationKinds? = null
 )
+
+@Serializable
+data class NotificationChannels(val push: Boolean = true, val email: Boolean = false)
+
+/** Which kinds of messages arrive over one channel. */
+@Serializable
+data class NotificationKinds(
+    val duties: Boolean = true,
+    val events: Boolean = true,
+    val messages: Boolean = true,
+    val requests: Boolean = true,
+    val finances: Boolean = true,
+    val reports: Boolean = true
+) {
+    operator fun get(kind: String): Boolean = when (kind) {
+        "duties" -> duties
+        "events" -> events
+        "messages" -> messages
+        "requests" -> requests
+        "finances" -> finances
+        else -> reports
+    }
+
+    fun with(kind: String, on: Boolean): NotificationKinds = when (kind) {
+        "duties" -> copy(duties = on)
+        "events" -> copy(events = on)
+        "messages" -> copy(messages = on)
+        "requests" -> copy(requests = on)
+        "finances" -> copy(finances = on)
+        else -> copy(reports = on)
+    }
+
+    companion object {
+        val NONE = NotificationKinds(false, false, false, false, false, false)
+    }
+}
+
+/** A user's notification choice with all defaults applied (push with everything, e-mail off). */
+data class NotificationPrefs(val channels: NotificationChannels, val push: NotificationKinds, val email: NotificationKinds)
 
 @Serializable
 data class User(
@@ -40,6 +86,8 @@ data class User(
     val notificationSettings: NotificationSettings? = null,
     val isClaimed: Boolean = true,
     val calendarToken: String = "",
+    /** Time zone the app last reported (duty reminders are timed in it). */
+    val timeZone: String = "",
     val canManageFinances: Boolean = false,
     val canViewFinances: Boolean = false,
     val canManageRegistrationCode: Boolean = false,
@@ -56,9 +104,22 @@ data class User(
     val managesEvents: Boolean get() = canManageEvents || "manage_events" in permissions
     val managesMentoring: Boolean get() = canManageMentoring || "manage_mentoring" in permissions
     val accessesAi: Boolean get() = canAccessAi || "access_ai" in permissions
-    val effectiveNotifications: NotificationSettings
-        get() = notificationSettings ?: if (emailNotifications) NotificationSettings()
-        else NotificationSettings(duties = false, events = false, messages = false, finances = false)
+    /** Channels and kinds like the server reads them (older records: flat keys = push, no record + emailNotifications off = nothing). */
+    val notificationPrefs: NotificationPrefs
+        get() {
+            val stored = notificationSettings
+            val legacyAllOff = stored == null && !emailNotifications
+            val flat = stored?.let { NotificationKinds(it.duties, it.events, it.messages, it.requests, it.finances, it.reports) } ?: NotificationKinds()
+            return NotificationPrefs(
+                channels = stored?.channels ?: NotificationChannels(push = !legacyAllOff, email = false),
+                push = stored?.push ?: if (legacyAllOff) NotificationKinds.NONE else flat,
+                email = stored?.email ?: NotificationKinds()
+            )
+        }
+
+    /** What may show up as notification on this device (the push channel). */
+    val effectiveNotifications: NotificationKinds
+        get() = notificationPrefs.let { if (it.channels.push) it.push else NotificationKinds.NONE }
 }
 
 @Serializable

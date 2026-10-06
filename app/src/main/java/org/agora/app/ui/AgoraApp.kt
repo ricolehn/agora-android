@@ -213,8 +213,10 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
         val link = deepLink ?: return@LaunchedEffect
         // The NavHost sits in the Scaffold's subcomposition: wait until its graph is set (cold start from a notification)
         nav.currentBackStackEntryFlow.first()
-        nav.navigateTab(link.route)
-        link.eventId?.let { nav.navigate("event/$it") }
+        // Intent extras come from outside (MainActivity is exported): only visible tabs and plain event ids
+        if (tabs.any { it.route == link.route }) nav.navigateTab(link.route)
+        else if (link.route == "settings") nav.navigate("settings")
+        link.eventId?.takeIf { EVENT_ID.matches(it) }?.let { nav.navigate("event/$it") }
     }
 
     // Header and bottom bar are part of every tab screen (TabChrome): a page opened from a card grows over them and
@@ -318,6 +320,7 @@ private fun NavHostController.navigateTab(route: String) = navigate(route) {
 /** Opened from a card with the container transform (see ContainerTransform.kt). */
 private val NavBackStackEntry.fromCard: Boolean get() = arguments?.getString("ct") != null
 
+private val EVENT_ID = Regex("[A-Za-z0-9_-]{1,64}")
 private val TAB_ROUTES = setOf("home", "finances", "events", "mentoring", "ai")
 
 /** Switching between the bottom bar tabs (also "back" to the start tab) only fades. */

@@ -290,7 +290,9 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                     if (event.location.isNotBlank()) {
                         val openMap = ONLINE_HINTS.none { event.location.lowercase().contains(it) }
                         val mapAction = {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(event.location))))
+                            // No browser / maps app installed: nothing to open
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(event.location)))) }
+                            Unit
                         }
                         InfoTile(Icons.Outlined.Place, Agora.colors.success, stringResource(R.string.location_label), event.location,
                             onClick = if (openMap) mapAction else null) {

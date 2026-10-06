@@ -67,7 +67,6 @@
     <string name="logout">Abmelden</string>
 
     <!-- Start -->
-    <string name="welcome_title">Willkommen</string>
     <string name="your_duties">Deine Dienste</string>
 
     <!-- Finanzen -->
@@ -89,7 +88,6 @@
     <string name="no_member_record">Kein Mitgliedseintrag gefunden. Bitte kontaktieren Sie einen Administrator.</string>
     <string name="user_requests_title">Meine Anfragen</string>
     <string name="user_new_request">Neue Anfrage</string>
-    <string name="user_history_title">Verlauf</string>
     <string name="user_req_type_payment">Zahlung</string>
     <string name="user_req_type_status">Statuswechsel</string>
     <string name="user_req_type_expense">Ausgabe</string>
@@ -102,8 +100,6 @@
     <string name="rejection_reason">Grund: %1$s</string>
     <string name="receipts_count">%1$d Beleg(e)</string>
     <string name="no_requests">Noch keine Anfragen.</string>
-    <string name="no_payments">Noch keine Zahlungen.</string>
-    <string name="payment">Zahlung</string>
     <string name="amount">Betrag</string>
     <string name="date">Datum</string>
     <string name="start_date">Startdatum</string>
@@ -123,13 +119,11 @@
     <string name="total_balance">Aktueller Kassenstand</string>
     <string name="finances_sub_history">Übersicht</string>
     <string name="finances_sub_members">Beitragsliste</string>
-    <string name="pending_requests">Offene Anträge (%1$d)</string>
     <string name="search_transactions">Historie durchsuchen…</string>
     <string name="search_members">Mitglieder suchen…</string>
     <string name="no_transactions">Keine Buchungen gefunden</string>
     <string name="approve">Genehmigen</string>
     <string name="reject">Ablehnen</string>
-    <string name="reject_request">Anfrage ablehnen</string>
     <string name="rejection_reason_label">Grund für Ablehnung</string>
     <string name="toast_request_approved">Anfrage genehmigt</string>
     <string name="toast_request_rejected">Anfrage abgelehnt</string>
@@ -142,8 +136,6 @@
     <string name="tx_type_payment">Mitgliedsbeitrag</string>
     <string name="tx_type_donation">Spende</string>
     <string name="tx_type_expense">Ausgabe</string>
-    <string name="not_paying">Beitragsfrei</string>
-    <string name="member_since">Mitglied seit %1$s</string>
     <string name="book_payment">Zahlung buchen</string>
     <string name="book">Buchen</string>
     <string name="toast_payment_booked">Zahlung gebucht</string>
@@ -151,7 +143,6 @@
     <string name="change_status_date">Gültig ab</string>
     <string name="change_status_hint">Ein Datum in der Vergangenheit ändert die Historie rückwirkend.</string>
     <string name="toast_status_changed">Status geändert</string>
-    <string name="status_history">Statusverlauf</string>
 
     <!-- Events -->
     <string name="events_tab_termine">Termine</string>
@@ -178,32 +169,20 @@
     <string name="event_no_registration">Ohne Anmeldung</string>
     <string name="event_places">%1$d / %2$d Plätze</string>
     <string name="event_not_found">Event nicht gefunden</string>
-    <string name="organized_by">Organisiert von %1$s</string>
-    <string name="open_map">Karte</string>
-    <string name="until_date">bis %1$s</string>
     <string name="registration">Anmeldung</string>
-    <string name="min_participants">Mindestens %1$d Teilnehmende</string>
     <string name="event_register">Verbindlich anmelden</string>
     <string name="event_join_waitlist">Auf Warteliste setzen</string>
-    <string name="event_registered_leave">Angemeldet – tippen zum Abmelden</string>
-    <string name="event_waitlist_leave">Auf der Warteliste (Verlassen)</string>
-    <string name="event_registration_closed">Anmeldung geschlossen – das Event ist vorbei.</string>
     <string name="events_registered_success">Erfolgreich verbindlich angemeldet!</string>
     <string name="events_waitlist_success">Auf die Warteliste gesetzt</string>
     <string name="events_unregistered_success">Erfolgreich abgemeldet</string>
     <string name="attendees">Teilnehmer</string>
-    <string name="no_attendees">Noch keine Anmeldungen.</string>
     <string name="delete_event">Event löschen</string>
     <string name="events_delete_confirm">Möchtest du dieses Event wirklich löschen?</string>
     <string name="events_deleted_success">Event gelöscht</string>
     <string name="event_saved">Gespeichert</string>
-    <string name="title">Titel</string>
     <string name="multi_day">Mehrtägig</string>
     <string name="start_time">Beginn</string>
     <string name="end_time">Ende</string>
-    <string name="location">Ort</string>
-    <string name="cover_image">Titelbild (16:9)</string>
-    <string name="choose_image">Bild auswählen</string>
     <string name="change_image">Bild ändern</string>
     <string name="pin_event">Großevent / Highlight</string>
     <string name="pin_event_desc">Wird für alle ganz oben angezeigt</string>
@@ -211,7 +190,6 @@
     <string name="min_participants_label">Min. Teilnehmende</string>
     <string name="max_participants_label">Max. Teilnehmende (0 = unbegrenzt)</string>
     <string name="target_groups">Zielgruppen</string>
-    <string name="target_groups_hint">Keine Auswahl = für alle sichtbar</string>
     <string name="recurring">Wiederholen</string>
     <string name="recurring_rule">Rhythmus</string>
     <string name="recurring_count">Anzahl</string>
@@ -229,14 +207,6 @@
     <string name="duty_accepted">Dienst zugesagt</string>
     <string name="duty_declined">Dienst abgelehnt</string>
     <string name="duty_request_open">Anfrage offen</string>
-    <string name="duty_request_open_sub">(Anfrage offen)</string>
-    <string name="duty_declined_sub">✕ Abgelehnt</string>
-    <string name="duty_confirmed_sub">✓ Eingeteilt</string>
-    <string name="duty_open_slot">Noch niemand eingeteilt (Offene Aufgabe)</string>
-    <string name="duty_group">Gruppe: %1$s</string>
-    <string name="duty_group_assigned_sub">(Gruppe eingeteilt)</string>
-    <string name="duty_no_tasks">Keine Dienste eingetragen.</string>
-    <string name="duty_no_tasks_manager">Noch keine Aufgaben angelegt.</string>
     <string name="duty_add_person">Person oder Gruppe hinzufügen</string>
     <string name="duty_add_task">Aufgabe hinzufügen</string>
     <string name="duty_new_task">Name der Aufgabe</string>
@@ -314,13 +284,13 @@
     <string name="btn_generate_new">Neu</string>
     <string name="notif_channels_title">Benachrichtigungen</string>
     <string name="notif_duties_title">Dienstanfragen</string>
-    <string name="notif_duties_desc">Anfragen, Bestätigungen &amp; Änderungen deiner Dienste</string>
+    <string name="notif_duties_desc">Anfragen für Dienste, Antworten darauf, Dienste deiner Gruppen und eine Erinnerung 3 Stunden vor deinem Dienst</string>
     <string name="notif_events_title">Neue Events &amp; Termine</string>
     <string name="notif_events_desc">Neue Veranstaltungen und Termine der Gemeinde</string>
     <string name="notif_messages_title">Nachrichten</string>
     <string name="notif_messages_desc">Begleitungsanfragen und Mentoring-Nachrichten</string>
-    <string name="notif_finances_title">Finanzielle Anträge</string>
-    <string name="notif_finances_desc">Neue Kassen- und Erstattungsanträge</string>
+    <string name="notif_finances_title">Anfragen an die Kasse</string>
+    <string name="notif_finances_desc">Neue Zahlungs-, Auslagen- und Statusanfragen von Mitgliedern</string>
     <string name="notif_general_title">Allgemein</string>
     <string name="push_title">Push-Benachrichtigungen auf diesem Gerät</string>
     <string name="push_active">Aktiv – Benachrichtigungen kommen sofort an.</string>
@@ -466,7 +436,6 @@
     <string name="home_register_open">Anmeldung offen</string>
     <string name="home_fee_open">%1$s offen</string>
     <string name="home_fee_details">Ansehen</string>
-    <string name="home_fee">Mitgliedsbeitrag</string>
     <string name="detail_groups_event_one">Event für die Gruppe %1$s</string>
     <string name="detail_groups_event_many">Event für die Gruppen %1$s</string>
     <string name="detail_groups_termin_one">Termin für die Gruppe %1$s</string>
@@ -490,4 +459,118 @@
     <string name="settings_section_general">Allgemein</string>
     <string name="settings_section_admin">Verwaltung</string>
     <string name="settings_section_more">Kalender, Datenschutz &amp; Konto</string>
+    <!-- beta3: requests like the web (beta18), Termine calendar on tablets -->
+    <string name="request_from_date">ab %1$s</string>
+    <string name="request_on_date">am %1$s</string>
+    <string name="requests_more">+%1$d weitere Anfragen</string>
+    <string name="req_actions_title">Was möchtest du einreichen?</string>
+    <string name="req_action_payment_title">Zahlung melden</string>
+    <string name="req_action_payment_desc">Beitrag überwiesen oder Dauerauftrag eingerichtet</string>
+    <string name="req_action_expense_title">Auslage erstatten lassen</string>
+    <string name="req_action_expense_desc">Etwas für die Gemeinde bezahlt? Mit Beleg einreichen</string>
+    <string name="req_action_status_title">Status ändern</string>
+    <string name="req_action_status_desc">Z. B. Geringverdiener oder eine Pause beantragen</string>
+    <string name="user_no_requests_hint">Oben kannst du eine Zahlung melden, eine Auslage einreichen oder deinen Status ändern.</string>
+    <string name="user_requests_show_all">Alle %1$d anzeigen</string>
+    <string name="user_requests_show_less">Weniger anzeigen</string>
+    <string name="request_detail_person">Von</string>
+    <string name="request_detail_purpose">Wofür</string>
+    <string name="request_detail_received">Eingegangen</string>
+    <string name="request_detail_reason">Grund</string>
+    <string name="request_reject_confirm">Anfrage ablehnen</string>
+    <string name="request_reject_placeholder">Optional – das Mitglied sieht ihn</string>
+    <string name="calendar_prev_month">Vorheriger Monat</string>
+    <string name="calendar_next_month">Nächster Monat</string>
+    <!-- beta3: financial report as PDF, like the web (beta19) -->
+    <string name="report_create">Bericht erstellen</string>
+    <string name="report_sheet_title">Finanzbericht erstellen</string>
+    <string name="report_type">Berichtstyp</string>
+    <string name="report_type_annual">Jahresübersicht</string>
+    <string name="report_type_annual_desc">Ein ganzes Jahr</string>
+    <string name="report_type_custom">Zeitraum</string>
+    <string name="report_type_custom_desc">Von – bis</string>
+    <string name="report_type_person">Einzelperson</string>
+    <string name="report_type_person_desc">Beiträge eines Mitglieds</string>
+    <string name="report_type_manual">Auswahl</string>
+    <string name="report_type_manual_desc">Buchungen ankreuzen</string>
+    <string name="report_year">Jahr</string>
+    <string name="report_from">Von</string>
+    <string name="report_to">Bis</string>
+    <string name="report_person">Mitglied</string>
+    <string name="report_pick">Buchungen auswählen</string>
+    <string name="report_tier">Detailgrad</string>
+    <string name="report_tier_compact">Kompakt</string>
+    <string name="report_tier_standard">Standard</string>
+    <string name="report_tier_detailed">Ausführlich</string>
+    <string name="report_tier_compact_hint">Nur Summen und eine Aufstellung nach Art</string>
+    <string name="report_tier_standard_hint">Summen und alle Buchungen</string>
+    <string name="report_tier_detailed_hint">Zusätzlich Notizen und Belege</string>
+    <string name="report_preview">Vorschau</string>
+    <string name="report_save">PDF speichern</string>
+    <string name="report_share">Teilen</string>
+    <string name="report_saved">Bericht gespeichert</string>
+    <string name="report_loading">Lade Buchungen…</string>
+    <string name="report_no_data">Keine Daten im gewählten Zeitraum</string>
+    <string name="report_pick_bookings">Kreuze die Buchungen an, die in den Bericht sollen.</string>
+    <string name="report_financial_report">Finanzbericht</string>
+    <string name="report_created_on">Erstellt am</string>
+    <string name="report_kind_annual">Jahresübersicht</string>
+    <string name="report_kind_custom">Übersicht für einen Zeitraum</string>
+    <string name="report_kind_manual">Ausgewählte Buchungen</string>
+    <string name="report_kind_person">Übersicht für ein Mitglied</string>
+    <string name="report_income">Einnahmen</string>
+    <string name="report_expenses">Ausgaben</string>
+    <string name="report_balance">Saldo</string>
+    <string name="report_outstanding">Ausstehend (bis heute)</string>
+    <string name="report_status">Status</string>
+    <string name="report_status_good">Kein Rückstand</string>
+    <string name="report_section_bookings">Buchungen</string>
+    <string name="report_section_by_kind">Nach Art</string>
+    <string name="report_head_date">Datum</string>
+    <string name="report_head_kind">Art</string>
+    <string name="report_head_desc">Beschreibung / Partner</string>
+    <string name="report_head_amount">Betrag</string>
+    <string name="report_head_count">Anzahl</string>
+    <string name="report_kind_pay">Beitrag</string>
+    <string name="report_kind_don">Spende</string>
+    <string name="report_kind_exp">Ausgabe</string>
+    <string name="report_receipt">Beleg vorhanden</string>
+    <string name="report_year_label">Jahr: %1$s</string>
+    <string name="report_manual_selection">Manuelle Auswahl</string>
+    <string name="report_all">Alle Buchungen</string>
+    <string name="report_file_name">Finanzbericht</string>
+    <plurals name="report_bookings">
+        <item quantity="one">%d Buchung</item>
+        <item quantity="other">%d Buchungen</item>
+    </plurals>
+    <plurals name="report_pages">
+        <item quantity="one">%d Seite</item>
+        <item quantity="other">%d Seiten</item>
+    </plurals>
+    <!-- beta3: settings in sub-pages, notifications per channel like the web (server v3.0.0) -->
+    <string name="settings_profile">Profil</string>
+    <string name="settings_appearance_desc">Farbschema und Sprache</string>
+    <string name="settings_password_desc">Neues Passwort festlegen</string>
+    <string name="settings_calendar_desc">Deine Termine im eigenen Kalender</string>
+    <string name="settings_fees_desc">Monatliche Beiträge je Status</string>
+    <string name="settings_account_title">Konto &amp; Datenschutz</string>
+    <string name="settings_account_desc">Web-Version, Datenschutz, Konto löschen</string>
+    <string name="notif_intro">Wähle, worüber du benachrichtigt wirst und welche Nachrichten du bekommst.</string>
+    <string name="notif_channel_push_title">Push</string>
+    <string name="notif_channel_push_desc">Direkt aufs Handy</string>
+    <string name="notif_channel_email_title">E-Mail</string>
+    <string name="notif_channel_email_desc">An %1$s</string>
+    <string name="notif_kinds_title">Was möchtest du bekommen?</string>
+    <string name="notif_tab_push">Push</string>
+    <string name="notif_tab_email">E-Mail</string>
+    <string name="notif_requests_title">Meine Anfragen</string>
+    <string name="notif_requests_desc">Wenn deine Zahlung, Auslage oder Statusänderung genehmigt oder abgelehnt wurde</string>
+    <string name="notif_reports_title">Gemeldete Inhalte</string>
+    <string name="notif_reports_desc">Gemeldete Chat-Nachrichten und KI-Antworten</string>
+    <string name="notif_all_off">Du bekommst keine Benachrichtigungen. Schalte oben Push oder E-Mail ein.</string>
+    <string name="notif_summary_both">Push und E-Mail</string>
+    <string name="notif_summary_push">Nur Push</string>
+    <string name="notif_summary_email">Nur E-Mail</string>
+    <string name="notif_summary_off">Aus</string>
+    <string name="notif_device_title">Dieses Gerät</string>
 </resources>

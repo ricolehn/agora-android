@@ -15,6 +15,8 @@ class AgoraMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Nobody signed in on this device: the message belongs to a previous account
+        if (!PushManager.isSignedIn(this)) return
         val data = message.data
         val title = data["title"]?.takeIf { it.isNotBlank() } ?: return
         val body = data["body"].orEmpty()

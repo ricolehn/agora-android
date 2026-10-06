@@ -206,7 +206,7 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val runner = rememberActionRunner()
-    val isManager = user.managesEvents || user.isAdmin
+    val isManager = user.managesEvents
 
     var type by rememberSaveable { mutableStateOf(existing?.eventType ?: if (isManager) initialType else "event") }
     var title by rememberSaveable { mutableStateOf(existing?.title ?: "") }

@@ -1,6 +1,7 @@
 package org.agora.app.ui.finance
 
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Description
 import org.agora.app.ui.components.pagePadding
 import org.agora.app.data.model.StandingOrder
 import androidx.compose.animation.AnimatedVisibility
@@ -23,7 +24,8 @@ import org.agora.app.ui.components.PageTitle
 import org.agora.app.ui.components.SecondaryButton
 import org.agora.app.ui.components.AgoraTextField
 import org.agora.app.ui.components.ButtonLabel
-import org.agora.app.ui.components.GradientFab
+import org.agora.app.ui.components.AgoraFabMenu
+import org.agora.app.ui.components.FabAction
 import org.agora.app.ui.components.IconTile
 import org.agora.app.ui.components.PillTabs
 import org.agora.app.ui.components.PrimaryButton
@@ -49,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -207,8 +210,12 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
     var tab by rememberSaveable { mutableStateOf(0) }
     var peopleFilter by rememberSaveable { mutableStateOf("") }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
+    var openRequest by remember { mutableStateOf<FinanceRequest?>(null) }
+    var reportOpen by rememberSaveable { mutableStateOf(false) }
+    val store = LocalContainer.current.store
+    // Expenses show the issuer's picture: their uid from the member records by name (like the web)
+    val uidByName = remember(state.people) { state.people.filter { it.uid.isNotBlank() }.associate { it.name.trim().lowercase() to it.uid } }
     var entryKind by rememberSaveable { mutableStateOf<String?>(null) }
-    var fabMenu by remember { mutableStateOf(false) }
     val canManage = user.canManageFinances || user.owner
 
     Box(Modifier.fillMaxSize()) {
@@ -229,7 +236,7 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                 if (state.loading && state.transactions.isEmpty() && state.people.isEmpty()) item { LoadingBox() }
                 else if (tab == 0) {
                     // Same order as the PWA: open requests, balance, history
-                    if (state.pending.isNotEmpty()) item { PendingRequestsCard(state.pending, canManage, onDone = vm::reload) }
+                    if (state.pending.isNotEmpty()) item(key = "requests") { OpenRequestsCard(state.pending, onOpen = { openRequest = it }) }
                     item {
                         GradientCard(Agora.colors.heroGradient) {
                             Text(
@@ -241,7 +248,14 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                                 modifier = Modifier.padding(top = 10.dp))
                         }
                     }
-                    item { PageTitle(stringResource(R.string.nav_history), Modifier.padding(top = 8.dp)) }
+                    item {
+                        // Financial report as PDF (like the web's "Bericht erstellen")
+                        PageTitle(stringResource(R.string.nav_history), Modifier.padding(top = 8.dp)) {
+                            SecondaryButton(onClick = { reportOpen = true }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
+                                ButtonLabel(stringResource(R.string.report_create), Icons.Outlined.Description)
+                            }
+                        }
+                    }
                     item { SearchField(query, { vm.search.value = it }, stringResource(R.string.search_transactions)) }
                     if (state.transactions.isEmpty()) item { EmptyState(Icons.Outlined.Receipt, stringResource(R.string.no_transactions)) }
                     // Grouped by day like the PWA's history
@@ -250,7 +264,10 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                             Text(Dates.short(day, locale), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(start = 4.dp, top = 6.dp))
                         }
-                        items(txs, key = { "tx-${it.type}-${it.id}" }) { tx -> TransactionRow(tx) { selectedTx = tx } }
+                        items(txs, key = { "tx-${it.type}-${it.id}" }) { tx ->
+                            val avatarUid = when (tx.type) { "pay" -> tx.personUid; "exp" -> uidByName[tx.who.trim().lowercase()]; else -> null }
+                            TransactionRow(tx, avatarUid) { selectedTx = tx }
+                        }
                     }
                     if (state.page < state.totalPages) item {
                         TextButton(onClick = vm::loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) {
@@ -277,100 +294,42 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                 }
             }
         }
-        if (canManage) Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp)) {
-            GradientFab(Icons.Outlined.Add, stringResource(R.string.add), onClick = { fabMenu = true })
-            DropdownMenu(
-                fabMenu, { fabMenu = false },
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 12.dp
-            ) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.action_capture_donation), fontWeight = FontWeight.Bold) },
-                    leadingIcon = { IconTile(Icons.Outlined.VolunteerActivism, Agora.colors.success) },
-                    onClick = { fabMenu = false; entryKind = "donation" })
-                DropdownMenuItem(text = { Text(stringResource(R.string.action_book_expense), fontWeight = FontWeight.Bold) },
-                    leadingIcon = { IconTile(Icons.Outlined.Receipt, Agora.colors.danger) },
-                    onClick = { fabMenu = false; entryKind = "expense" })
-            }
-        }
+        // Native M3 "+" menu: record a donation or book an expense
+        if (canManage) AgoraFabMenu(
+            listOf(
+                FabAction(stringResource(R.string.action_capture_donation), Icons.Outlined.VolunteerActivism) { entryKind = "donation" },
+                FabAction(stringResource(R.string.action_book_expense), Icons.Outlined.Receipt) { entryKind = "expense" }
+            ),
+            stringResource(R.string.add),
+            Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = contentPadding.calculateBottomPadding())
+        )
     }
 
     selectedTx?.let { TransactionSheet(it) { selectedTx = null } }
+    if (reportOpen) ReportSheet(state.people, onDismiss = { reportOpen = false })
+    openRequest?.let { request ->
+        RequestDetailSheet(request, canDecide = canManage, onDismiss = { openRequest = null }, onDecided = { vm.reload(); store.refreshInBackground() })
+    }
     entryKind?.let { kind -> FinanceEntrySheet(kind, onDismiss = { entryKind = null }, onSaved = vm::reload) }
 }
 
-/** `.requests-card`: all open requests in one card, grouped by person like the PWA. */
+/**
+ * History row like the PWA: payments and expenses show the person's picture (initials without one; expenses with a small
+ * red badge), donations the purple tile; who, description, signed amount.
+ */
 @Composable
-private fun PendingRequestsCard(requests: List<FinanceRequest>, canManage: Boolean, onDone: () -> Unit) {
-    AgoraCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Inbox, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            CapsLabel("${stringResource(R.string.pending_requests_short)} (${requests.size})", Modifier.padding(start = 8.dp))
-        }
-        requests.groupBy { it.personName.ifBlank { "–" } }.forEach { (name, personRequests) ->
-            Row(Modifier.padding(top = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Person, null, Modifier.size(18.dp), tint = Agora.colors.success)
-                Text(name, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, modifier = Modifier.padding(start = 8.dp))
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                personRequests.forEach { PendingRequestCard(it, canManage, onDone) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PendingRequestCard(request: FinanceRequest, canManage: Boolean, onDone: () -> Unit) {
-    val container = LocalContainer.current
-    val runner = rememberActionRunner()
-    var rejecting by remember { mutableStateOf(false) }
-    val (icon, title) = requestTypeInfo(request.type)
-    val approvedMsg = stringResource(R.string.toast_request_approved)
-    val rejectedMsg = stringResource(R.string.toast_request_rejected)
-    // `.request-card` inside the group: type with icon, timestamp chip, details, approve (gradient) / reject
-    AgoraCard(elevation = 0.dp, contentPadding = PaddingValues(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(22.dp), tint = Agora.colors.heading)
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading, modifier = Modifier.weight(1f).padding(start = 10.dp))
-            if (request.timestamp > 0) Text(
-                Dates.dateTime(request.timestamp, Dates.locale(LocalContext.current)),
-                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clip(CircleShape).background(Agora.colors.surfaceAlt).padding(horizontal = 10.dp, vertical = 4.dp)
-            )
-        }
-        Text(requestChips(request).joinToString(" · "), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 10.dp))
-        if (canManage) Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryButton(onClick = {
-                runner.run(approvedMsg) {
-                    container.repo.approveRequest(request)
-                    onDone()
-                }
-            }, enabled = !runner.busy, modifier = Modifier.weight(1f)) { ButtonLabel(stringResource(R.string.approve), Icons.Outlined.Check) }
-            SecondaryButton(onClick = { rejecting = true }, enabled = !runner.busy, modifier = Modifier.weight(1f)) {
-                ButtonLabel(stringResource(R.string.reject), Icons.Outlined.Close)
-            }
-        }
-    }
-    if (rejecting) TextInputSheet(
-        title = stringResource(R.string.reject_request),
-        label = stringResource(R.string.rejection_reason_label),
-        confirmLabel = stringResource(R.string.reject),
-        onConfirm = { reason -> runner.run(rejectedMsg) { container.repo.rejectRequest(request.id, reason); onDone() } },
-        onDismiss = { rejecting = false },
-        icon = Icons.Outlined.Close,
-        iconTint = Agora.colors.danger,
-        destructive = true
-    )
-}
-
-/** History row like the PWA: type tile (payment green, donation purple, expense red), who, description, signed amount. */
-@Composable
-private fun TransactionRow(tx: Transaction, onClick: () -> Unit) {
+private fun TransactionRow(tx: Transaction, avatarUid: String?, onClick: () -> Unit) {
     val (icon, tint) = txTypeStyle(tx)
     AgoraCard(onClick = onClick, contentPadding = PaddingValues(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            if (tx.type != "don" && tx.who.isNotBlank()) Box(Modifier.size(40.dp)) {
+                UserAvatar(avatarUid, tx.who, 40.dp)
+                if (tx.type == "exp") Box(
+                    Modifier.align(Alignment.BottomEnd).offset(3.dp, 3.dp).size(18.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(2.dp)
+                        .clip(CircleShape).background(Agora.colors.danger),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Outlined.Euro, null, Modifier.size(10.dp), tint = Color.White) }
+            } else Box(Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                 Icon(icon, null, Modifier.size(20.dp), tint = tint)
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -394,7 +353,7 @@ private fun TransactionRow(tx: Transaction, onClick: () -> Unit) {
 private fun TransactionSheet(tx: Transaction, onDismiss: () -> Unit) {
     val container = LocalContainer.current
     val locale = Dates.locale(LocalContext.current)
-    val receipts = tx.receipt?.let { raw -> Regex("\"([^\"]+)\"").findAll(raw).map { it.groupValues[1] }.toList() }.orEmpty()
+    val receipts = receiptFiles(tx.receipt)
     val (icon, tint) = txTypeStyle(tx)
     val typeLabel = stringResource(when (tx.type) { "exp" -> R.string.tx_type_expense; "don" -> R.string.tx_type_donation; else -> R.string.tx_type_payment })
     val amountColor = if (tx.isIncome) Agora.colors.success else Agora.colors.danger
@@ -416,7 +375,7 @@ private fun TransactionSheet(tx: Transaction, onDismiss: () -> Unit) {
         if (receipts.isNotEmpty()) CapsLabel(stringResource(R.string.receipts))
         receipts.forEach { file ->
             AsyncImage(
-                model = container.repo.receiptUrl(file), contentDescription = file, contentScale = ContentScale.FillWidth,
+                model = receiptImageRequest(container.repo.receiptUrl(file)), contentDescription = file, contentScale = ContentScale.FillWidth,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
             )
         }
@@ -465,7 +424,7 @@ private fun ExpandablePersonCard(person: Person, canManage: Boolean, onChanged: 
                     Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 4.dp).size(20.dp),
                         tint = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                CapsLabel(statusLabel(person.effectiveStatus), Modifier.padding(top = 2.dp))
+                CapsLabel(statusName(person.effectiveStatus), Modifier.padding(top = 2.dp))
             }
             Column(horizontalAlignment = Alignment.End) {
                 if (!standingOrderCovers) Text(
@@ -491,7 +450,7 @@ private fun ExpandablePersonCard(person: Person, canManage: Boolean, onChanged: 
                         Row {
                             Column(Modifier.weight(1f)) {
                                 CapsLabel(stringResource(R.string.status_label))
-                                Text(statusLabel(p.effectiveStatus), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading,
+                                Text(statusName(p.effectiveStatus), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading,
                                     modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
                                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
                             }
@@ -541,7 +500,7 @@ private fun ExpandablePersonCard(person: Person, canManage: Boolean, onChanged: 
                         SecondaryButton(onClick = { changingStatus = true }, modifier = Modifier.fillMaxWidth()) { ButtonLabel(stringResource(R.string.status_btn), Icons.Outlined.SwapHoriz) }
                     }
                     SectionTitle(stringResource(R.string.history_label))
-                    if (detail == null) LoadingBox() else FinanceTimeline(p)
+                    if (detail == null) LoadingBox() else FinanceTimeline(p, plainStatus = true)
                 }
             }
         }

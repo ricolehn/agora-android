@@ -109,11 +109,24 @@ class PushManager(
         sessionStore.setPushToken(token)
     }
 
-    /** Stops push for this device (logout). */
-    suspend fun disable() {
-        sessionStore.pushToken()?.let { repo.unsubscribeFcm(it) }
+    /** Stops push for this device (logout); [remote] = the server can still be told (token still valid). */
+    suspend fun disable(remote: Boolean = true) {
+        if (remote) sessionStore.pushToken()?.let { runCatching { repo.unsubscribeFcm(it) } }
         sessionStore.setPushToken(null)
         if (firebaseReady()) runCatching { FirebaseMessaging.getInstance().deleteToken().await() }
         _status.value = PushStatus(serverEnabled = _status.value.serverEnabled)
+    }
+
+    companion object {
+        private const val PREFS = "agora_push"
+        private const val SIGNED_IN = "signed_in"
+
+        /** Synchronous session flag for the messaging service (DataStore is asynchronous). */
+        fun setSignedIn(context: Context, signedIn: Boolean) =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(SIGNED_IN, signedIn).apply()
+
+        /** True until a logout on this device (installs from before the flag keep getting their messages). */
+        fun isSignedIn(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(SIGNED_IN, true)
     }
 }

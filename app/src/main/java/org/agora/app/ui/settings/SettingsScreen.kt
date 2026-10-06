@@ -94,7 +94,27 @@ import org.agora.app.BuildConfig
 import org.agora.app.R
 import org.agora.app.data.local.ThemeMode
 import org.agora.app.data.model.CalendarFeed
-import org.agora.app.data.model.NotificationSettings
+import org.agora.app.data.model.NotificationPrefs
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AdminPanelSettings
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.ManageAccounts
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Payments
+import org.agora.app.ui.components.IconTile
+import org.agora.app.ui.components.readingPadding
 import org.agora.app.data.model.User
 import org.agora.app.data.model.parseAmount
 import org.agora.app.push.Notifier
@@ -193,15 +213,12 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
     val theme by container.sessionStore.theme.collectAsStateWithLifecycle(ThemeMode.SYSTEM)
     val pushStatus by container.push.status.collectAsStateWithLifecycle()
     var avatarVersion by remember { mutableIntStateOf(0) }
-    var inviteCode by remember { mutableStateOf<String?>(null) }
     var feed by remember { mutableStateOf<CalendarFeed?>(null) }
     var confirmFeedReset by remember { mutableStateOf(false) }
     var deletingAccount by remember { mutableStateOf(false) }
     var oldPassword by rememberSaveable { mutableStateOf("") }
     var newPassword by rememberSaveable { mutableStateOf("") }
     var notifPermission by remember { mutableStateOf(Notifier.canNotify(context)) }
-    val prefs = user.effectiveNotifications
-    val showFinancePref = user.canViewFinances || user.isAdmin
 
     val savedMsg = stringResource(R.string.saved)
     val uploadFailed = stringResource(R.string.error_upload)
@@ -213,7 +230,6 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         container.push.refreshStatus()
         feed = runCatching { container.repo.calendarFeed() }.getOrNull()
-        if (user.canManageRegistrationCode) inviteCode = container.repo.inviteCode()
     }
 
     // A picked picture goes through the round crop step before it is uploaded
@@ -236,239 +252,190 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
     }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notifPermission = it }
 
-    fun saveNotifications(settings: NotificationSettings) = runner.run {
-        container.repo.saveNotificationSettings(user.userId, settings)
+    fun saveNotifications(prefs: NotificationPrefs) = runner.run {
+        container.repo.saveNotificationSettings(user.userId, prefs)
         container.store.reloadUser()
     }
 
+    // The settings live in sub-pages; the main page lists them, the registration code always sits on top
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    BackHandler(page != null) { page = null }
+    val pages = SettingsPage.entries.filter { it != SettingsPage.Fees || user.isAdmin }
+
     Scaffold(
         topBar = {
-            SubPageHeader(stringResource(R.string.nav_settings), onBack)
+            SubPageHeader(stringResource(page?.title ?: R.string.nav_settings), onBack = { if (page != null) page = null else onBack() })
         },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        // Three sections like the web: general settings first, administration, then calendar, privacy and account
-        val blocks = buildList<SettingsBlock> {
-            add(SettingsBlock(0, "profile") {
-                SettingsCard(stringResource(R.string.profile_picture)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        androidx.compose.runtime.key(avatarVersion) { UserAvatar(user.userId, user.fullName, 72.dp, ring = AvatarRings.of(user)) }
-                        Column(Modifier.weight(1f).padding(start = 14.dp)) {
-                            Text(user.fullName, style = MaterialTheme.typography.titleMedium)
-                            Text(user.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    SecondaryButton(onClick = { pickPicture.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        enabled = !runner.busy, modifier = Modifier.padding(top = 12.dp)) {
-                        Icon(Icons.Outlined.PhotoCamera, null, Modifier.size(18.dp))
-                        Text(" " + stringResource(R.string.btn_upload_pic))
-                    }
-                    Text(stringResource(R.string.profile_pic_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            })
-            if (user.canManageRegistrationCode) add(SettingsBlock(1, "invite") {
-                SettingsCard(stringResource(R.string.invite_title), Icons.Outlined.Lock) {
-                  Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Agora.colors.surfaceAlt)
-                        .dashedBorder(MaterialTheme.colorScheme.outline, 16.dp)
-                        .padding(18.dp)
-                  ) {
-                    CapsLabel(stringResource(R.string.invite_current))
-                    Text(inviteCode ?: "…", style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp), fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Black, color = Agora.colors.heading, modifier = Modifier.padding(top = 4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
-                        SecondaryButton(onClick = { inviteCode?.let { copyToClipboard(context, it); scope.launch { snackbar.showSnackbar(copied) } } },
-                            enabled = inviteCode != null) {
-                            Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
-                            Text(" " + stringResource(R.string.copy_btn))
-                        }
-                        SecondaryButton(onClick = {
-                            val code = Random.nextInt(100000, 1000000).toString()
-                            runner.run(savedMsg) { container.repo.setInviteCode(code); inviteCode = code }
-                        }, enabled = !runner.busy) {
-                            Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp))
-                            Text(" " + stringResource(R.string.btn_generate_new))
-                        }
-                    }
-                  }
-                }
-            })
-            add(SettingsBlock(0, "notifications") {
-                SettingsCard(stringResource(R.string.notif_channels_title), Icons.Outlined.NotificationsNone, contentPadding = PaddingValues(top = 18.dp, bottom = 8.dp), titlePadding = 18.dp) {
-                    SwitchItem(stringResource(R.string.notif_duties_title), stringResource(R.string.notif_duties_desc), prefs.duties, !runner.busy) {
-                        saveNotifications(prefs.copy(duties = it))
-                    }
-                    SwitchItem(stringResource(R.string.notif_events_title), stringResource(R.string.notif_events_desc), prefs.events, !runner.busy) {
-                        saveNotifications(prefs.copy(events = it))
-                    }
-                    SwitchItem(stringResource(R.string.notif_messages_title), stringResource(R.string.notif_messages_desc), prefs.messages, !runner.busy) {
-                        saveNotifications(prefs.copy(messages = it))
-                    }
-                    if (showFinancePref) SwitchItem(stringResource(R.string.notif_finances_title), stringResource(R.string.notif_finances_desc), prefs.finances, !runner.busy) {
-                        saveNotifications(prefs.copy(finances = it))
-                    }
-                }
-            })
-            add(SettingsBlock(0, "push") {
-                AgoraCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.NotificationsActive, null, tint = if (pushStatus.registered) Agora.colors.success else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 10.dp))
-                    }
-                    val statusText = when {
-                        pushStatus.registered -> stringResource(R.string.push_active)
-                        pushStatus.serverEnabled == false -> stringResource(R.string.push_server_disabled)
-                        else -> stringResource(R.string.push_not_set_up)
-                    }
-                    Text(statusText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
-                    if (!pushStatus.registered) Text(stringResource(R.string.push_fallback_hint), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                    pushStatus.error?.let { Text(stringResource(R.string.push_error, it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
-                        when {
-                            !notifPermission && Build.VERSION.SDK_INT >= 33 -> PrimaryButton(onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
-                                Text(stringResource(R.string.allow_notifications))
-                            }
-                            pushStatus.serverEnabled != false -> SecondaryButton(onClick = { runner.run { container.push.sync() } }, enabled = !runner.busy) {
-                                Text(stringResource(if (pushStatus.registered) R.string.push_reconnect else R.string.push_set_up))
+        val listPadding = readingPadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp, maxWidth = 720.dp)
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                // Into a sub-page from the right, back to the list from the left
+                if (targetState != null) (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
+                else (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
+            },
+            label = "settings-page"
+        ) { current ->
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                when (current) {
+                    null -> {
+                        if (user.canManageRegistrationCode) item(key = "invite") { InviteCard() }
+                        item(key = "menu") {
+                            AgoraCard(contentPadding = PaddingValues(0.dp)) {
+                                pages.forEachIndexed { index, target ->
+                                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    if (target == SettingsPage.Profile) MenuRow(
+                                        title = user.fullName, subtitle = user.email,
+                                        leading = { androidx.compose.runtime.key(avatarVersion) { UserAvatar(user.userId, user.fullName, 44.dp, ring = AvatarRings.of(user)) } }
+                                    ) { page = target }
+                                    else MenuRow(
+                                        title = stringResource(target.title),
+                                        subtitle = if (target == SettingsPage.Notifications) notificationSummary(user.notificationPrefs) else target.subtitle?.let { stringResource(it) },
+                                        leading = { IconTile(target.icon, target.tint ?: MaterialTheme.colorScheme.primary, size = 40.dp) }
+                                    ) { page = target }
+                                }
                             }
                         }
-                        if (pushStatus.registered) SecondaryButton(onClick = { runner.run(testSent) { container.repo.testPush() } }, enabled = !runner.busy) {
-                            Text(stringResource(R.string.push_test))
+                        item(key = "logout") {
+                            AgoraCard(contentPadding = PaddingValues(0.dp)) {
+                                MenuRow(
+                                    title = stringResource(R.string.logout), subtitle = null, danger = true,
+                                    leading = { IconTile(Icons.AutoMirrored.Outlined.Logout, Agora.colors.danger, size = 40.dp) }
+                                ) { scope.launch { container.store.logout() } }
+                            }
+                        }
+                        item(key = "version") {
+                            Text("Agora Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                        }
+                    }
+                    SettingsPage.Profile -> item(key = "profile") {
+                        AgoraCard {
+                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                androidx.compose.runtime.key(avatarVersion) { UserAvatar(user.userId, user.fullName, 96.dp, ring = AvatarRings.of(user)) }
+                                Text(user.fullName, style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, modifier = Modifier.padding(top = 12.dp))
+                                Text(user.email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                SecondaryButton(onClick = { pickPicture.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                    enabled = !runner.busy, modifier = Modifier.padding(top = 16.dp)) {
+                                    Icon(Icons.Outlined.PhotoCamera, null, Modifier.size(18.dp))
+                                    Text(" " + stringResource(R.string.btn_upload_pic))
+                                }
+                                Text(stringResource(R.string.profile_pic_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                            }
+                        }
+                    }
+                    SettingsPage.Notifications -> {
+                        item(key = "notifications") { NotificationsSettings(user, !runner.busy, ::saveNotifications) }
+                        item(key = "device") { PushDeviceCard(pushStatus, notifPermission, runner.busy,
+                            onAllow = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                            onSync = { runner.run { container.push.sync() } },
+                            onTest = { runner.run(testSent) { container.repo.testPush() } }) }
+                    }
+                    SettingsPage.Appearance -> item(key = "appearance") {
+                        AgoraCard {
+                            CapsLabel(stringResource(R.string.theme_title))
+                            val modes = ThemeMode.entries
+                            PillTabs(
+                                modes.map { mode ->
+                                    stringResource(when (mode) { ThemeMode.SYSTEM -> R.string.theme_system; ThemeMode.LIGHT -> R.string.theme_light; ThemeMode.DARK -> R.string.theme_dark }) to
+                                        when (mode) { ThemeMode.SYSTEM -> Icons.Outlined.PhoneAndroid; ThemeMode.LIGHT -> Icons.Outlined.LightMode; ThemeMode.DARK -> Icons.Outlined.DarkMode }
+                                },
+                                selected = modes.indexOf(theme), onSelect = { i -> scope.launch { container.sessionStore.setTheme(modes[i]) } },
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                            CapsLabel(stringResource(R.string.settings_language), Modifier.padding(top = 18.dp))
+                            val currentLanguage = AppCompatDelegate.getApplicationLocales().toLanguageTags().substringBefore('-').ifBlank { "system" }
+                            val languages = listOf("system", "de", "en")
+                            PillTabs(
+                                languages.map { lang -> (when (lang) { "de" -> "Deutsch"; "en" -> "English"; else -> stringResource(R.string.theme_system) }) to null },
+                                selected = languages.indexOf(currentLanguage).coerceAtLeast(0),
+                                onSelect = { i ->
+                                    val lang = languages[i]
+                                    AppCompatDelegate.setApplicationLocales(if (lang == "system") LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(lang))
+                                },
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+                    SettingsPage.Password -> item(key = "password") {
+                        AgoraCard {
+                            AgoraTextField(oldPassword, { oldPassword = it }, label = { Text(stringResource(R.string.old_password)) }, singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth())
+                            AgoraTextField(newPassword, { newPassword = it }, label = { Text(stringResource(R.string.new_password)) }, singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                supportingText = { Text(stringResource(R.string.password_min6)) }, modifier = Modifier.fillMaxWidth())
+                            PrimaryButton(onClick = {
+                                runner.run(pwChanged) {
+                                    container.repo.changePassword(oldPassword, newPassword)
+                                    // The server invalidates the token: sign in again with the new password
+                                    container.store.logout(remote = false)
+                                }
+                            }, enabled = oldPassword.isNotBlank() && newPassword.length >= 6 && !runner.busy, modifier = Modifier.padding(top = 8.dp)) {
+                                Text(stringResource(R.string.change_password_title))
+                            }
+                        }
+                    }
+                    SettingsPage.Calendar -> item(key = "calendar") {
+                        AgoraCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary)
+                                Text(stringResource(R.string.calendar_sub_desc), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp))
+                            }
+                            val f = feed
+                            if (f != null) {
+                                AgoraTextField(f.feedUrl, {}, readOnly = true, label = { Text(stringResource(R.string.calendar_sub_feed_url)) }, singleLine = true,
+                                    trailingIcon = { IconButton(onClick = { copyToClipboard(context, f.feedUrl); scope.launch { snackbar.showSnackbar(copied) } }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.copy_btn)) } },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
+                                Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    SecondaryButton(onClick = {
+                                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(f.webcalUrl))) }
+                                            .onFailure { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) }
+                                    }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.calendar_sub_btn_device)) }
+                                    SecondaryButton(onClick = { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) },
+                                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.calendar_sub_btn_google)) }
+                                    TextButton(onClick = { confirmFeedReset = true }) { Text(stringResource(R.string.calendar_sub_btn_reset)) }
+                                }
+                            }
+                        }
+                    }
+                    SettingsPage.Fees -> item(key = "fees") {
+                        FeeEditor(data.fees.rates) { rates -> runner.run(savedMsg) { container.repo.saveFeeSettings(rates); container.store.refreshAll() } }
+                    }
+                    SettingsPage.Account -> {
+                        item(key = "links") {
+                            AgoraCard(contentPadding = PaddingValues(0.dp)) {
+                                MenuRow(stringResource(R.string.open_in_browser), container.api.baseUrl,
+                                    leading = { IconTile(Icons.AutoMirrored.Outlined.OpenInNew, MaterialTheme.colorScheme.primary, size = 40.dp) }) {
+                                    openInBrowser(context, container.api.baseUrl)
+                                }
+                                if (user.isAdmin) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    MenuRow(stringResource(R.string.nav_superadmin_settings), null,
+                                        leading = { IconTile(Icons.Outlined.AdminPanelSettings, Color(0xFF6366F1), size = 40.dp) }) {
+                                        openInBrowser(context, container.api.baseUrl + "/#super-admin-settings")
+                                    }
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                MenuRow(stringResource(R.string.privacy_policy), null,
+                                    leading = { IconTile(Icons.Outlined.Policy, Color(0xFF0EA5E9), size = 40.dp) }) {
+                                    openInBrowser(context, container.api.baseUrl + "/privacy")
+                                }
+                            }
+                        }
+                        // The owner account cannot be deleted (the server refuses it as well)
+                        if (!user.owner && !user.superAdmin) item(key = "delete") {
+                            AgoraCard(contentPadding = PaddingValues(0.dp)) {
+                                MenuRow(stringResource(R.string.delete_account), null, danger = true,
+                                    leading = { IconTile(Icons.Outlined.DeleteForever, Agora.colors.danger, size = 40.dp) }) { deletingAccount = true }
+                            }
                         }
                     }
                 }
-            })
-            add(SettingsBlock(0, "appearance") {
-                SettingsCard(stringResource(R.string.appearance), Icons.Outlined.Palette) {
-                    CapsLabel(stringResource(R.string.theme_title))
-                    val modes = ThemeMode.entries
-                    PillTabs(
-                        modes.map { mode ->
-                            stringResource(when (mode) { ThemeMode.SYSTEM -> R.string.theme_system; ThemeMode.LIGHT -> R.string.theme_light; ThemeMode.DARK -> R.string.theme_dark }) to
-                                when (mode) { ThemeMode.SYSTEM -> Icons.Outlined.PhoneAndroid; ThemeMode.LIGHT -> Icons.Outlined.LightMode; ThemeMode.DARK -> Icons.Outlined.DarkMode }
-                        },
-                        selected = modes.indexOf(theme), onSelect = { i -> scope.launch { container.sessionStore.setTheme(modes[i]) } },
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    CapsLabel(stringResource(R.string.settings_language), Modifier.padding(top = 18.dp))
-                    val current = AppCompatDelegate.getApplicationLocales().toLanguageTags().substringBefore('-').ifBlank { "system" }
-                    val languages = listOf("system", "de", "en")
-                    PillTabs(
-                        languages.map { lang -> (when (lang) { "de" -> "Deutsch"; "en" -> "English"; else -> stringResource(R.string.theme_system) }) to null },
-                        selected = languages.indexOf(current).coerceAtLeast(0),
-                        onSelect = { i ->
-                            val lang = languages[i]
-                            AppCompatDelegate.setApplicationLocales(if (lang == "system") LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(lang))
-                        },
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-            })
-            if (user.isAdmin) add(SettingsBlock(1, "fees") {
-                SectionTitle(stringResource(R.string.monthly_fees))
-                FeeEditor(data.fees.rates) { rates -> runner.run(savedMsg) { container.repo.saveFeeSettings(rates); container.store.refreshAll() } }
-            })
-            add(SettingsBlock(0, "password") {
-                SettingsCard(stringResource(R.string.change_password_title), Icons.Outlined.Key) {
-                    AgoraTextField(oldPassword, { oldPassword = it }, label = { Text(stringResource(R.string.old_password)) }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth())
-                    AgoraTextField(newPassword, { newPassword = it }, label = { Text(stringResource(R.string.new_password)) }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        supportingText = { Text(stringResource(R.string.password_min6)) }, modifier = Modifier.fillMaxWidth())
-                    PrimaryButton(onClick = {
-                        runner.run(pwChanged) {
-                            container.repo.changePassword(oldPassword, newPassword)
-                            // The server invalidates the token: sign in again with the new password
-                            container.store.logout(remote = false)
-                        }
-                    }, enabled = oldPassword.isNotBlank() && newPassword.length >= 6 && !runner.busy, modifier = Modifier.padding(top = 8.dp)) {
-                        Text(stringResource(R.string.change_password_title))
-                    }
-                }
-            })
-            add(SettingsBlock(2, "calendar") {
-                SettingsCard(stringResource(R.string.calendar_sub_title), Icons.Outlined.CalendarMonth) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary)
-                        Text(stringResource(R.string.calendar_sub_desc), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 10.dp))
-                    }
-                    val f = feed
-                    if (f != null) {
-                        AgoraTextField(f.feedUrl, {}, readOnly = true, label = { Text(stringResource(R.string.calendar_sub_feed_url)) }, singleLine = true,
-                            trailingIcon = { IconButton(onClick = { copyToClipboard(context, f.feedUrl); scope.launch { snackbar.showSnackbar(copied) } }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.copy_btn)) } },
-                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
-                        Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SecondaryButton(onClick = {
-                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(f.webcalUrl))) }
-                                    .onFailure { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) }
-                            }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.calendar_sub_btn_device)) }
-                            SecondaryButton(onClick = { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) },
-                                modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.calendar_sub_btn_google)) }
-                            TextButton(onClick = { confirmFeedReset = true }) { Text(stringResource(R.string.calendar_sub_btn_reset)) }
-                        }
-                    }
-                }
-            })
-            add(SettingsBlock(2, "account") {
-                SettingsCard(stringResource(R.string.account), Icons.Outlined.AccountCircle, contentPadding = PaddingValues(top = 18.dp, bottom = 8.dp), titlePadding = 18.dp) {
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.open_in_browser)) },
-                        supportingContent = { Text(container.api.baseUrl) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.clickable { openInBrowser(context, container.api.baseUrl) }
-                    )
-                    if (user.isAdmin) {
-                        HorizontalDivider()
-                        TextButton(onClick = { openInBrowser(context, container.api.baseUrl + "/#super-admin-settings") }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                            Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp))
-                            Text(" " + stringResource(R.string.nav_superadmin_settings))
-                        }
-                    }
-                    HorizontalDivider()
-                    ListItem(
-                        headlineContent = { Text(stringResource(R.string.privacy_policy)) },
-                        leadingContent = { Icon(Icons.Outlined.Policy, null) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.clickable { openInBrowser(context, container.api.baseUrl + "/privacy") }
-                    )
-                    HorizontalDivider()
-                    TextButton(onClick = { scope.launch { container.store.logout() } }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                        Text(" " + stringResource(R.string.logout), color = MaterialTheme.colorScheme.error)
-                    }
-                    // The owner account cannot be deleted (the server refuses it as well)
-                    if (!user.owner && !user.superAdmin) TextButton(onClick = { deletingAccount = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Icon(Icons.Outlined.DeleteForever, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                        Text(stringResource(R.string.delete_account), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(start = 6.dp))
-                    }
-                }
-                Text("Agora Android ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp, start = 4.dp))
-            })
-        }
-        val wide = isWide()
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = pagePadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            SETTINGS_SECTIONS.forEachIndexed { section, title ->
-                val cards = blocks.filter { it.section == section }
-                if (cards.isEmpty()) return@forEachIndexed
-                item(key = "section-$section") { SectionTitle(stringResource(title)) }
-                // Tablets: the cards of a section in two columns
-                if (wide) item(key = "pane-$section") {
-                    TwoPane(true, left = { cards.filterIndexed { i, _ -> i % 2 == 0 }.forEach { it.content() } },
-                        right = { cards.filterIndexed { i, _ -> i % 2 == 1 }.forEach { it.content() } })
-                } else items(cards, key = { it.key }) { it.content() }
             }
         }
     }
@@ -527,10 +494,203 @@ private fun DeleteAccountSheet(onDismiss: () -> Unit) {
     }
 }
 
-/** One card of the settings page and the section it belongs to (see [SETTINGS_SECTIONS]). */
-private class SettingsBlock(val section: Int, val key: String, val content: @Composable () -> Unit)
+/** The sub-pages of the settings (the registration code is not one: it stays on the main page). */
+private enum class SettingsPage(val title: Int, val icon: ImageVector, val subtitle: Int?, val tint: Color?) {
+    Profile(R.string.settings_profile, Icons.Outlined.AccountCircle, null, null),
+    Notifications(R.string.notif_channels_title, Icons.Outlined.NotificationsNone, null, Color(0xFFF59E0B)),
+    Appearance(R.string.appearance, Icons.Outlined.Palette, R.string.settings_appearance_desc, Color(0xFF8B5CF6)),
+    Password(R.string.change_password_title, Icons.Outlined.Key, R.string.settings_password_desc, Color(0xFF64748B)),
+    Calendar(R.string.calendar_sub_title, Icons.Outlined.CalendarMonth, R.string.settings_calendar_desc, null),
+    Fees(R.string.monthly_fees, Icons.Outlined.Payments, R.string.settings_fees_desc, Color(0xFF10B981)),
+    Account(R.string.settings_account_title, Icons.Outlined.ManageAccounts, R.string.settings_account_desc, Color(0xFF0EA5E9))
+}
 
-private val SETTINGS_SECTIONS = listOf(R.string.settings_section_general, R.string.settings_section_admin, R.string.settings_section_more)
+/** One row of a settings list: tile or avatar, title, optional subtitle, chevron. */
+@Composable
+private fun MenuRow(title: String, subtitle: String?, danger: Boolean = false, leading: @Composable () -> Unit, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        leading()
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = if (danger) Agora.colors.danger else Agora.colors.heading,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        if (!danger) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+    }
+}
+
+@Composable
+private fun notificationSummary(prefs: NotificationPrefs): String = stringResource(when {
+    prefs.channels.push && prefs.channels.email -> R.string.notif_summary_both
+    prefs.channels.push -> R.string.notif_summary_push
+    prefs.channels.email -> R.string.notif_summary_email
+    else -> R.string.notif_summary_off
+})
+
+/** Registration code of the instance (for those with the right), always at the top of the settings. */
+@Composable
+private fun InviteCard() {
+    val container = LocalContainer.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val runner = rememberActionRunner()
+    val snackbar = LocalSnackbar.current
+    var inviteCode by remember { mutableStateOf<String?>(null) }
+    val savedMsg = stringResource(R.string.saved)
+    val copied = stringResource(R.string.copied)
+    LaunchedEffect(Unit) { inviteCode = runCatching { container.repo.inviteCode() }.getOrNull() }
+    SettingsCard(stringResource(R.string.invite_title), Icons.Outlined.Lock) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Agora.colors.surfaceAlt)
+                .dashedBorder(MaterialTheme.colorScheme.outline, 16.dp)
+                .padding(18.dp)
+        ) {
+            CapsLabel(stringResource(R.string.invite_current))
+            Text(inviteCode ?: "…", style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp), fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Black, color = Agora.colors.heading, modifier = Modifier.padding(top = 4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+                SecondaryButton(onClick = { inviteCode?.let { copyToClipboard(context, it); scope.launch { snackbar.showSnackbar(copied) } } },
+                    enabled = inviteCode != null) {
+                    Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
+                    Text(" " + stringResource(R.string.copy_btn))
+                }
+                SecondaryButton(onClick = {
+                    val code = Random.nextInt(100000, 1000000).toString()
+                    runner.run(savedMsg) { container.repo.setInviteCode(code); inviteCode = code }
+                }, enabled = !runner.busy) {
+                    Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp))
+                    Text(" " + stringResource(R.string.btn_generate_new))
+                }
+            }
+        }
+    }
+}
+
+/** Kind of message with its icon and colour (same order and choice as the web settings). */
+private data class NotificationKind(val key: String, val title: Int, val desc: Int, val icon: ImageVector, val color: Color)
+
+private val NOTIFICATION_KINDS = listOf(
+    NotificationKind("duties", R.string.notif_duties_title, R.string.notif_duties_desc, Icons.Outlined.EventAvailable, Color(0xFF6366F1)),
+    NotificationKind("events", R.string.notif_events_title, R.string.notif_events_desc, Icons.Outlined.CalendarMonth, Color(0xFF0891B2)),
+    NotificationKind("messages", R.string.notif_messages_title, R.string.notif_messages_desc, Icons.AutoMirrored.Outlined.Chat, Color(0xFF7C3AED)),
+    NotificationKind("requests", R.string.notif_requests_title, R.string.notif_requests_desc, Icons.Outlined.Description, Color(0xFF10B981)),
+    NotificationKind("finances", R.string.notif_finances_title, R.string.notif_finances_desc, Icons.Outlined.Payments, Color(0xFFD97706)),
+    NotificationKind("reports", R.string.notif_reports_title, R.string.notif_reports_desc, Icons.Outlined.Flag, Color(0xFFEF4444))
+)
+
+/**
+ * Notifications like the web: push and e-mail as master switches, below them per channel which kinds arrive. Without
+ * e-mail there is no e-mail tab; finance requests only for those who decide on them, reported content only for admins.
+ */
+@Composable
+private fun NotificationsSettings(user: User, enabled: Boolean, onSave: (NotificationPrefs) -> Unit) {
+    var prefs by remember(user) { mutableStateOf(user.notificationPrefs) }
+    var tab by rememberSaveable { mutableStateOf("push") }
+    val channels = prefs.channels
+    if (!channels.email) tab = "push" else if (!channels.push) tab = "email"
+    fun update(next: NotificationPrefs) { prefs = next; onSave(next) }
+    val kinds = NOTIFICATION_KINDS.filter {
+        (it.key != "finances" || user.isAdmin || user.canManageFinances) && (it.key != "reports" || user.isAdmin)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(stringResource(R.string.notif_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp))
+        AgoraCard(contentPadding = PaddingValues(0.dp)) {
+            ChannelRow(Icons.Outlined.NotificationsNone, stringResource(R.string.notif_channel_push_title), stringResource(R.string.notif_channel_push_desc),
+                channels.push, enabled) { update(prefs.copy(channels = channels.copy(push = it))); if (it) tab = "push" }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            ChannelRow(Icons.Outlined.Email, stringResource(R.string.notif_channel_email_title), stringResource(R.string.notif_channel_email_desc, user.email),
+                channels.email, enabled) { update(prefs.copy(channels = channels.copy(email = it))); if (it) tab = "email" }
+        }
+        if (!channels.push && !channels.email) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Agora.colors.surfaceAlt).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Outlined.NotificationsOff, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.notif_all_off), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 10.dp))
+            }
+            return@Column
+        }
+        CapsLabel(stringResource(R.string.notif_kinds_title), Modifier.padding(start = 4.dp, top = 4.dp))
+        if (channels.push && channels.email) PillTabs(
+            listOf(stringResource(R.string.notif_tab_push) to Icons.Outlined.NotificationsNone, stringResource(R.string.notif_tab_email) to Icons.Outlined.Email),
+            selected = if (tab == "email") 1 else 0, onSelect = { tab = if (it == 1) "email" else "push" }
+        )
+        val current = if (tab == "email") prefs.email else prefs.push
+        AgoraCard(contentPadding = PaddingValues(0.dp)) {
+            kinds.forEachIndexed { index, kind ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconTile(kind.icon, kind.color, size = 36.dp)
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(stringResource(kind.title), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
+                        Text(stringResource(kind.desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    AgoraSwitch(current[kind.key], { on ->
+                        update(if (tab == "email") prefs.copy(email = prefs.email.with(kind.key, on)) else prefs.copy(push = prefs.push.with(kind.key, on)))
+                    }, enabled = enabled)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelRow(icon: ImageVector, title: String, desc: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                .then(if (checked) Modifier.background(Agora.colors.brandGradient) else Modifier.background(Agora.colors.surfaceAlt)),
+            contentAlignment = Alignment.Center
+        ) { Icon(icon, null, Modifier.size(20.dp), tint = if (checked) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) }
+        Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        AgoraSwitch(checked, onChange, enabled = enabled)
+    }
+}
+
+/** Push on this device: permission, connection to the server, test message. */
+@Composable
+private fun PushDeviceCard(
+    pushStatus: org.agora.app.push.PushStatus, notifPermission: Boolean, busy: Boolean,
+    onAllow: () -> Unit, onSync: () -> Unit, onTest: () -> Unit
+) {
+    SettingsCard(stringResource(R.string.notif_device_title), Icons.Outlined.NotificationsActive) {
+        val statusText = when {
+            pushStatus.registered -> stringResource(R.string.push_active)
+            pushStatus.serverEnabled == false -> stringResource(R.string.push_server_disabled)
+            else -> stringResource(R.string.push_not_set_up)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .background(if (pushStatus.registered) Agora.colors.success else MaterialTheme.colorScheme.outline))
+            Text(statusText, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+        }
+        if (!pushStatus.registered) Text(stringResource(R.string.push_fallback_hint), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        pushStatus.error?.let { Text(stringResource(R.string.push_error, it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
+            when {
+                !notifPermission && Build.VERSION.SDK_INT >= 33 -> PrimaryButton(onClick = onAllow) { Text(stringResource(R.string.allow_notifications)) }
+                pushStatus.serverEnabled != false -> SecondaryButton(onClick = onSync, enabled = !busy) {
+                    Text(stringResource(if (pushStatus.registered) R.string.push_reconnect else R.string.push_set_up))
+                }
+            }
+            if (pushStatus.registered) SecondaryButton(onClick = onTest, enabled = !busy) { Text(stringResource(R.string.push_test)) }
+        }
+    }
+}
 
 @Composable
 private fun FeeEditor(rates: Map<String, Double>, onSave: (Map<String, Double>) -> Unit) {

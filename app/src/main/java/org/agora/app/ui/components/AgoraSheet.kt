@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -103,9 +104,13 @@ fun AgoraSheet(
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
             )
         },
-        modifier = modifier
+        // The sheet is its own window: it has to ask for the high refresh rate itself while it is dragged, otherwise
+        // adaptive-refresh phones drop to a low rate and the sheet stutters behind the finger
+        modifier = modifier.highFrameRateWhileTouching()
     ) {
-        Column(Modifier.fillMaxWidth().imePadding()) {
+        // Own layer: dragging only moves the already drawn content instead of redrawing it (and its blurred
+        // soft shadows) in every frame
+        Column(Modifier.fillMaxWidth().graphicsLayer().imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 8.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (icon != null) IconTile(icon, iconTint, Modifier.padding(end = 12.dp), size = 42.dp)
                 Column(Modifier.weight(1f)) {

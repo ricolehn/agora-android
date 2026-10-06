@@ -69,7 +69,6 @@
     <string name="logout">Sign out</string>
 
     <!-- Home -->
-    <string name="welcome_title">Welcome</string>
     <string name="your_duties">Your duties</string>
 
     <!-- Finances -->
@@ -91,7 +90,6 @@
     <string name="no_member_record">No member record found. Please contact an administrator.</string>
     <string name="user_requests_title">My requests</string>
     <string name="user_new_request">New request</string>
-    <string name="user_history_title">History</string>
     <string name="user_req_type_payment">Payment</string>
     <string name="user_req_type_status">Status change</string>
     <string name="user_req_type_expense">Expense</string>
@@ -104,8 +102,6 @@
     <string name="rejection_reason">Reason: %1$s</string>
     <string name="receipts_count">%1$d receipt(s)</string>
     <string name="no_requests">No requests yet.</string>
-    <string name="no_payments">No payments yet.</string>
-    <string name="payment">Payment</string>
     <string name="amount">Amount</string>
     <string name="date">Date</string>
     <string name="start_date">Start date</string>
@@ -125,13 +121,11 @@
     <string name="total_balance">Current balance</string>
     <string name="finances_sub_history">Overview</string>
     <string name="finances_sub_members">Member list</string>
-    <string name="pending_requests">Open requests (%1$d)</string>
     <string name="search_transactions">Search history…</string>
     <string name="search_members">Search members…</string>
     <string name="no_transactions">No bookings found</string>
     <string name="approve">Approve</string>
     <string name="reject">Reject</string>
-    <string name="reject_request">Reject request</string>
     <string name="rejection_reason_label">Reason for rejection</string>
     <string name="toast_request_approved">Request approved</string>
     <string name="toast_request_rejected">Request rejected</string>
@@ -144,8 +138,6 @@
     <string name="tx_type_payment">Membership fee</string>
     <string name="tx_type_donation">Donation</string>
     <string name="tx_type_expense">Expense</string>
-    <string name="not_paying">No fee</string>
-    <string name="member_since">Member since %1$s</string>
     <string name="book_payment">Book payment</string>
     <string name="book">Book</string>
     <string name="toast_payment_booked">Payment booked</string>
@@ -153,7 +145,6 @@
     <string name="change_status_date">Valid from</string>
     <string name="change_status_hint">Dates in the past rewrite the history retroactively.</string>
     <string name="toast_status_changed">Status changed</string>
-    <string name="status_history">Status history</string>
 
     <!-- Events -->
     <string name="events_tab_termine">Appointments</string>
@@ -180,32 +171,20 @@
     <string name="event_no_registration">No registration needed</string>
     <string name="event_places">%1$d / %2$d places</string>
     <string name="event_not_found">Event not found</string>
-    <string name="organized_by">Organised by %1$s</string>
-    <string name="open_map">Map</string>
-    <string name="until_date">until %1$s</string>
     <string name="registration">Registration</string>
-    <string name="min_participants">At least %1$d participants</string>
     <string name="event_register">Register (binding)</string>
     <string name="event_join_waitlist">Join waiting list</string>
-    <string name="event_registered_leave">Registered – tap to unregister</string>
-    <string name="event_waitlist_leave">On the waiting list (leave)</string>
-    <string name="event_registration_closed">Registration is closed – the event is over.</string>
     <string name="events_registered_success">Registered successfully!</string>
     <string name="events_waitlist_success">Added to the waiting list</string>
     <string name="events_unregistered_success">Unregistered</string>
     <string name="attendees">Attendees</string>
-    <string name="no_attendees">No registrations yet.</string>
     <string name="delete_event">Delete event</string>
     <string name="events_delete_confirm">Do you really want to delete this event?</string>
     <string name="events_deleted_success">Event deleted</string>
     <string name="event_saved">Saved</string>
-    <string name="title">Title</string>
     <string name="multi_day">Multi-day</string>
     <string name="start_time">Start</string>
     <string name="end_time">End</string>
-    <string name="location">Location</string>
-    <string name="cover_image">Cover image (16:9)</string>
-    <string name="choose_image">Choose image</string>
     <string name="change_image">Change image</string>
     <string name="pin_event">Major event / highlight</string>
     <string name="pin_event_desc">Shown at the top for everyone</string>
@@ -213,7 +192,6 @@
     <string name="min_participants_label">Min. participants</string>
     <string name="max_participants_label">Max. participants (0 = unlimited)</string>
     <string name="target_groups">Target groups</string>
-    <string name="target_groups_hint">Nothing selected = visible to everyone</string>
     <string name="recurring">Repeat</string>
     <string name="recurring_rule">Rhythm</string>
     <string name="recurring_count">Count</string>
@@ -231,14 +209,6 @@
     <string name="duty_accepted">Duty accepted</string>
     <string name="duty_declined">Duty declined</string>
     <string name="duty_request_open">Request open</string>
-    <string name="duty_request_open_sub">(request open)</string>
-    <string name="duty_declined_sub">✕ Declined</string>
-    <string name="duty_confirmed_sub">✓ Assigned</string>
-    <string name="duty_open_slot">Nobody assigned yet (open task)</string>
-    <string name="duty_group">Group: %1$s</string>
-    <string name="duty_group_assigned_sub">(group assigned)</string>
-    <string name="duty_no_tasks">No duties entered.</string>
-    <string name="duty_no_tasks_manager">No tasks created yet.</string>
     <string name="duty_add_person">Add person or group</string>
     <string name="duty_add_task">Add task</string>
     <string name="duty_new_task">Name of the task</string>
@@ -316,13 +286,13 @@
     <string name="btn_generate_new">New</string>
     <string name="notif_channels_title">Notifications</string>
     <string name="notif_duties_title">Duty requests</string>
-    <string name="notif_duties_desc">Requests, confirmations &amp; changes to your duties</string>
+    <string name="notif_duties_desc">Duty requests, answers to them, duties of your groups and a reminder 3 hours before your duty</string>
     <string name="notif_events_title">New events &amp; appointments</string>
     <string name="notif_events_desc">New events and appointments of the community</string>
     <string name="notif_messages_title">Messages</string>
     <string name="notif_messages_desc">Support requests and mentoring messages</string>
-    <string name="notif_finances_title">Financial requests</string>
-    <string name="notif_finances_desc">New cash and reimbursement requests</string>
+    <string name="notif_finances_title">Requests to the treasury</string>
+    <string name="notif_finances_desc">New payment, expense and status requests from members</string>
     <string name="notif_general_title">General</string>
     <string name="push_title">Push notifications on this device</string>
     <string name="push_active">Active – notifications arrive instantly.</string>
@@ -468,7 +438,6 @@
     <string name="home_register_open">Registration open</string>
     <string name="home_fee_open">%1$s open</string>
     <string name="home_fee_details">View</string>
-    <string name="home_fee">Membership fee</string>
     <string name="detail_groups_event_one">Event for the group %1$s</string>
     <string name="detail_groups_event_many">Event for the groups %1$s</string>
     <string name="detail_groups_termin_one">Appointment for the group %1$s</string>
@@ -492,4 +461,118 @@
     <string name="settings_section_general">General</string>
     <string name="settings_section_admin">Administration</string>
     <string name="settings_section_more">Calendar, privacy &amp; account</string>
+    <!-- beta3: requests like the web (beta18), Termine calendar on tablets -->
+    <string name="request_from_date">from %1$s</string>
+    <string name="request_on_date">on %1$s</string>
+    <string name="requests_more">+%1$d more requests</string>
+    <string name="req_actions_title">What would you like to submit?</string>
+    <string name="req_action_payment_title">Report a payment</string>
+    <string name="req_action_payment_desc">Transferred your fee or set up a standing order</string>
+    <string name="req_action_expense_title">Get an expense refunded</string>
+    <string name="req_action_expense_desc">Paid for something for the church? Submit it with a receipt</string>
+    <string name="req_action_status_title">Change status</string>
+    <string name="req_action_status_desc">E.g. apply for low earner or a pause</string>
+    <string name="user_no_requests_hint">Above you can report a payment, submit an expense or change your status.</string>
+    <string name="user_requests_show_all">Show all %1$d</string>
+    <string name="user_requests_show_less">Show less</string>
+    <string name="request_detail_person">From</string>
+    <string name="request_detail_purpose">Purpose</string>
+    <string name="request_detail_received">Received</string>
+    <string name="request_detail_reason">Reason</string>
+    <string name="request_reject_confirm">Reject request</string>
+    <string name="request_reject_placeholder">Optional – shown to the member</string>
+    <string name="calendar_prev_month">Previous month</string>
+    <string name="calendar_next_month">Next month</string>
+    <!-- beta3: financial report as PDF, like the web (beta19) -->
+    <string name="report_create">Create report</string>
+    <string name="report_sheet_title">Create financial report</string>
+    <string name="report_type">Report type</string>
+    <string name="report_type_annual">Annual overview</string>
+    <string name="report_type_annual_desc">A whole year</string>
+    <string name="report_type_custom">Period</string>
+    <string name="report_type_custom_desc">From – to</string>
+    <string name="report_type_person">One person</string>
+    <string name="report_type_person_desc">Fees of one member</string>
+    <string name="report_type_manual">Selection</string>
+    <string name="report_type_manual_desc">Tick bookings</string>
+    <string name="report_year">Year</string>
+    <string name="report_from">From</string>
+    <string name="report_to">To</string>
+    <string name="report_person">Member</string>
+    <string name="report_pick">Select bookings</string>
+    <string name="report_tier">Level of detail</string>
+    <string name="report_tier_compact">Compact</string>
+    <string name="report_tier_standard">Standard</string>
+    <string name="report_tier_detailed">Detailed</string>
+    <string name="report_tier_compact_hint">Totals and a summary by kind only</string>
+    <string name="report_tier_standard_hint">Totals and every booking</string>
+    <string name="report_tier_detailed_hint">Also notes and receipts</string>
+    <string name="report_preview">Preview</string>
+    <string name="report_save">Save PDF</string>
+    <string name="report_share">Share</string>
+    <string name="report_saved">Report saved</string>
+    <string name="report_loading">Loading bookings…</string>
+    <string name="report_no_data">No data in the chosen period</string>
+    <string name="report_pick_bookings">Tick the bookings that should go into the report.</string>
+    <string name="report_financial_report">Financial report</string>
+    <string name="report_created_on">Created on</string>
+    <string name="report_kind_annual">Annual overview</string>
+    <string name="report_kind_custom">Overview for a period</string>
+    <string name="report_kind_manual">Selected bookings</string>
+    <string name="report_kind_person">Overview for one member</string>
+    <string name="report_income">Income</string>
+    <string name="report_expenses">Expenses</string>
+    <string name="report_balance">Balance</string>
+    <string name="report_outstanding">Outstanding (until today)</string>
+    <string name="report_status">Status</string>
+    <string name="report_status_good">No arrears</string>
+    <string name="report_section_bookings">Bookings</string>
+    <string name="report_section_by_kind">By kind</string>
+    <string name="report_head_date">Date</string>
+    <string name="report_head_kind">Kind</string>
+    <string name="report_head_desc">Description / partner</string>
+    <string name="report_head_amount">Amount</string>
+    <string name="report_head_count">Count</string>
+    <string name="report_kind_pay">Fee</string>
+    <string name="report_kind_don">Donation</string>
+    <string name="report_kind_exp">Expense</string>
+    <string name="report_receipt">Receipt attached</string>
+    <string name="report_year_label">Year: %1$s</string>
+    <string name="report_manual_selection">Manual selection</string>
+    <string name="report_all">All bookings</string>
+    <string name="report_file_name">Financial_report</string>
+    <plurals name="report_bookings">
+        <item quantity="one">%d booking</item>
+        <item quantity="other">%d bookings</item>
+    </plurals>
+    <plurals name="report_pages">
+        <item quantity="one">%d page</item>
+        <item quantity="other">%d pages</item>
+    </plurals>
+    <!-- beta3: settings in sub-pages, notifications per channel like the web (server v3.0.0) -->
+    <string name="settings_profile">Profile</string>
+    <string name="settings_appearance_desc">Theme and language</string>
+    <string name="settings_password_desc">Set a new password</string>
+    <string name="settings_calendar_desc">Your appointments in your own calendar</string>
+    <string name="settings_fees_desc">Monthly fees per status</string>
+    <string name="settings_account_title">Account &amp; privacy</string>
+    <string name="settings_account_desc">Web version, privacy policy, delete account</string>
+    <string name="notif_intro">Choose how you are notified and which messages you get.</string>
+    <string name="notif_channel_push_title">Push</string>
+    <string name="notif_channel_push_desc">Straight to this phone</string>
+    <string name="notif_channel_email_title">E-mail</string>
+    <string name="notif_channel_email_desc">To %1$s</string>
+    <string name="notif_kinds_title">What would you like to get?</string>
+    <string name="notif_tab_push">Push</string>
+    <string name="notif_tab_email">E-mail</string>
+    <string name="notif_requests_title">My requests</string>
+    <string name="notif_requests_desc">When your payment, expense or status change was approved or rejected</string>
+    <string name="notif_reports_title">Reported content</string>
+    <string name="notif_reports_desc">Reported chat messages and AI answers</string>
+    <string name="notif_all_off">You get no notifications. Turn on push or e-mail above.</string>
+    <string name="notif_summary_both">Push and e-mail</string>
+    <string name="notif_summary_push">Push only</string>
+    <string name="notif_summary_email">E-mail only</string>
+    <string name="notif_summary_off">Off</string>
+    <string name="notif_device_title">This device</string>
 </resources>

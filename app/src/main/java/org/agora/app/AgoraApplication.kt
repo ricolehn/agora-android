@@ -53,12 +53,20 @@ class AgoraApplication : Application(), SingletonImageLoader.Factory {
         // After a crash (debug builds) MainActivity only shows the report: start nothing in the background
         if (CrashLog.pending(this) != null) return
         container.store.onLoggedIn = {
+            PushManager.setSignedIn(this, true)
             PollWorker.schedule(this)
             runCatching { container.push.sync() }
+            runCatching { container.repo.syncTimeZone(it) }
         }
-        container.store.onLoggingOut = {
+        container.store.onLoggingOut = { remote ->
+            PushManager.setSignedIn(this, false)
             PollWorker.cancel(this)
-            container.push.disable()
+            container.push.disable(remote)
+            // Pictures and receipts of this account must not stay on the device
+            SingletonImageLoader.get(this).let { loader ->
+                loader.memoryCache?.clear()
+                loader.diskCache?.clear()
+            }
         }
     }
 

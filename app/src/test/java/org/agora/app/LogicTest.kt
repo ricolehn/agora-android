@@ -12,6 +12,7 @@ import org.agora.app.data.model.User
 import org.agora.app.data.model.parseAmount
 import org.agora.app.ui.ai.splitThinking
 import org.agora.app.ui.events.terminFilter
+import org.agora.app.ui.finance.receiptFiles
 import org.agora.app.util.Dates
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,6 +22,17 @@ import org.junit.Test
 import java.time.YearMonth
 
 class LogicTest {
+    @Test
+    fun receiptFieldsOfAllVersionsAreRead() {
+        // current format: JSON array as text; bookings from older versions: plain name or comma list
+        assertEquals(listOf("A-2026-05-30-1.jpg", "A-2026-05-30-2.jpg"), receiptFiles("[\"A-2026-05-30-1.jpg\",\"A-2026-05-30-2.jpg\"]"))
+        assertEquals(listOf("Angelina_Fott-2026-03-13-1.jpg"), receiptFiles("Angelina_Fott-2026-03-13-1.jpg"))
+        assertEquals(listOf("a.jpg", "b.jpg"), receiptFiles(" a.jpg, b.jpg "))
+        assertEquals(emptyList<String>(), receiptFiles(null))
+        assertEquals(emptyList<String>(), receiptFiles("  "))
+        assertEquals(emptyList<String>(), receiptFiles("[]"))
+    }
+
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true; explicitNulls = false }
 
     private val base = json.parseToJsonElement(

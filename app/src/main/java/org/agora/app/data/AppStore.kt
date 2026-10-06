@@ -48,6 +48,8 @@ data class AppData(
     val fees: FeeSettings = FeeSettings(),
     val ownPerson: Person? = null,
     val ownRequests: List<FinanceRequest> = emptyList(),
+    /** Open requests of all members; only filled for those who decide on them (treasurers, owner). */
+    val pendingRequests: List<FinanceRequest> = emptyList(),
     val events: List<AgoraEvent> = emptyList(),
     val dutyRequests: List<DutyRequest> = emptyList(),
     val threads: List<MentoringThread> = emptyList(),
@@ -87,7 +89,8 @@ class AppStore(
 
     /** Callbacks for session lifecycle (push registration etc.). */
     var onLoggedIn: suspend (User) -> Unit = {}
-    var onLoggingOut: suspend () -> Unit = {}
+    /** [remote]: the server still accepts the token (normal logout) - otherwise only local cleanup. */
+    var onLoggingOut: suspend (remote: Boolean) -> Unit = {}
 
     private val refreshMutex = Mutex()
     private var liveJob: Job? = null
@@ -189,10 +192,9 @@ class AppStore(
 
     suspend fun logout(remote: Boolean = true) {
         stopLiveUpdates()
-        if (remote) {
-            runCatching { onLoggingOut() }
-            repo.logout()
-        }
+        // Push and background checks stop in every case (also after a 401, password change or account deletion)
+        runCatching { onLoggingOut(remote) }
+        if (remote) runCatching { repo.logout() }
         repo.api.token = null
         // Cached answers belong to this account
         repo.api.clearHttpCache()
@@ -219,7 +221,8 @@ class AppStore(
                 val old = _data.value
                 val fees = async { runCatching { repo.feeSettings() }.getOrDefault(old.fees) }
                 val person = async { runCatching { repo.ownPeople(user.userId).firstOrNull() }.getOrElse { old.ownPerson } }
-                val requests = async { runCatching { repo.ownRequests(user.userId) }.getOrDefault(old.ownRequests) }
+                // Members only get their own requests from the server (also decided ones, via their person record)
+                val requests = async { runCatching { repo.allRequests() }.getOrNull() }
                 val events = async { runCatching { repo.events() }.onFailure { if (it is ApiException) lastError = it.message } .getOrDefault(old.events) }
                 val duties = async { runCatching { repo.myDutyRequests() }.getOrDefault(old.dutyRequests) }
                 val threads = async { runCatching { repo.threads() }.getOrDefault(old.threads) }
@@ -227,11 +230,16 @@ class AppStore(
                 val eventSettings = async { repo.eventSettings() }
                 val groups = async { repo.groups() }
                 val ai = async { if (user.accessesAi) repo.aiEnabled() else false }
+                val ownPerson = person.await()
+                val allRequests = requests.await()
+                val ownRequests = allRequests?.filter { it.userId == user.userId || (ownPerson != null && it.personId == ownPerson.id) } ?: old.ownRequests
+                val pendingRequests = if (user.canManageFinances || user.owner) allRequests?.filter { it.status == "pending" } ?: old.pendingRequests else emptyList()
                 _data.value = AppData(
                     loaded = true,
                     fees = fees.await(),
-                    ownPerson = person.await(),
-                    ownRequests = requests.await(),
+                    ownPerson = ownPerson,
+                    ownRequests = ownRequests,
+                    pendingRequests = pendingRequests,
                     events = events.await(),
                     dutyRequests = duties.await(),
                     threads = threads.await(),
@@ -318,14 +326,14 @@ class AppStore(
             return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) trimmed else "https://$trimmed"
         }
 
-        /** Hosts that may use plain HTTP (same list as network_security_config.xml: local development only). */
+        /** Hosts that may use plain HTTP in debug builds (src/debug network_security_config.xml: local development only). */
         private val LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "10.0.2.2")
 
         /** Servers must use HTTPS; the network security config would block plain HTTP anyway, this gives a clear message. */
         fun requireSecure(url: String) {
             if (!url.startsWith("http://")) return
             val host = url.removePrefix("http://").substringBefore("/").substringBefore(":")
-            if (host !in LOCAL_HOSTS) throw ApiException(HTTPS_REQUIRED, "https")
+            if (!org.agora.app.BuildConfig.DEBUG || host !in LOCAL_HOSTS) throw ApiException(HTTPS_REQUIRED, "https")
         }
 
         const val HTTPS_REQUIRED = 426

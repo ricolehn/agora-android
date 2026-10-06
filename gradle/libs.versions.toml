@@ -7,14 +7,14 @@ androidx-core = "1.19.1"
 androidx-appcompat = "1.8.0"
 androidx-lifecycle = "2.11.0"
 androidx-activity = "1.13.0"
-androidx-datastore = "1.1.2"
+androidx-datastore = "1.1.7"
 androidx-navigation = "2.10.2"
 androidx-work = "2.12.0"
-androidx-browser = "1.8.0"
+androidx-browser = "1.9.0"
 androidx-splashscreen = "1.0.1"
 compose-bom = "2026.09.00"
 okhttp = "4.12.0"
-coil = "3.1.0"
+coil = "3.3.0"
 firebase-bom = "34.19.0"
 markdown = "0.31.0"
 junit = "4.13.2"
@@ -41,7 +41,9 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+# The native M3 FAB menu (FloatingActionButtonMenu, M3 Expressive) only exists in 1.5.0 alphas; alpha27 still builds
+# on the stable Compose 1.12 of the BOM (alpha28+ pull Compose 1.13 alphas)
+compose-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.5.0-alpha27" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 # KotlinX

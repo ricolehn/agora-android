@@ -36,6 +36,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +95,8 @@ import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.unit.Constraints
 import coil3.compose.AsyncImage
 import org.agora.app.data.model.AgoraEvent
 import org.agora.app.data.model.Person
@@ -100,6 +105,8 @@ import org.agora.app.ui.events.colorMesh
 import org.agora.app.ui.events.highlightIndigo
 import org.agora.app.ui.events.isPast
 import org.agora.app.ui.finance.statusMetaText
+import org.agora.app.ui.finance.OpenRequestsCard
+import org.agora.app.ui.finance.RequestDetailSheet
 import org.agora.app.ui.finance.paidUntilText
 import org.agora.app.util.Money
 import java.time.LocalDateTime
@@ -142,6 +149,7 @@ fun HomeScreen(
         person.statusMeta.isSoonDue -> PayState.Soon
         else -> null
     }
+    var openRequest by remember { mutableStateOf<org.agora.app.data.model.FinanceRequest?>(null) }
     val acceptedMsg = stringResource(R.string.duty_accepted)
     val declinedMsg = stringResource(R.string.duty_declined)
 
@@ -190,6 +198,10 @@ fun HomeScreen(
                     onOpenEvent = onOpenEvent
                 )
             }
+            // Treasurers and the owner: open requests right after the duty requests (web beta18)
+            if (data.pendingRequests.isNotEmpty()) item(key = "finance-requests") {
+                OpenRequestsCard(data.pendingRequests, onOpen = { openRequest = it }, onAll = onOpenFinances, limit = HOME_REQUEST_ROWS)
+            }
             if (data.loaded || upcoming.isNotEmpty()) item(key = "upcoming") { UpcomingRow(upcoming, user, today, gutter, onOpenEvent, onOpenTermine) }
             // Tablets: own duties and new messages side by side
             if (wide && myDutyEvents.isNotEmpty() && unread.isNotEmpty()) item(key = "duties-messages") {
@@ -201,9 +213,14 @@ fun HomeScreen(
             if (payState == PayState.Soon && person != null) item(key = "pay-soon") { HomePayment(person, payState, onOpenFinances) }
         }
     }
+    openRequest?.let { request ->
+        RequestDetailSheet(request, canDecide = user.canManageFinances || user.owner, onDismiss = { openRequest = null },
+            onDecided = { store.refreshInBackground() })
+    }
 }
 
 private const val HOME_UPCOMING_COUNT = 5
+private const val HOME_REQUEST_ROWS = 3
 
 private enum class PayState { Soon, Overdue }
 
@@ -309,24 +326,33 @@ private fun UpcomingRow(upcoming: List<AgoraEvent>, user: User, today: String, g
         val cardWidth = if (isTablet()) maxOf(236.dp, (screenWidthDp().dp - gutter * 2 - gap * 4) / 5) else 236.dp
         val coverHeight = minOf((cardWidth - 12.dp) * 9f / 16f, 200.dp)
         val listState = rememberLazyListState()
-        LazyRow(
-            Modifier.fullBleed(gutter),
-            state = listState,
-            contentPadding = PaddingValues(start = gutter, end = gutter, top = 2.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            flingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Start)
-        ) {
-            items(upcoming, key = { it.id }) { event ->
-                // Fixed height: all cards equally tall, the chip sits at the bottom
-                NextCard(event, user, today, Modifier.width(cardWidth).height(coverHeight + 12.dp + 136.dp), coverHeight, onOpenEvent)
-            }
+        // All cards as tall as the tallest one of these events (measured first), the chip at the bottom: a fixed
+        // height for the worst case (two-line title, place and chip) left empty space under most cards
+        SubcomposeLayout(Modifier.fullBleed(gutter)) { constraints ->
+            val width = cardWidth.roundToPx()
+            val cardHeight = subcompose("measure") {
+                upcoming.forEach { event -> NextCard(event, user, today, Modifier.width(cardWidth), coverHeight, onOpenEvent, measuring = true) }
+            }.maxOf { it.measure(Constraints(minWidth = width, maxWidth = width)).height }.toDp()
+            val row = subcompose("row") {
+                LazyRow(
+                    state = listState,
+                    contentPadding = PaddingValues(start = gutter, end = gutter, top = 2.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    flingBehavior = rememberSnapFlingBehavior(listState, SnapPosition.Start)
+                ) {
+                    items(upcoming, key = { it.id }) { event ->
+                        NextCard(event, user, today, Modifier.width(cardWidth).height(cardHeight), coverHeight, onOpenEvent)
+                    }
+                }
+            }.first().measure(constraints)
+            layout(row.width, row.height) { row.place(0, 0) }
         }
     }
 }
 
 /** One card of the "Als Nächstes" row: picture or colour mesh with the day on it, time, title, place, one chip. */
 @Composable
-private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Modifier, coverHeight: Dp, onOpenEvent: (String) -> Unit) {
+private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Modifier, coverHeight: Dp, onOpenEvent: (String) -> Unit, measuring: Boolean = false) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val locale = Dates.locale(context)
@@ -339,15 +365,17 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
     val dayLabel = homeDayLabel(start, today, locale)
     val isToday = start <= today
     val key = "next-${event.id}"
+    // The measuring copy (see UpcomingRow) has no shared-element key, no click and no picture, only the same size
     AgoraCard(
-        modifier.containerTransform(key),
-        onClick = openFrom(key) { onOpenEvent(event.id) },
+        if (measuring) modifier else modifier.containerTransform(key),
+        onClick = if (measuring) null else openFrom(key) { onOpenEvent(event.id) },
         contentPadding = PaddingValues(6.dp),
         shape = RoundedCornerShape(20.dp),
         elevation = 5.dp
     ) {
         Box(Modifier.fillMaxWidth().height(coverHeight).clip(RoundedCornerShape(15.dp)).background(Agora.colors.surfaceAlt)) {
-            if (event.imageUrl.isNotBlank()) AsyncImage(container.api.absolute(event.imageUrl), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            if (measuring) Unit
+            else if (event.imageUrl.isNotBlank()) AsyncImage(container.api.absolute(event.imageUrl), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             else Box(
                 Modifier.fillMaxSize().colorMesh(
                     Agora.colors.surfaceAlt,
@@ -366,7 +394,7 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
-        Column(Modifier.weight(1f).padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.then(if (measuring) Modifier else Modifier.weight(1f)).padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             val time = when {
                 event.isMultiDay -> Dates.spanShort(event.date, event.endDate, locale)
                 event.startTime.isNotBlank() -> event.startTime
@@ -384,7 +412,7 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
                 Text(event.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
             }
-            Spacer(Modifier.weight(1f))
+            if (!measuring) Spacer(Modifier.weight(1f))
             val duty = event.myConfirmedDuty(user) ?: event.myGroupDuty(user)
             when {
                 duty != null -> Pill(duty.roleName, Agora.colors.duty, icon = Icons.Outlined.Handyman)

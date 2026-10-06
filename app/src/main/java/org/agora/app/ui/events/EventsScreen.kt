@@ -12,7 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Celebration
-import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,7 +47,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.ui.text.font.FontWeight
-import org.agora.app.ui.components.GradientFab
+import org.agora.app.ui.components.AgoraFabMenu
+import org.agora.app.ui.components.FabAction
 import org.agora.app.ui.components.IconTile
 import org.agora.app.ui.components.PageTitle
 import org.agora.app.ui.components.PillTabs
@@ -64,6 +65,21 @@ import org.agora.app.ui.components.columnCount
 import org.agora.app.ui.components.gridItems
 import org.agora.app.ui.components.pagePadding
 import java.time.YearMonth
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.agora.app.ui.components.isWide
+import org.agora.app.ui.components.pageGutter
+import org.agora.app.ui.components.screenWidthDp
 
 /** Search over title, location, description and duty names (like the PWA). */
 private fun AgoraEvent.matches(query: String): Boolean {
@@ -107,13 +123,13 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
     var tab by rememberSaveable { mutableStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
     var showPast by rememberSaveable { mutableStateOf(false) }
-    var createMenu by remember { mutableStateOf(false) }
     val runner = rememberActionRunner()
     val locale = Dates.locale(LocalContext.current)
     val today = Dates.todayIso()
     val acceptedMsg = stringResource(R.string.duty_accepted)
     val declinedMsg = stringResource(R.string.duty_declined)
-    val canCreate = data.eventSettings.allowMemberCreation || user.managesEvents || user.isAdmin
+    // Admins too need the event permission (like the server)
+    val canCreate = data.eventSettings.allowMemberCreation || user.managesEvents
     LaunchedEffect(EventsTabRequest.termine) {
         if (EventsTabRequest.termine) {
             tab = 0
@@ -121,13 +137,52 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
         }
     }
 
-    val searched = data.events.filter { it.matches(query) }
-    val termineColumns = columnCount(420.dp)
+    val searched = remember(data.events, query) { data.events.filter { it.matches(query) } }
     val coverColumns = columnCount(300.dp, 16.dp)
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // Termine: one list below each other; on wide tablets a month calendar on the left third jumps to a day (web beta18)
+    val termine = remember(searched, user, today) {
+        terminDays(searched.filter { terminFilter(it, user, today) }, today).sortedWith(compareBy({ it.second }, { it.first.startTime }))
+    }
+    val termineByMonth = remember(termine) { termine.groupBy { Dates.parse(it.second)?.let(YearMonth::from) } }
+    val showCalendar = isWide() && tab == 0 && termine.isNotEmpty()
+    val gutter = pageGutter()
+    val calendarGap = 28.dp
+    val calendarWidth = ((screenWidthDp().dp - gutter * 2 - calendarGap) / 3).coerceAtLeast(280.dp)
+    val listStart = if (showCalendar) calendarWidth + calendarGap else 0.dp
+    var calendarMonth by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
+    var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
+    var jumpTick by remember { mutableStateOf(0) }
+    val calendarDays = remember(termine) {
+        termine.groupBy({ it.second }, { terminCategory(it.first) }).mapValues { it.value.toSet() }
+    }
+    // Index of the first list item of each day: title, tabs, search, (duty requests), anchor, then month headers + days
+    val headerItems = 3 + (if (data.dutyRequests.isNotEmpty()) 1 else 0) + 1
+    val dayIndex = remember(termineByMonth, headerItems) {
+        buildMap {
+            var index = headerItems
+            termineByMonth.forEach { (month, days) ->
+                if (month != null) index++
+                days.forEach { (_, day) -> if (day !in this) put(day, index); index++ }
+            }
+        }
+    }
+    // The day the list jumped to: the chosen one, or the next one with entries
+    val jumpTarget = selectedDay?.let { chosen -> dayIndex.keys.sorted().firstOrNull { it >= chosen } }
+    val jumpTo: (String) -> Unit = { day ->
+        selectedDay = day
+        dayIndex.keys.sorted().firstOrNull { it >= day }?.let { target ->
+            jumpTick++
+            scope.launch { listState.animateScrollToItem(dayIndex.getValue(target)) }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         PullToRefreshBox(isRefreshing = refreshing, onRefresh = { store.refreshInBackground(true) }, modifier = Modifier.fillMaxSize()) {
             LazyColumn(
+                state = listState,
                 contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -153,17 +208,25 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                 }
 
                 if (tab == 0) {
-                    // Multi-day events appear on every remaining day, purely by day
-                    val termine = terminDays(searched.filter { terminFilter(it, user, today) }, today)
-                        .sortedWith(compareBy({ it.second }, { it.first.startTime }))
+                    // Multi-day events appear on every remaining day, purely by day, one card below the other
+                    item(key = "termine-anchor") { Spacer(Modifier.fillMaxWidth()) }
                     if (termine.isEmpty()) item { EmptyState(Icons.Outlined.CalendarMonth, stringResource(R.string.events_empty_termine)) }
-                    termine.groupBy { Dates.parse(it.second)?.let(YearMonth::from) }.forEach { (month, days) ->
+                    termineByMonth.forEach { (month, days) ->
                         if (month != null) item(key = "m-$month") {
-                            SectionTitle(Dates.monthYear(month, locale), count = days.size)
+                            SectionTitle(Dates.monthYear(month, locale), Modifier.padding(start = listStart), count = days.size)
                         }
-                        // Tablets: several day cards per row
-                        gridItems(days, termineColumns, key = { (event, day) -> "t-${event.id}-$day" }) { (event, day), cell ->
-                            EventRow(event, user, day = day, showRegistered = false, cell.containerTransform("termin-${event.id}-$day"),
+                        items(days, key = { (event, day) -> "t-${event.id}-$day" }) { (event, day) ->
+                            // The cards of the day chosen in the calendar light up briefly
+                            val glow = remember { Animatable(0f) }
+                            LaunchedEffect(jumpTick) {
+                                if (jumpTick > 0 && jumpTarget == day) {
+                                    glow.snapTo(1f); delay(500); glow.animateTo(0f, tween(1100))
+                                }
+                            }
+                            EventRow(event, user, day = day, showRegistered = false,
+                                Modifier.padding(start = listStart)
+                                    .border(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f * glow.value), MaterialTheme.shapes.medium)
+                                    .containerTransform("termin-${event.id}-$day"),
                                 openFrom("termin-${event.id}-$day") { onOpenEvent(event.id) })
                         }
                     }
@@ -198,28 +261,36 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                 }
             }
         }
-        if (canCreate) Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp)) {
-            GradientFab(Icons.Outlined.Add, stringResource(R.string.create),
-                onClick = { if (user.managesEvents || user.isAdmin) createMenu = true else onCreate("event") })
-            // `.fab-menu`: rounded card with icon tiles
-            DropdownMenu(
-                createMenu, { createMenu = false },
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = 12.dp
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.new_termin), fontWeight = FontWeight.Bold) },
-                    leadingIcon = { IconTile(Icons.Outlined.EventNote, MaterialTheme.colorScheme.primary) },
-                    onClick = { createMenu = false; onCreate("termin") }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.new_event), fontWeight = FontWeight.Bold) },
-                    leadingIcon = { IconTile(Icons.Outlined.Celebration, Agora.colors.duty) },
-                    onClick = { createMenu = false; onCreate("event") }
+        if (showCalendar) {
+            // Sits next to the list from the first entry on and stays at the top while the list scrolls under it
+            val top by remember(listState, headerItems) {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val anchor = info.visibleItemsInfo.firstOrNull { it.key == "termine-anchor" }
+                    val pinned = info.beforeContentPadding
+                    when {
+                        anchor != null -> maxOf(anchor.offset + info.beforeContentPadding, pinned)
+                        listState.firstVisibleItemIndex >= headerItems -> pinned
+                        else -> null
+                    }
+                }
+            }
+            top?.let { y ->
+                TermineCalendar(
+                    month = YearMonth.parse(calendarMonth), onMonth = { calendarMonth = it.toString() },
+                    days = calendarDays, selected = selectedDay, today = today, onDay = jumpTo,
+                    modifier = Modifier.padding(start = gutter).width(calendarWidth).offset { IntOffset(0, y) }
                 )
             }
+        }
+        if (canCreate) {
+            // Native M3 "+": event managers pick appointment or event, everyone else creates an event directly
+            val newEvent = FabAction(stringResource(R.string.new_event), Icons.Outlined.Celebration) { onCreate("event") }
+            val actions = if (user.managesEvents)
+                listOf(FabAction(stringResource(R.string.new_termin), Icons.AutoMirrored.Outlined.EventNote) { onCreate("termin") }, newEvent)
+            else listOf(newEvent)
+            AgoraFabMenu(actions, stringResource(R.string.create),
+                Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = contentPadding.calculateBottomPadding()))
         }
     }
 }
