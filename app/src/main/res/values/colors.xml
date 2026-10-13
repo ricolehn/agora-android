@@ -6,6 +6,8 @@
     <!-- Page colour: window and splash screen, so the app opens without a coloured flash -->
     <color name="window_bg">#F5F4F1</color>
     <!-- The monochrome logo on the splash screen -->
-    <color name="logo_mono">#1A1917</color>
+    <!-- The Agora knot (splash, in-app fallback logo); the launcher icon always sits on the light page colour -->
+    <color name="logo_mark">#204E44</color>
+    <color name="logo_mark_launcher">#204E44</color>
     <color name="ic_launcher_background">#E6F2FA</color>
 </resources>

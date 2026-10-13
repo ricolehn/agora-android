@@ -1,9 +1,9 @@
 package org.agora.app.ui.finance
 
+import androidx.core.graphics.drawable.toBitmap
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -419,10 +419,14 @@ private fun DateRange(from: String, to: String, onFrom: (String) -> Unit, onTo: 
 /** The church logo of the server (SVG via Coil), else the app's own logo. */
 private suspend fun loadReportLogo(context: Context, url: String): Bitmap? {
     val remote = runCatching {
-        val request = ImageRequest.Builder(context).data(url).size(160).allowHardware(false).build()
+        val request = ImageRequest.Builder(context).data(url).size(160).allowHardware(false)
+            .diskCachePolicy(coil3.request.CachePolicy.WRITE_ONLY).build()
         SingletonImageLoader.get(context).execute(request).image?.toBitmap()
     }.getOrNull()
-    return remote ?: withContext(Dispatchers.IO) { BitmapFactory.decodeResource(context.resources, R.drawable.agora_logo) }
+    return remote ?: withContext(Dispatchers.IO) {
+        androidx.core.content.ContextCompat.getDrawable(context, R.drawable.agora_logo)?.mutate()
+            ?.apply { setTint(0xFF204E44.toInt()) }?.toBitmap(160, 160)
+    }
 }
 
 /** First page of the report for the preview, and the number of pages. */

@@ -110,7 +110,10 @@ fun ChurchLogo(size: androidx.compose.ui.unit.Dp) {
     }
     if (container.api.baseUrl.isBlank()) fallback()
     else SubcomposeAsyncImage(
-        model = ImageRequest.Builder(LocalContext.current).data(container.api.absolute("/assets/church-logo.svg")).build(),
+        // Never read from the disk cache: Coil keeps files there regardless of the server's no-store, so a new or
+        // changed logo would never show (offline the bundled knot stands in)
+        model = ImageRequest.Builder(LocalContext.current).data(container.api.absolute("/assets/church-logo.svg"))
+            .diskCachePolicy(coil3.request.CachePolicy.WRITE_ONLY).build(),
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = Modifier.size(size),
