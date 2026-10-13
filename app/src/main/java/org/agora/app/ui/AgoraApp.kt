@@ -246,7 +246,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
             if (data.error != null) Icon(Icons.Outlined.CloudOff, stringResource(R.string.offline), Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.error)
             Box {
                 IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
-                    UserAvatar(user.userId, user.fullName, 40.dp, ring = AvatarRings.of(user))
+                    UserAvatar(user.userId, user.fullName, 40.dp, ring = AvatarRings.of(user), glow = false)
                 }
                 // Profile menu of the PWA (`.profile-dropdown`)
                 DropdownMenu(

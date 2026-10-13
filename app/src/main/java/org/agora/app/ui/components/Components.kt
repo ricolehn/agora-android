@@ -248,14 +248,15 @@ object AvatarRings {
  * a 3dp gradient ring, a 2dp gap in the surface colour and a soft glow, so the role colour stands out.
  */
 @Composable
-fun UserAvatar(uid: String?, name: String, size: Dp = 40.dp, ring: AvatarRing? = null, modifier: Modifier = Modifier) {
+// [glow]: the soft shadow under the ring; off where the avatar sits flat in a bar (header)
+fun UserAvatar(uid: String?, name: String, size: Dp = 40.dp, ring: AvatarRing? = null, modifier: Modifier = Modifier, glow: Boolean = true) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val outer = modifier
         .size(size)
         .then(
             if (ring != null) Modifier
-                .softShadow(Agora.colors.shadow.copy(alpha = 0.16f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp)
+                .then(if (glow) Modifier.softShadow(Agora.colors.shadow.copy(alpha = 0.16f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp) else Modifier)
                 .clip(CircleShape)
                 .background(ring.brush)
                 .padding(3.dp)

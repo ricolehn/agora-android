@@ -16,3 +16,6 @@ app/build/
 keystore.properties
 *.jks
 *.keystore
+
+# Kotlin compiler session data
+.kotlin/
