@@ -1,4 +1,10 @@
-# Agora for Android
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg" />
+    <img src=".github/assets/logo.svg" width="110" alt="Agora Logo" />
+  </picture>
+  <h1>Agora for Android</h1>
+</div>
 
 Native Android client for [Agora](https://github.com/ricolehn/agora), built with Kotlin, Jetpack Compose and Material 3.
 It talks to the same backend as the web app (PWA) and mirrors its screens and rules, so members find their way around immediately.
