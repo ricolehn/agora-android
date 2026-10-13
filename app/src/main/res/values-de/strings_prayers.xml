@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gebetsanliegen (Extras), wie in der Web-App v3.1 -->
+<resources>
+    <string name="prayers_title">Gebetsanliegen</string>
+    <string name="prayers_note">Teile, was dir auf dem Herzen liegt – mit Namen oder anonym. Wenn es sich erledigt hat, entfernst du es einfach.</string>
+    <string name="prayers_filter_all">Alle</string>
+    <string name="prayers_filter_mine">Meine</string>
+    <string name="prayers_load_failed">Gebetsanliegen konnten nicht geladen werden</string>
+    <string name="prayers_retry">Erneut versuchen</string>
+    <string name="prayers_anonymous_name">Anonym</string>
+    <string name="prayers_member_fallback">Mitglied</string>
+    <string name="prayers_expired">Abgelaufen</string>
+    <string name="prayers_remove">Entfernen</string>
+    <string name="prayers_expired_hint">Wird nicht mehr angezeigt – verlängere es, um es wieder zu zeigen</string>
+    <string name="prayers_until">Sichtbar bis %1$s</string>
+    <string name="prayers_until_short">bis %1$s</string>
+    <string name="prayers_empty_open">Gerade gibt es keine Gebetsanliegen</string>
+    <string name="prayers_empty_mine">Du hast noch kein Anliegen geteilt</string>
+    <string name="prayers_empty_hint">Teile ein Anliegen mit dem Plus unten rechts.</string>
+    <string name="prayers_shared">Dein Gebetsanliegen wurde geteilt</string>
+    <string name="prayers_extended">Wird einen weiteren Monat angezeigt</string>
+    <string name="prayers_remove_confirm">Dieses Gebetsanliegen für alle entfernen?</string>
+    <string name="prayers_deleted">Gebetsanliegen gelöscht</string>
+    <string name="prayers_read_more">Weiterlesen</string>
+    <string name="prayers_read_less">Weniger anzeigen</string>
+    <string name="prayers_new">Gebetsanliegen teilen</string>
+    <string name="prayers_your_request">Dein Anliegen</string>
+    <string name="prayers_text_ph">Wofür dürfen wir beten?</string>
+    <string name="prayers_how_long_short">Sichtbar für</string>
+    <string name="prayers_week">1 Woche</string>
+    <string name="prayers_month">1 Monat</string>
+    <string name="prayers_quarter">3 Monate</string>
+    <string name="prayers_anonymous">Anonym teilen</string>
+    <string name="prayers_anonymous_desc">Niemand sieht, von wem es ist – auch die Leitung nicht.</string>
+    <string name="prayers_share">Teilen</string>
+    <string name="prayers_yours">Dein Gebetsanliegen</string>
+    <string name="prayers_extend_month">Einen Monat länger</string>
+    <string name="prayers_done">Fertig – entfernen</string>
+    <string name="prayers_done_toast">Entfernt – danke fürs Teilen</string>
+    <string name="prayers_options">Optionen</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app logo in one colour (like the push notification icon) for the splash screen: the white shape of the
+     launcher foreground (drawable-nodpi/ic_logo_mono_src.png, same 108dp geometry), tinted dark or light by theme -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/ic_logo_mono_src"
+    android:tint="@color/logo_mono"
+    android:gravity="fill" />

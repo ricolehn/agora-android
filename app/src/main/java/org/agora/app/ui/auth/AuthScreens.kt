@@ -79,7 +79,7 @@ import org.agora.app.ui.components.LocalContainer
 private fun AuthScaffold(content: @Composable () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val wash = Brush.linearGradient(
-        listOf(Color(0xFF06B6D4).copy(alpha = 0.16f), scheme.background, Color(0xFF10B981).copy(alpha = 0.14f)),
+        listOf(Color(0xFF0D9E94).copy(alpha = 0.12f), scheme.background, Color(0xFF14A87C).copy(alpha = 0.10f)),
         start = Offset.Zero, end = Offset.Infinite
     )
     Box(Modifier.fillMaxSize().background(scheme.background).background(wash)) {
@@ -90,7 +90,7 @@ private fun AuthScaffold(content: @Composable () -> Unit) {
                     .padding(20.dp)
                     .widthIn(max = 460.dp)
                     .fillMaxWidth()
-                    .softShadow(Color(0xFF0F172A).copy(alpha = 0.16f), blur = 24.dp, shape = MaterialTheme.shapes.large, offsetY = 8.dp)
+                    .softShadow(Agora.colors.shadow.copy(alpha = 0.16f), blur = 24.dp, shape = MaterialTheme.shapes.large, offsetY = 8.dp)
                     .clip(MaterialTheme.shapes.large)
                     .background(scheme.surface)
                     .padding(horizontal = 20.dp, vertical = 28.dp),

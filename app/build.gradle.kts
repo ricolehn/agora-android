@@ -20,8 +20,8 @@ android {
         applicationId = "org.agora.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 12
-        versionName = "1.0.0"
+        versionCode = 13
+        versionName = "1.1.0-beta1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -123,6 +123,8 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.markdown.m3)
+    implementation(libs.haze)
+    implementation(libs.haze.blur)
 
     debugImplementation(libs.compose.ui.tooling)
 

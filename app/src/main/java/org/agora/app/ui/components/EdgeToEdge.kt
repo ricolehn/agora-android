@@ -41,6 +41,8 @@ import androidx.core.view.WindowCompat
 /** Pages with a picture right under the status bar register here: no fade there, light icons on the picture. */
 object StatusBarOverlay {
     internal var immersive by mutableIntStateOf(0)
+    /** Pages whose own light header runs up under the status bar (sphere band): no fade, icons stay as themed */
+    internal var clear by mutableIntStateOf(0)
 }
 
 /** While [enabled] (e.g. the event cover is under the status bar), the status bar shows the page as it is. */
@@ -53,12 +55,22 @@ fun ImmersiveStatusBar(enabled: Boolean) {
     }
 }
 
+/** While [enabled], the page runs up under the status bar without the fade, like a picture, but keeps the themed icons. */
+@Composable
+fun ClearStatusBar(enabled: Boolean) {
+    if (!enabled) return
+    DisposableEffect(Unit) {
+        StatusBarOverlay.clear++
+        onDispose { StatusBarOverlay.clear-- }
+    }
+}
+
 /** Fade behind the status bar, drawn above all content; it takes no touches. */
 @Composable
 fun StatusBarScrim(modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val inset = WindowInsets.statusBars.getTop(density)
-    val visible by animateFloatAsState(if (StatusBarOverlay.immersive > 0) 0f else 1f, tween(200), label = "scrim")
+    val visible by animateFloatAsState(if (StatusBarOverlay.immersive > 0 || StatusBarOverlay.clear > 0) 0f else 1f, tween(200), label = "scrim")
     if (inset == 0 || visible == 0f) return
     val color = MaterialTheme.colorScheme.background.copy(alpha = visible)
     val fade = with(density) { 12.dp.toPx() }

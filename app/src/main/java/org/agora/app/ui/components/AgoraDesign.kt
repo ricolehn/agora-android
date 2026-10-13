@@ -1,5 +1,7 @@
 package org.agora.app.ui.components
 
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
@@ -42,6 +44,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ProvideTextStyle
@@ -92,7 +97,7 @@ fun BrandName(text: String, modifier: Modifier = Modifier, fontSize: androidx.co
         modifier = modifier,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        style = TextStyle(brush = Agora.colors.brandGradient, fontSize = fontSize, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp)
+        style = TextStyle(brush = Agora.colors.brandGradient, fontSize = fontSize, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
     )
 }
 
@@ -112,7 +117,7 @@ fun CapsLabel(text: String, modifier: Modifier = Modifier, color: Color = Materi
         text.uppercase(),
         modifier = modifier,
         color = color,
-        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp),
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
     )
@@ -126,7 +131,7 @@ fun PillTabs(options: List<Pair<String, ImageVector?>>, selected: Int, onSelect:
             .fillMaxWidth()
             .clip(CircleShape)
             .background(Agora.colors.tabTrack)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), CircleShape)
+            .border(1.dp, Agora.colors.hairline, CircleShape)
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
@@ -136,21 +141,21 @@ fun PillTabs(options: List<Pair<String, ImageVector?>>, selected: Int, onSelect:
             Row(
                 Modifier
                     .weight(1f)
-                    .then(if (active) Modifier.softShadow(Color.Black.copy(alpha = 0.14f), blur = 4.dp, shape = CircleShape, offsetY = 1.dp) else Modifier)
+                    .then(if (active) Modifier.softShadow(Agora.colors.shadow.copy(alpha = 0.12f), blur = 4.dp, shape = CircleShape, offsetY = 1.dp) else Modifier)
                     .clip(CircleShape)
                     .background(if (active) Agora.colors.tabThumb else Color.Transparent)
                     .clickable(role = Role.Tab) { onSelect(i) }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (icon != null) {
-                    Icon(icon, null, Modifier.size(17.dp), tint = color)
+                    Icon(icon, null, Modifier.size(15.dp), tint = color)
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(
                     label, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (active) FontWeight.Bold else FontWeight.SemiBold)
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
                 )
             }
         }
@@ -172,13 +177,13 @@ fun PrimaryButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val glow = if (danger) Agora.colors.danger else Color(0xFF06B6D4)
+    // No coloured light (web v3.1): a quiet neutral shadow under the button
     Box(
         modifier
             .defaultMinSize(minHeight = 42.dp)
             .scale(if (pressed) 0.97f else 1f)
             .alpha(if (enabled) 1f else 0.5f)
-            .softShadow(glow.copy(alpha = if (enabled) 0.30f else 0f), blur = 10.dp, shape = shape, offsetY = 3.dp)
+            .softShadow(Agora.colors.shadow.copy(alpha = if (enabled) 0.18f else 0f), blur = 8.dp, shape = shape, offsetY = 2.dp)
             .clip(shape)
             .then(if (danger) Modifier.background(Agora.colors.danger) else Modifier.background(Agora.colors.brandGradient))
             .clickable(interaction, androidx.compose.material3.ripple(color = Color.White), enabled = enabled, role = Role.Button, onClick = onClick)
@@ -264,7 +269,7 @@ fun GlassChip(text: String, modifier: Modifier = Modifier, icon: ImageVector? = 
         }
         Text(
             text.uppercase(), color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.6.sp)
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
         )
     }
 }
@@ -304,13 +309,13 @@ fun GlassBackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(40.dp)
-            .softShadow(Color.Black.copy(alpha = 0.30f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp)
+            .softShadow(Agora.colors.shadow.copy(alpha = 0.22f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp)
             .clip(CircleShape)
-            .background(Color(0xA60F172A))
-            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
+            .frosted(tint = frostSurface())
+            .border(1.dp, Agora.colors.hairline, CircleShape)
             .clickable(role = Role.Button, onClick = onBack),
         contentAlignment = Alignment.Center
-    ) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), Modifier.size(21.dp), tint = Color.White) }
+    ) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), Modifier.size(21.dp), tint = Agora.colors.heading) }
 }
 
 /** Round gradient send button of the chat inputs (`.chat-send-btn`). */
@@ -320,7 +325,7 @@ fun SendButton(enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> U
         modifier
             .size(44.dp)
             .alpha(if (enabled) 1f else 0.5f)
-            .softShadow(Color(0xFF06B6D4).copy(alpha = if (enabled) 0.32f else 0f), blur = 10.dp, shape = CircleShape, offsetY = 3.dp)
+            .softShadow(Agora.colors.shadow.copy(alpha = if (enabled) 0.18f else 0f), blur = 10.dp, shape = CircleShape, offsetY = 3.dp)
             .clip(CircleShape)
             .background(Agora.colors.heroGradient)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
@@ -439,33 +444,48 @@ fun IconTile(icon: ImageVector, tint: Color, modifier: Modifier = Modifier, size
 
 /** Info tile with icon, caps label and value (event detail "TERMIN", "WO / ADRESSE"). */
 @Composable
-fun InfoTile(icon: ImageVector, tint: Color, label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
+fun InfoTile(
+    icon: ImageVector, tint: Color, label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null,
+    grouped: Boolean = false, oneLine: Boolean = false, trailing: @Composable () -> Unit = {}
+) {
     Row(
         modifier
             .fillMaxWidth()
-            .clip(FieldShape)
-            .background(Agora.colors.surfaceAlt)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, FieldShape)
+            .then(if (grouped) Modifier else Modifier.clip(FieldShape).background(Agora.colors.surfaceAlt).border(1.dp, MaterialTheme.colorScheme.outlineVariant, FieldShape))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .padding(horizontal = if (grouped) 14.dp else 12.dp, vertical = if (grouped) 10.dp else 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconTile(icon, tint)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            CapsLabel(label)
-            Text(value, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
+            if (grouped) Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else CapsLabel(label)
+            // One line that shrinks to fit on narrow phones (date and time of an event)
+            if (oneLine) Text(value, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, softWrap = false,
+                autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MaterialTheme.typography.titleSmall.fontSize, stepSize = 0.5.sp))
+            else Text(value, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
         }
         trailing()
     }
 }
 
+/** Info rows that belong together (date and place of an event) in one softly tinted card with dividers. */
+@Composable
+fun InfoGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Agora.colors.surfaceAlt)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp)),
+        content = content
+    )
+}
+
 /** Header of the main screens: logo + gradient app name, avatar on the right (`.app-header`). */
 @Composable
 fun AgoraHeader(appName: String, logo: @Composable () -> Unit, trailing: @Composable RowScope.() -> Unit) {
+    // No own fill: the tab frame frosts it (Frost.kt), the page shows through softly
     Row(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 4.dp)
             .heightIn(min = 48.dp),
@@ -491,7 +511,8 @@ fun SubPageHeader(
     Row(
         modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            // Glass over the content running on underneath (opaque page colour when the page has no source)
+            .frosted()
             .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .heightIn(min = 48.dp),
@@ -525,40 +546,37 @@ fun RoundIconButton(icon: ImageVector, contentDescription: String?, onClick: () 
 
 data class BottomNavItem(val label: String, val icon: ImageVector, val selectedIcon: ImageVector, val badge: Int = 0)
 
-/** Bottom navigation of the PWA: white bar, emerald active item without indicator pill. */
+/**
+ * Bottom navigation: the M3 NavigationBar on frosted glass - the active tab in a tinted pill behind its icon,
+ * like the web app. Badges for unread chats and open duty requests.
+ */
 @Composable
 fun AgoraBottomBar(items: List<BottomNavItem>, selected: Int, onSelect: (Int) -> Unit) {
-    // Faint upward shadow like the PWA (`box-shadow: 0 -4px 16px rgba(0,0,0,.06)`)
-    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.softShadow(Color.Black.copy(alpha = 0.07f), blur = 16.dp, shape = RectangleShape, offsetY = (-4).dp)) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().height(60.dp), verticalAlignment = Alignment.CenterVertically) {
-                items.forEachIndexed { i, item ->
-                    val active = i == selected
-                    val color by animateColorAsState(if (active) MaterialTheme.colorScheme.secondary else Agora.colors.navInactive, label = "nav")
-                    val interaction = remember { MutableInteractionSource() }
-                    val pressed by interaction.collectIsPressedAsState()
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .height(60.dp)
-                            .clickable(interaction, null, role = Role.Tab) { onSelect(i) }
-                            .scale(if (pressed) 0.94f else 1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
+    Column(Modifier.frosted(tint = frostSurface())) {
+        HorizontalDivider(color = Agora.colors.hairline)
+        NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
+            items.forEachIndexed { i, item ->
+                val active = i == selected
+                NavigationBarItem(
+                    selected = active,
+                    onClick = { onSelect(i) },
+                    icon = {
                         BadgedBox(badge = {
                             if (item.badge > 0) Badge(containerColor = Agora.colors.danger, contentColor = Color.White) { Text("${item.badge}") }
-                        }) {
-                            Icon(if (active) item.selectedIcon else item.icon, null, Modifier.size(24.dp), tint = color)
-                        }
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            item.label, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
-                        )
-                    }
-                }
+                        }) { Icon(if (active) item.selectedIcon else item.icon, null) }
+                    },
+                    label = {
+                        Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium))
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Agora.colors.navPillContent,
+                        selectedTextColor = Agora.colors.heading,
+                        indicatorColor = Agora.colors.navPill,
+                        unselectedIconColor = Agora.colors.navInactive,
+                        unselectedTextColor = Agora.colors.navInactive
+                    )
+                )
             }
         }
     }
@@ -569,7 +587,7 @@ fun AgoraBottomBar(items: List<BottomNavItem>, selected: Int, onSelect: (Int) ->
 fun AgoraSnackbar(data: SnackbarData) = Snackbar(
     data,
     shape = RoundedCornerShape(16.dp),
-    containerColor = Color(0xFF1E293B),
+    containerColor = Color(0xFF2B2A28),
     contentColor = Color.White,
-    actionColor = Color(0xFF22D3EE)
+    actionColor = Color(0xFF63C0B4)
 )

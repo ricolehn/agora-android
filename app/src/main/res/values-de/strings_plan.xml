@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dienstplan und Ablauf als ein Plan (Web v3.1: renderDutyPlan / plan-entry-modal) -->
+<resources>
+    <string name="plan_title_both">Dienstplan &amp; Ablauf</string>
+    <string name="plan_group_program">Ablauf</string>
+    <string name="plan_add_entry">Eintrag hinzufügen</string>
+    <string name="plan_new_entry">Neuer Eintrag</string>
+    <string name="plan_edit_entry">Eintrag bearbeiten</string>
+    <string name="plan_kind_task">Aufgabe / Punkt</string>
+    <string name="plan_kind_song">Lied</string>
+    <string name="plan_name">Name</string>
+    <string name="plan_name_ph">z. B. Predigt, Technik, Begrüßung</string>
+    <string name="plan_who">Wer?</string>
+    <string name="plan_ask_person">Person oder Gruppe anfragen</string>
+    <string name="plan_ask_more">Weitere Person anfragen</string>
+    <string name="plan_in_program">Im Ablauf</string>
+    <string name="plan_position_label">Position</string>
+    <string name="plan_at_start">Am Anfang</string>
+    <string name="plan_after">Nach „%1$s“</string>
+    <string name="plan_duration">Dauer (Min.)</string>
+    <string name="plan_key">Tonart</string>
+    <string name="plan_note_ph">Notiz (optional)</string>
+    <string name="plan_starts_hint">Beginnt um %1$s Uhr, bis %2$s Uhr</string>
+    <string name="plan_order_only">Ohne Dauer legt der Eintrag nur die Reihenfolge fest.</string>
+    <string name="plan_open">noch offen</string>
+    <string name="plan_open_short">offen</string>
+    <string name="plan_state_requested">angefragt</string>
+    <string name="plan_state_declined">abgelehnt</string>
+    <string name="plan_empty_manager">Füge hinzu, was passiert und wer hilft – mit „+“ unten.</string>
+    <string name="plan_song_search">Im Liederbuch suchen…</string>
+    <string name="plan_song_none">Kein Lied gefunden</string>
+    <string name="plan_song_missing_item">Lied (nicht mehr im Liederbuch)</string>
+    <string name="plan_song_missing">Bitte wähle ein Lied aus.</string>
+    <string name="plan_name_missing">Bitte gib einen Namen ein.</string>
+    <string name="plan_saved">Gespeichert</string>
+    <string name="plan_deleted">Eintrag gelöscht</string>
+    <string name="plan_delete_entry">Eintrag löschen</string>
+    <string name="plan_delete_confirm">„%1$s“ mit allen Anfragen dafür löschen?</string>
+    <string name="plan_remove_person">Eintrag entfernen</string>
+    <string name="plan_remove_person_confirm">Diesen Eintrag wirklich entfernen?</string>
+    <string name="plan_minutes">%1$d Min.</string>
+    <string name="plan_count_one">1 Punkt</string>
+    <string name="plan_count_many">%1$d Punkte</string>
+    <string name="plan_save_failed">Der Ablauf konnte nicht gespeichert werden</string>
+</resources>

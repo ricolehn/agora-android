@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Liederbuch (wie in der Web-App, v3.1) -->
+<resources>
+    <string name="songbook_title">Liederbuch</string>
+    <string name="songbook_search">Titel, Autor, Liedtext oder CCLI-Nummer suchen…</string>
+    <string name="songbook_new">Neues Lied</string>
+    <string name="songbook_edit">Lied bearbeiten</string>
+    <string name="songbook_add">Lied hinzufügen</string>
+    <string name="songbook_load_failed">Liederbuch konnte nicht geladen werden</string>
+    <string name="songbook_retry">Erneut versuchen</string>
+    <string name="songbook_license">CCLI-Lizenz %1$s</string>
+    <string name="songbook_license_missing">Die CCLI-Lizenznummer der Gemeinde fehlt noch – ein Admin trägt sie in den Systemeinstellungen ein. Sie wird bei jedem Lied angezeigt.</string>
+    <string name="songbook_no_match">Kein Lied gefunden</string>
+    <string name="songbook_empty">Noch keine Lieder im Liederbuch</string>
+    <string name="songbook_empty_hint">Mit dem Plus unten rechts legst du das erste Lied an.</string>
+    <string name="songbook_key_short">Tonart %1$s</string>
+    <string name="songbook_key_shifted">Tonart %1$s (%2$s)</string>
+    <string name="songbook_transposed">Um %1$s Halbtöne transponiert</string>
+    <string name="songbook_ccli_song_short">CCLI-Lied %1$s</string>
+    <string name="songbook_chords">Akkorde</string>
+    <string name="songbook_show_chords">Akkorde anzeigen</string>
+    <string name="songbook_down">Halbton tiefer</string>
+    <string name="songbook_up">Halbton höher</string>
+    <string name="songbook_key_reset">Zurück zur Originaltonart</string>
+    <string name="songbook_original_key">Originaltonart</string>
+    <string name="songbook_smaller">Kleinere Schrift</string>
+    <string name="songbook_larger">Größere Schrift</string>
+    <string name="songbook_label_chorus">Refrain</string>
+    <string name="songbook_label_verse">Strophe</string>
+    <string name="songbook_label_bridge">Bridge</string>
+    <string name="songbook_label_tab">Tab</string>
+    <string name="songbook_song">Lied</string>
+    <string name="songbook_title_ph">Titel</string>
+    <string name="songbook_artist_ph">Autor(en)</string>
+    <string name="songbook_key_ph">Tonart, z. B. G</string>
+    <string name="songbook_text">Text &amp; Akkorde</string>
+    <string name="songbook_help">Akkorde in eckigen Klammern direkt vor die Silbe: [G]Großer [D]Gott. Abschnitte mit # am Zeilenanfang, z. B. # Refrain. Leere Zeile = neuer Absatz.</string>
+    <string name="songbook_preview">Vorschau</string>
+    <string name="songbook_preview_empty">Hier erscheint das Lied, wie es angezeigt wird.</string>
+    <string name="songbook_rights">Rechte</string>
+    <string name="songbook_ccli_song">CCLI-Liednummer</string>
+    <string name="songbook_copyright">Copyright</string>
+    <string name="songbook_saved">Lied gespeichert</string>
+    <string name="songbook_deleted">Lied gelöscht</string>
+    <string name="songbook_delete_title">Lied löschen</string>
+    <string name="songbook_delete_confirm">Lied endgültig löschen?</string>
+    <string name="songbook_discard">Änderungen verwerfen?</string>
+    <string name="songbook_discard_text">Deine Änderungen an diesem Lied gehen verloren.</string>
+    <string name="songbook_discard_confirm">Verwerfen</string>
+</resources>

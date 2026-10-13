@@ -1,5 +1,13 @@
 package org.agora.app.ui.finance
 
+import org.agora.app.ui.components.softShadow
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.background
 import org.agora.app.data.model.Payment
 import androidx.compose.foundation.layout.size
@@ -115,65 +123,103 @@ fun FinanceStatusCard(user: User, person: Person?, fees: FeeSettings, onClick: (
                 Text(stringResource(R.string.no_member_record), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
             }
         }
-        else -> {
-            // Centred status card of the PWA (`.user-status-card`): heavy coloured title, inner amount box, stat tiles
-            val color = personStatusColor(person)
-            val meta = person.statusMeta
-            TintedCard(color, onClick = onClick, contentPadding = PaddingValues(16.dp)) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        statusMetaText(meta.text.ifBlank { "Alles in Ordnung" }),
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold), color = color, textAlign = TextAlign.Center
-                    )
+        else -> PersonStatusHero(person, fees, onClick, showDetails, onStatusClick)
+    }
+}
+
+/**
+ * The fee state of one member (web: .user-finance-hero-card / .member-hero): a round symbol, the state in plain words,
+ * "Bezahlt bis", the open amount when overdue and - with [showDetails] - fee and status as two chips side by side.
+ * [compact]: the smaller version inside an opened card of the fee list (always shows "Bezahlt bis").
+ */
+@Composable
+fun PersonStatusHero(
+    person: Person, fees: FeeSettings, onClick: (() -> Unit)? = null, showDetails: Boolean = false,
+    onStatusClick: (() -> Unit)? = null, compact: Boolean = false
+) {
+    // One glance like the web app (.user-finance-hero-card): a round symbol, the state in plain words,
+    // fee and status as two chips side by side
+    val color = personStatusColor(person)
+    val meta = person.statusMeta
+    val shape = RoundedCornerShape(if (compact) 20.dp else 26.dp)
+    val symbol = when {
+        meta.isOverdue -> Icons.Outlined.ErrorOutline
+        meta.isSoonDue -> Icons.Outlined.Schedule
+        else -> Icons.Outlined.Check
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .softShadow(Agora.colors.shadow.copy(alpha = 0.06f), blur = 6.dp, shape = shape, offsetY = 1.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .background(Brush.radialGradient(listOf(color.copy(alpha = 0.13f), Color.Transparent), center = Offset(Float.POSITIVE_INFINITY, 0f), radius = 900f))
+            .border(1.dp, color.copy(alpha = 0.26f), shape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(start = if (compact) 16.dp else 18.dp, end = if (compact) 16.dp else 18.dp, top = if (compact) 16.dp else 18.dp, bottom = 16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(if (compact) 42.dp else 50.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+                Icon(symbol, null, Modifier.size(if (compact) 22.dp else 28.dp), tint = if (MaterialTheme.colorScheme.background.luminance() < 0.2f) MaterialTheme.colorScheme.background else Color.White)
+            }
+            Column(Modifier.padding(start = 14.dp)) {
+                Text(statusMetaText(meta.text.ifBlank { "Alles in Ordnung" }), style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall, color = color)
+                Text(
+                    buildAnnotatedString {
+                        if (!compact && meta.isActiveStandingOrder && !meta.isOverdue) append(stringResource(R.string.user_standing_order_active))
+                        else {
+                            append(stringResource(R.string.user_paid_until) + " ")
+                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading)) { append(paidUntilText(person)) }
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (meta.isOverdue && person.overdueAmount > 0) {
+            Row(
+                Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                    .background(color.copy(alpha = 0.09f)).padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.user_open_amount), color = color, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Text(Money.format(person.overdueAmount), color = color, style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        if (showDetails) {
+            Row(Modifier.padding(top = 14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FeeChip(Modifier.weight(1f)) {
                     Text(
                         buildAnnotatedString {
-                            if (meta.isActiveStandingOrder && !meta.isOverdue) append(stringResource(R.string.user_standing_order_active))
-                            else {
-                                append(stringResource(R.string.user_paid_until) + " ")
-                                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading)) { append(paidUntilText(person)) }
-                            }
+                            val amount = Money.format(fees.rateFor(person.effectiveStatus))
+                            val text = stringResource(R.string.fee_per_month, amount)
+                            val at = text.indexOf(amount)
+                            append(text)
+                            if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading), at, at + amount.length)
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 2.dp)
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (meta.isOverdue && person.overdueAmount > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(color.copy(alpha = 0.08f))
-                            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                            .padding(vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CapsLabel(stringResource(R.string.user_open_amount), color = color)
-                        Text(Money.format(person.overdueAmount), color = color, style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold),
-                            modifier = Modifier.padding(top = 4.dp))
-                    }
-                }
-                if (showDetails) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surface)
-                    ) {
-                        StatTile(stringResource(R.string.user_monthly_rate), Money.format(fees.rateFor(person.effectiveStatus)), Modifier.weight(1f))
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
-                        // Plain status name: the emoji of the label made it too wide for the tile
-                        StatTile(stringResource(R.string.user_current_status), statusName(person.effectiveStatus),
-                            Modifier.weight(1f), onStatusClick)
-                    }
+                // Plain status name: the emoji of the label made it too wide
+                FeeChip(Modifier.weight(1f), onClick = onStatusClick) {
+                    Text(statusName(person.effectiveStatus), style = MaterialTheme.typography.labelLarge, color = Agora.colors.heading,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (onStatusClick != null) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
+}
+
+/** A chip of the status card: fee per month or the status (tap to request a change). */
+@Composable
+private fun FeeChip(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Agora.colors.surfaceAlt).border(1.dp, Agora.colors.hairline, RoundedCornerShape(14.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically, content = content
+    )
 }
 
 /** Centred label/value tile (`.user-stat`). */
@@ -186,7 +232,7 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, onClic
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CapsLabel(label)
-        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading,
+        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Agora.colors.heading,
             maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 2.dp))
     }
@@ -214,7 +260,7 @@ fun FinanceTimeline(person: Person, modifier: Modifier = Modifier, plainStatus: 
                 // Dot with a connecting line to the next entry
                 Column(Modifier.width(20.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape).background(if (entry.payment != null) MaterialTheme.colorScheme.primary else Agora.colors.duty))
-                    if (index < entries.lastIndex) Box(Modifier.padding(top = 4.dp).width(2.dp).weight(1f).background(MaterialTheme.colorScheme.outlineVariant))
+                    if (index < entries.lastIndex) Box(Modifier.padding(top = 4.dp).width(2.dp).weight(1f).background(Agora.colors.hairline))
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp, bottom = if (index < entries.lastIndex) 14.dp else 0.dp)) {
                     val date = Dates.short(entry.date, locale)

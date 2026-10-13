@@ -1,5 +1,15 @@
 package org.agora.app.ui.mentoring
 
+import org.agora.app.ui.components.softShadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import org.agora.app.ui.components.containerTransform
 import org.agora.app.ui.components.pagePadding
 import org.agora.app.ui.components.openFrom
@@ -125,16 +135,29 @@ fun MentoringScreen(user: User, contentPadding: PaddingValues, onOpenThread: (St
             contentPadding = pagePadding(contentPadding.calculateTopPadding() + 4.dp, contentPadding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // `.mentoring-header-card`: centred heading, subtitle and one call to action
+            // `.mentoring-header-card`: a calm banner with a soft teal wash - title and text left, the action below
             item {
-                AgoraCard(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp)) {
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                val banner = RoundedCornerShape(26.dp)
+                val brand = Agora.colors.brand
+                Box(
+                    Modifier.fillMaxWidth()
+                        .softShadow(Agora.colors.shadow.copy(alpha = 0.06f), blur = 6.dp, shape = banner, offsetY = 1.dp)
+                        .clip(banner)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .drawBehind {
+                            drawRect(Brush.radialGradient(listOf(brand.copy(alpha = 0.14f), Color.Transparent), center = Offset(size.width, 0f), radius = size.maxDimension * 0.75f))
+                            drawRect(Brush.radialGradient(listOf(Color(0xFF14A87C).copy(alpha = 0.08f), Color.Transparent), center = Offset(0f, size.height), radius = size.maxDimension * 0.6f))
+                        }
+                        .border(1.dp, Agora.colors.hairline, banner)
+                        .padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 20.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.mentoring_title), style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading)
                         Text(stringResource(R.string.mentoring_subtitle), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
-                        Spacer(Modifier.height(18.dp))
+                            modifier = Modifier.padding(top = 6.dp))
+                        Spacer(Modifier.height(16.dp))
                         val status = profile.mentor?.status
-                        val wide = Modifier.fillMaxWidth(0.85f)
+                        val wide = Modifier
                         when {
                             profile.exists && status == "pending" -> SecondaryButton(onClick = { profileSheet = true }, modifier = wide, shape = CircleShape) {
                                 ButtonLabel(stringResource(R.string.mentoring_application_pending), Icons.Outlined.HourglassTop)
@@ -174,7 +197,7 @@ fun MentoringScreen(user: User, contentPadding: PaddingValues, onOpenThread: (St
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(thread.partnerName, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                            fontWeight = if (thread.unreadCount > 0) FontWeight.ExtraBold else FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
+                                            fontWeight = if (thread.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold, modifier = Modifier.weight(1f, fill = false))
                                         if (thread.isClosed) Icon(Icons.Outlined.Lock, null, Modifier.padding(start = 4.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Text(

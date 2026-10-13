@@ -1,4 +1,12 @@
 package org.agora.app.ui.events
+import androidx.compose.ui.platform.LocalResources
+import org.agora.app.ui.components.FrostScaffold
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import org.agora.app.ui.components.GlassSpheres
+import org.agora.app.ui.components.InfoGroup
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -171,6 +179,7 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     val data by store.data.collectAsStateWithLifecycle()
     val event = data.events.firstOrNull { it.id == eventId }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val locale = Dates.locale(context)
     val runner = rememberActionRunner()
     var confirmDelete by remember { mutableStateOf(false) }
@@ -181,20 +190,25 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     // the cover rounded inside it
     val tablet = isTablet()
     val hasCover = hasPicture && !tablet
+    // Without a picture the page starts with a band of glass spheres (web: .event-detail-sphere-band)
+    val hasBand = !hasPicture && !tablet
     val listState = rememberLazyListState()
     // While the cover is under the status bar: no fade, white icons (the cover is darkened at the top)
     val coverUnderStatusBar by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     ImmersiveStatusBar(hasCover && coverUnderStatusBar)
-    Scaffold(
+    FrostScaffold(
         // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header
-        topBar = { if (!hasCover) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) },
+        topBar = { if (!hasCover && !hasBand) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
-        containerColor = MaterialTheme.colorScheme.background
+        // Picture or sphere band up under the status bar: no glass there, it runs on like a photo
+        statusBarFrost = !((hasCover || hasBand) && coverUnderStatusBar),
+        // Pinned over the list so it stays reachable while scrolling (the tags scroll away with the cover)
+        overlay = { if (hasCover || hasBand) GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp)) }
     ) { padding ->
         if (event == null) {
             if (!data.loaded) LoadingBox(Modifier.padding(padding))
             else EmptyState(Icons.Outlined.Event, stringResource(R.string.event_not_found), modifier = Modifier.padding(padding))
-            return@Scaffold
+            return@FrostScaffold
         }
         val typeLabel = stringResource(when {
             event.isPinned -> R.string.event_badge_highlight
@@ -206,7 +220,7 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = readingPadding(if (hasCover) 0.dp else padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp),
+            contentPadding = readingPadding(if (hasCover || hasBand) 0.dp else padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (hasPicture && tablet) item {
@@ -224,31 +238,30 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                         model = container.api.absolute(event.imageUrl), contentDescription = null, contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                    Box(Modifier.fillMaxWidth().height(110.dp).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))))
-                    Row(
-                        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Spacer(Modifier.size(40.dp))
-                        FlowRow(
-                            Modifier.weight(1f).padding(start = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            GlassChip(typeLabel, icon = if (event.isPinned) Icons.Outlined.StarOutline else null, highlight = event.isPinned)
-                            if (event.status == "cancelled") GlassChip(cancelled)
-                        }
-                    }
+                    // Darker top so the back button stays readable, then the picture runs softly into the page (web)
+                    Box(Modifier.fillMaxWidth().height(90.dp).background(Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.55f), 0.55f to Color.Black.copy(alpha = 0.2f), 1f to Color.Transparent)))
+                    Box(Modifier.fillMaxWidth().fillMaxHeight(0.34f).align(Alignment.BottomCenter).background(Brush.verticalGradient(
+                        0f to Color.Transparent, 0.7f to MaterialTheme.colorScheme.background.copy(alpha = 0.7f), 1f to MaterialTheme.colorScheme.background)))
+                    HeadBadges(event.isPinned, event.status == "cancelled", typeLabel, cancelled)
+                }
+            }
+            if (hasBand) item {
+                val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                GlassSpheres(Modifier.fullBleed(20.dp).height(150.dp + statusBar), wash = if (event.isPinned) highlightIndigo() else Agora.colors.brand) {
+                    Box(Modifier.fillMaxWidth().fillMaxHeight(0.4f).align(Alignment.BottomCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background))))
+                    HeadBadges(event.isPinned, event.status == "cancelled", typeLabel, cancelled)
                 }
             }
             // Badges, title and organiser like the PWA's detail modal
             item {
-                if (!hasCover) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill(typeLabel, if (event.isPinned) Agora.colors.warning else MaterialTheme.colorScheme.primary,
-                        icon = if (event.isPinned) Icons.Outlined.StarOutline else null, caps = true)
+                // Only highlights and cancelled events get a badge (web); the band and the cover carry theirs
+                if (!hasCover && !hasBand && (event.isPinned || event.status == "cancelled")) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (event.isPinned) Pill(typeLabel, Agora.colors.warning, icon = Icons.Outlined.StarOutline, caps = true)
                     if (event.status == "cancelled") Pill(cancelled, Agora.colors.danger, caps = true)
                 }
-                Text(event.title, style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading, modifier = Modifier.padding(top = if (hasCover) 4.dp else 10.dp))
+                Text(event.title, style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading, modifier = Modifier.padding(top = if (hasCover || hasBand) 4.dp else 10.dp))
                 if (event.createdByName.isNotBlank()) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Person, null, Modifier.size(18.dp), tint = Agora.colors.warning)
                     Text(
@@ -285,8 +298,9 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                 }
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    InfoTile(Icons.Outlined.CalendarMonth, Color(0xFF8B5CF6), stringResource(R.string.event_badge_termin), Dates.eventWhen(context, event))
+                InfoGroup {
+                    InfoTile(Icons.Outlined.CalendarMonth, Color(0xFF8B5CF6), stringResource(R.string.event_badge_termin), Dates.eventWhen(context, event),
+                        grouped = true, oneLine = true)
                     if (event.location.isNotBlank()) {
                         val openMap = ONLINE_HINTS.none { event.location.lowercase().contains(it) }
                         val mapAction = {
@@ -294,8 +308,9 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(event.location)))) }
                             Unit
                         }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         InfoTile(Icons.Outlined.Place, Agora.colors.success, stringResource(R.string.location_label), event.location,
-                            onClick = if (openMap) mapAction else null) {
+                            onClick = if (openMap) mapAction else null, grouped = true) {
                             if (openMap) IconTile(Icons.AutoMirrored.Outlined.OpenInNew, Agora.colors.success, size = 36.dp)
                         }
                     }
@@ -338,22 +353,16 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                 }
             }
             if (event.requiresRegistration) item { RegistrationCard(event, user) }
-            if (event.canAccessDutyPlan) item { DutyPlanCard(event, user) }
+            if (event.canAccessDutyPlan) item { PlanCard(event, user) }
             // `.detail-admin-section`: edit / delete for organisers
             if (event.canEdit) item {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Agora.colors.surfaceAlt)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                        .padding(14.dp)
-                ) {
+                Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Settings, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        CapsLabel(stringResource(R.string.management), Modifier.padding(start = 8.dp))
+                        Icon(Icons.Outlined.Settings, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.management), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp))
                     }
-                    Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SecondaryButton(onClick = { onEdit(event.id) }, modifier = Modifier.weight(1f)) { ButtonLabel(stringResource(R.string.edit), Icons.Outlined.Edit) }
                         SecondaryButton(onClick = { confirmDelete = true }, style = SecondaryStyle.Danger, modifier = Modifier.weight(1f)) {
                             ButtonLabel(stringResource(R.string.delete), Icons.Outlined.Delete)
@@ -362,8 +371,6 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                 }
             }
         }
-        // Pinned over the list so it stays reachable while scrolling (the tags scroll away with the cover)
-        if (hasCover) GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp))
     }
 
     if (confirmDelete && event != null) ConfirmSheet(
@@ -372,7 +379,7 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
         confirmLabel = stringResource(R.string.delete),
         destructive = true,
         onConfirm = {
-            runner.run(context.getString(R.string.events_deleted_success)) {
+            runner.run(resources.getString(R.string.events_deleted_success)) {
                 container.repo.deleteEvent(event.id)
                 store.refreshAll()
                 onBack()
@@ -442,6 +449,7 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
     val container = LocalContainer.current
     val runner = rememberActionRunner()
     val context = LocalContext.current
+    val resources = LocalResources.current
     var attendees by remember { mutableStateOf<Attendees?>(null) }
     var expanded by rememberSaveable { mutableStateOf(false) }
     var reload by remember { mutableStateOf(0) }
@@ -458,7 +466,7 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
         if (event.minParticipants > 0) stringResource(R.string.reg_min, event.minParticipants) else null
     ).joinToString(" · ")
     val leave = {
-        runner.run(context.getString(R.string.events_unregistered_success)) { container.repo.register(event.id, false); container.store.refreshAll() }
+        runner.run(resources.getString(R.string.events_unregistered_success)) { container.repo.register(event.id, false); container.store.refreshAll() }
     }
 
     AgoraCard {
@@ -478,7 +486,7 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
                 stringResource(R.string.reg_status_waitlist_sub), stringResource(R.string.reg_waitlist_leave), !runner.busy, leave)
             else -> {
                 val register = {
-                    runner.run(context.getString(if (event.isFull) R.string.events_waitlist_success else R.string.events_registered_success)) {
+                    runner.run(resources.getString(if (event.isFull) R.string.events_waitlist_success else R.string.events_registered_success)) {
                         container.repo.register(event.id, true)
                         container.store.refreshAll()
                     }
@@ -545,7 +553,7 @@ private fun AvatarStack(people: List<Pair<String, String>>, max: Int = 5) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "+$rest", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "+$rest", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.clip(CircleShape).background(Agora.colors.surfaceAlt).padding(horizontal = 7.dp, vertical = 6.dp)
             )
         }
@@ -568,316 +576,15 @@ private fun AttendeeRow(event: AgoraEvent, userId: String, name: String, waitlis
     }
 }
 
-/** Duty roster like the PWA: collapsed head "x von y besetzt" + bar, one compact row per task with status chips. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Badges at the top right of the cover picture or the sphere band (web: .event-detail-pre-title): highlight, cancelled. */
 @Composable
-private fun DutyPlanCard(event: AgoraEvent, user: User) {
-    val container = LocalContainer.current
-    val context = LocalContext.current
-    val runner = rememberActionRunner()
-    var assignRole by remember { mutableStateOf<String?>(null) }
-    var addingTask by rememberSaveable { mutableStateOf(false) }
-    var newTask by rememberSaveable { mutableStateOf("") }
-    var confirmTaskDelete by remember { mutableStateOf<String?>(null) }
-    val grouped = event.duties.groupBy { it.roleName.trim().ifBlank { "Aufgabe" } }
-    // Confirmed people and assigned groups count as filled
-    val filled = event.duties.count { it.status == "confirmed" || (it.status == "assigned" && (it.assignedGroup.isNotBlank() || it.assignedGroupName.isNotBlank())) }
-    val refresh: suspend () -> Unit = { container.store.refreshAll() }
-    var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
-    val meta = if (event.duties.isEmpty()) stringResource(R.string.duty_none_yet)
-    else stringResource(R.string.duty_filled, filled, event.duties.size) + " · " +
-        (if (grouped.size == 1) stringResource(R.string.duty_tasks_one) else stringResource(R.string.duty_tasks_many, grouped.size))
-
-    AgoraCard {
-        Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { expanded = !expanded }) {
-            EventCardHead(Icons.Outlined.Handyman, Agora.colors.duty, stringResource(R.string.duty_plan), meta, expanded)
-        }
-        if (event.duties.isNotEmpty()) ThinProgress(
-            filled.toFloat() / event.duties.size,
-            if (filled == event.duties.size) Agora.colors.brandGradient
-            else Brush.horizontalGradient(listOf(Color(0xFF818CF8), Color(0xFF6366F1))),
-            Modifier.padding(top = 12.dp)
-        )
-        AnimatedVisibility(expanded) {
-            Column(Modifier.padding(top = 6.dp)) {
-                if (grouped.isEmpty()) Text(
-                    stringResource(if (event.canEdit) R.string.duty_empty_manager else R.string.duty_empty_member),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)
-                )
-                grouped.entries.forEachIndexed { index, (role, duties) ->
-                    val canManage = event.canEdit || duties.any { it.canManageDuty }
-                    val assignees = duties.filter { it.assignedUser.isNotBlank() || it.requestedUser.isNotBlank() || it.assignedGroup.isNotBlank() || it.assignedGroupName.isNotBlank() }
-                    val hasOpen = assignees.isEmpty() || duties.size > assignees.size
-                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Column(Modifier.padding(vertical = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(role, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, modifier = Modifier.weight(1f))
-                            if (canManage) {
-                                if (!hasOpen) SmallRoundTool(Icons.Outlined.Add, stringResource(R.string.duty_add_person)) { assignRole = role }
-                                SmallRoundTool(Icons.Outlined.Delete, stringResource(R.string.delete_task), danger = true) { confirmTaskDelete = role }
-                            }
-                        }
-                        FlowRow(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            assignees.forEach { duty ->
-                                DutyChip(duty, user, canRemove = canManage || duty.canManageDuty, busy = runner.busy) {
-                                    runner.run {
-                                        val sameRole = event.duties.filter { it.roleName.trim() == duty.roleName.trim() }
-                                        // Keep the task as an empty slot when its last entry is removed (PWA behaviour)
-                                        if (sameRole.size == 1) container.repo.addDuty(event.id, duty.roleName, "", null, null)
-                                        container.repo.deleteDuty(duty.id)
-                                        refresh()
-                                    }
-                                }
-                            }
-                            if (hasOpen) OpenDutyChip(canManage) { assignRole = role }
-                        }
-                        // A request to me gets the answer buttons right in the row
-                        duties.firstOrNull { it.status == "requested" && it.requestedUser == user.userId }?.let { request ->
-                            Row(
-                                Modifier.padding(top = 10.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Agora.colors.warning.copy(alpha = 0.08f))
-                                    .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(stringResource(R.string.duty_you_were_asked), style = MaterialTheme.typography.labelLarge, color = Color(0xFFB45309), modifier = Modifier.weight(1f))
-                                PrimaryButton(onClick = { runner.run { container.repo.respondToDuty(request.id, true); refresh() } }, enabled = !runner.busy,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { ButtonLabel(stringResource(R.string.duty_accept), Icons.Outlined.Check) }
-                                Spacer(Modifier.width(6.dp))
-                                SecondaryButton(onClick = { runner.run { container.repo.respondToDuty(request.id, false); refresh() } }, enabled = !runner.busy,
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) { Text(stringResource(R.string.duty_decline)) }
-                            }
-                        }
-                        duties.filter { it.notes.isNotBlank() }.forEach {
-                            Text(it.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                        }
-                    }
-                }
-                if (event.canEdit) {
-                    if (addingTask) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                            AgoraTextField(newTask, { newTask = it }, label = { Text(stringResource(R.string.duty_new_task)) }, singleLine = true, modifier = Modifier.weight(1f))
-                            TextButton(onClick = {
-                                val name = newTask.trim()
-                                if (name.isNotBlank()) runner.run(context.getString(R.string.duty_task_added, name)) {
-                                    container.repo.addDuty(event.id, name, "", null, null)
-                                    newTask = ""
-                                    addingTask = false
-                                    refresh()
-                                }
-                            }, enabled = !runner.busy) { Text(stringResource(R.string.add)) }
-                        }
-                    } else DashedButton(stringResource(R.string.duty_add_task), Modifier.padding(top = 6.dp)) { addingTask = true }
-                }
-            }
-        }
-    }
-
-    assignRole?.let { role ->
-        AssignDutySheet(role, onDismiss = { assignRole = null }) { userId, groupId ->
-            assignRole = null
-            val message = context.getString(if (groupId != null) R.string.duty_group_assigned else R.string.duty_request_sent)
-            runner.run(message) {
-                val openSlot = event.duties.firstOrNull { it.roleName.trim() == role && it.status == "open" }
-                if (openSlot != null) container.repo.assignDuty(openSlot.id, userId, groupId)
-                else container.repo.addDuty(event.id, role, "", userId, groupId)
-                refresh()
-            }
-        }
-    }
-    confirmTaskDelete?.let { role ->
-        ConfirmSheet(
-            title = stringResource(R.string.delete_task),
-            text = stringResource(R.string.delete_task_confirm, role),
-            confirmLabel = stringResource(R.string.delete),
-            destructive = true,
-            onConfirm = {
-                runner.run {
-                    event.duties.filter { it.roleName.trim() == role }.forEach { container.repo.deleteDuty(it.id) }
-                    refresh()
-                }
-            },
-            onDismiss = { confirmTaskDelete = null }
-        )
-    }
-}
-
-@Composable
-private fun SmallRoundTool(icon: ImageVector, description: String, danger: Boolean = false, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = Agora.colors.surfaceAlt,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.padding(start = 6.dp).size(30.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, description, Modifier.size(16.dp), tint = if (danger) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
-        }
-    }
-}
-
-/** Person / group chip with its status colour: confirmed (green), requested (amber), declined (red), group (indigo). */
-@Composable
-private fun DutyChip(duty: Duty, user: User, canRemove: Boolean, busy: Boolean, onRemove: () -> Unit) {
-    val you = stringResource(R.string.you)
-    val isGroup = duty.status == "assigned" && (duty.assignedGroupName.isNotBlank() || duty.assignedGroup.isNotBlank())
-    val requested = duty.status == "requested"
-    val declined = duty.status == "declined"
-    val color = when {
-        isGroup -> Agora.colors.duty
-        requested -> Agora.colors.warning
-        declined -> Agora.colors.danger
-        else -> Agora.colors.success
-    }
-    // Avatar gets the real name (initials), the label says "Du" for me
-    val (id, realName, isMe) = when {
-        isGroup -> Triple(null, duty.assignedGroupName.ifBlank { duty.assignedGroup }, false)
-        requested || declined -> Triple(duty.requestedUser, duty.requestedUserName.ifBlank { "Person" }, duty.requestedUser == user.userId)
-        else -> Triple(duty.assignedUser, duty.assignedUserName.ifBlank { "Person" }, duty.assignedUser == user.userId)
-    }
-    val name = if (isMe) you else realName
-    val state = when {
-        isGroup -> stringResource(R.string.duty_chip_group)
-        requested -> stringResource(R.string.duty_chip_requested)
-        declined -> stringResource(R.string.duty_chip_declined)
-        else -> null
-    }
+private fun BoxScope.HeadBadges(pinned: Boolean, cancelled: Boolean, typeLabel: String, cancelledLabel: String) {
+    if (!pinned && !cancelled) return
     Row(
-        Modifier
-            .height(30.dp)
-            .clip(CircleShape)
-            .background(color.copy(alpha = 0.08f))
-            .border(1.dp, color.copy(alpha = 0.3f), CircleShape)
-            .padding(start = 3.dp, end = if (canRemove) 2.dp else 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
     ) {
-        if (isGroup) Box(Modifier.size(24.dp).clip(CircleShape).background(color.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.Groups, null, Modifier.size(14.dp), tint = color)
-        } else UserAvatar(id, realName, 24.dp)
-        Text(
-            name, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (declined) MaterialTheme.colorScheme.onSurfaceVariant else Agora.colors.heading,
-            textDecoration = if (declined) TextDecoration.LineThrough else null,
-            modifier = Modifier.padding(start = 6.dp).widthIn(max = 160.dp)
-        )
-        if (state != null) Text(state, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = color, modifier = Modifier.padding(start = 5.dp))
-        else Icon(Icons.Outlined.Check, null, Modifier.padding(start = 4.dp).size(14.dp), tint = color)
-        if (canRemove) Box(
-            Modifier.padding(start = 2.dp).size(24.dp).clip(CircleShape).clickable(enabled = !busy, onClick = onRemove),
-            contentAlignment = Alignment.Center
-        ) { Icon(Icons.Outlined.Close, stringResource(R.string.remove), Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-    }
-}
-
-/** Dashed "Offen" chip; for managers it opens the assign sheet. */
-@Composable
-private fun OpenDutyChip(canManage: Boolean, onAssign: () -> Unit) {
-    val outline = MaterialTheme.colorScheme.outline
-    Row(
-        Modifier
-            .height(30.dp)
-            .clip(CircleShape)
-            .dashedOutline(outline, 15.dp)
-            .then(if (canManage) Modifier.clickable(onClick = onAssign) else Modifier)
-            .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(if (canManage) Icons.Outlined.Add else Icons.Outlined.Person, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            stringResource(if (canManage) R.string.duty_chip_open_assign else R.string.duty_chip_open),
-            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp), color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 5.dp)
-        )
-    }
-}
-
-/** Full-width dashed button ("Aufgabe hinzufügen"). */
-@Composable
-private fun DashedButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .dashedOutline(MaterialTheme.colorScheme.outline, 12.dp)
-            .clickable(onClick = onClick)
-            .padding(vertical = 11.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Outlined.Add, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp))
-    }
-}
-
-private fun Modifier.dashedOutline(color: Color, radius: Dp) = drawBehind {
-    val stroke = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
-    drawRoundRect(color = color, style = stroke, cornerRadius = CornerRadius(radius.toPx()))
-}
-
-/** "Person oder Gruppe zuweisen": search members (request) or groups (assign). */
-@Composable
-private fun AssignDutySheet(role: String, onDismiss: () -> Unit, onPick: (userId: String?, groupId: String?) -> Unit) {
-    val container = LocalContainer.current
-    val sheet = rememberSheetController(onDismiss)
-    var candidates by remember { mutableStateOf<Candidates?>(null) }
-    var tab by rememberSaveable { mutableStateOf(0) }
-    var query by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(Unit) { candidates = runCatching { container.repo.candidates() }.getOrDefault(Candidates()) }
-    AgoraSheet(
-        title = stringResource(R.string.duty_assign_title),
-        subtitle = stringResource(R.string.duty_task_label, role),
-        icon = Icons.Outlined.Assignment,
-        iconTint = Agora.colors.duty,
-        onDismiss = onDismiss,
-        controller = sheet
-    ) {
-        PillTabs(
-            listOf(stringResource(R.string.person) to Icons.Outlined.Person, stringResource(R.string.group) to Icons.Outlined.Groups),
-            selected = tab, onSelect = { tab = it }
-        )
-        org.agora.app.ui.components.SearchField(query, { query = it }, stringResource(if (tab == 0) R.string.search_person else R.string.search_group))
-        val c = candidates
-        if (c == null) LoadingBox()
-        else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            val q = query.trim().lowercase()
-            if (tab == 0) c.candidates.filter { q.isBlank() || it.name.lowercase().contains(q) || it.email.lowercase().contains(q) }.forEach { person ->
-                CandidateRow(
-                    title = person.name.ifBlank { person.email },
-                    subtitle = person.email.takeIf { it.isNotBlank() },
-                    leading = { UserAvatar(person.id, person.name, 38.dp) },
-                    actionLabel = stringResource(R.string.duty_request),
-                    onAction = { sheet.dismiss { onPick(person.id, null) } }
-                )
-            } else c.groups.filter { q.isBlank() || it.name.lowercase().contains(q) }.forEach { group ->
-                CandidateRow(
-                    title = group.name,
-                    subtitle = stringResource(R.string.duty_assign_group_sub),
-                    leading = { IconTile(Icons.Outlined.Groups, Agora.colors.duty, size = 38.dp) },
-                    actionLabel = stringResource(R.string.duty_assign),
-                    onAction = { sheet.dismiss { onPick(null, group.id) } }
-                )
-            }
-        }
-    }
-}
-
-/** Person / group row of the assign sheet: avatar, name, secondary line and a compact action button. */
-@Composable
-private fun CandidateRow(title: String, subtitle: String?, leading: @Composable () -> Unit, actionLabel: String, onAction: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Agora.colors.surfaceAlt)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        leading()
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        SecondaryButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) { Text(actionLabel) }
+        if (pinned) GlassChip(typeLabel, icon = Icons.Outlined.StarOutline, highlight = true)
+        if (cancelled) GlassChip(cancelledLabel)
     }
 }

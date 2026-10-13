@@ -1,5 +1,11 @@
 package org.agora.app.ui.finance
 
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -152,7 +158,7 @@ private fun RequestsHead(title: String, count: Int, badgeColor: Color, onAll: ((
 @Composable
 private fun CountBadge(count: Int, color: Color, modifier: Modifier = Modifier) {
     Box(modifier.heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(color).padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
-        Text(if (count > 99) "99+" else "$count", color = Color.White, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold))
+        Text(if (count > 99) "99+" else "$count", color = Color.White, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
     }
 }
 
@@ -186,7 +192,7 @@ fun OpenRequestsCard(requests: List<FinanceRequest>, onOpen: (FinanceRequest) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(name, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).padding(end = 8.dp))
-                        Text(requestAmount(request), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading)
+                        Text(requestAmount(request), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = Agora.colors.heading)
                     }
                     DotLabel(requestTypeInfo(request.type).second, requestColor(request.type), request.receipts().isNotEmpty())
                     Text(request.text() ?: requestDateLabel(request), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -219,20 +225,29 @@ fun RequestActions(onRequest: (type: String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(R.string.req_actions_title), style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading,
             modifier = Modifier.padding(start = 4.dp, top = 6.dp))
-        AgoraCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+        // Three soft tiles side by side (web: .req-action): a whisper of their colour, a light tinted symbol, a short title
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             listOf(
-                Triple("payment", R.string.req_action_payment_title, R.string.req_action_payment_desc),
-                Triple("expense", R.string.req_action_expense_title, R.string.req_action_expense_desc),
-                Triple("status", R.string.req_action_status_title, R.string.req_action_status_desc)
-            ).forEachIndexed { index, (type, title, desc) ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(Modifier.fillMaxWidth().clickable { onRequest(type) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconTile(requestTypeInfo(type).first, requestColor(type), size = 40.dp)
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(stringResource(title), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
-                        Text(stringResource(desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                "payment" to R.string.req_action_payment_title,
+                "expense" to R.string.req_action_expense_title,
+                "status" to R.string.req_action_status_title
+            ).forEach { (type, title) ->
+                val color = requestColor(type)
+                val surface = MaterialTheme.colorScheme.surface
+                Card(
+                    onClick = { onRequest(type) },
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.05f).compositeOver(surface)),
+                    border = BorderStroke(1.dp, color.copy(alpha = 0.16f)),
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha = 0.14f).compositeOver(surface)), contentAlignment = Alignment.Center) {
+                            Icon(requestTypeInfo(type).first, null, Modifier.size(20.dp), tint = color)
+                        }
+                        Text(stringResource(title), style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, lineHeight = 16.sp), color = Agora.colors.heading,
+                            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 9.dp))
                     }
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             }
         }
@@ -269,7 +284,7 @@ fun MyRequestsCard(requests: List<FinanceRequest>, onOpen: (FinanceRequest) -> U
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(requestTypeInfo(request.type).second, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 8.dp))
-                        Text(requestAmount(request), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading)
+                        Text(requestAmount(request), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = Agora.colors.heading)
                     }
                     val sent = if (request.timestamp > 0) " · " + Dates.short(java.time.Instant.ofEpochMilli(request.timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString(), locale) else ""
                     DotLabel(stateText + sent, stateColor, request.receipts().isNotEmpty())
@@ -350,7 +365,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
             Modifier.fillMaxWidth().clip(heroShape).background(color.copy(alpha = 0.08f)).border(1.dp, color.copy(alpha = 0.22f), heroShape).padding(vertical = 18.dp, horizontal = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(requestAmount(request), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold, fontSize = 28.sp),
+            Text(requestAmount(request), style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, fontSize = 28.sp),
                 color = Agora.colors.heading, textAlign = TextAlign.Center)
             val date = requestDateLabel(request)
             if (date.isNotBlank()) Text(date, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))

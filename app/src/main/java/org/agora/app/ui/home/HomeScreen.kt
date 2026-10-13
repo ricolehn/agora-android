@@ -1,5 +1,6 @@
 package org.agora.app.ui.home
 
+import org.agora.app.ui.components.GlassSpheres
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
@@ -243,7 +244,7 @@ private fun HomeGreeting(user: User) {
         )
         Text(
             if (first.isNotBlank()) "$hello, $first 👋" else "$hello 👋",
-            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp),
+            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 27.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
             color = Agora.colors.heading,
             modifier = Modifier.padding(top = 4.dp)
         )
@@ -254,7 +255,7 @@ private fun HomeGreeting(user: User) {
 @Composable
 private fun HomeSectionHead(title: String, link: String? = null, onLink: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.2).sp),
+        Text(title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
             color = Agora.colors.heading, modifier = Modifier.weight(1f))
         if (link != null) TextButton(onClick = onLink) {
             Text(link, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
@@ -359,7 +360,7 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
     val cat = when {
         event.isPinned && !event.isTermin -> highlightIndigo()
         !event.isTermin -> MaterialTheme.colorScheme.primary
-        else -> Color(0xFF64748B)
+        else -> Color(0xFF78716C)
     }
     val start = if (event.date < today) today else event.date
     val dayLabel = homeDayLabel(start, today, locale)
@@ -376,20 +377,14 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
         Box(Modifier.fillMaxWidth().height(coverHeight).clip(RoundedCornerShape(15.dp)).background(Agora.colors.surfaceAlt)) {
             if (measuring) Unit
             else if (event.imageUrl.isNotBlank()) AsyncImage(container.api.absolute(event.imageUrl), null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            else Box(
-                Modifier.fillMaxSize().colorMesh(
-                    Agora.colors.surfaceAlt,
-                    Triple(0.2f, 0.25f, cat.copy(alpha = 0.35f)),
-                    Triple(0.85f, 0.35f, Color(0xFF6366F1).copy(alpha = 0.22f)),
-                    Triple(0.5f, 1f, Color(0xFF10B981).copy(alpha = 0.22f))
-                ),
-                contentAlignment = Alignment.Center
-            ) { Icon(if (event.isTermin) Icons.Outlined.Schedule else Icons.Outlined.CalendarMonth, null, Modifier.size(24.dp), tint = cat) }
+            else GlassSpheres(Modifier.fillMaxSize(), wash = cat) {
+                Icon(if (event.isTermin) Icons.Outlined.Schedule else Icons.Outlined.CalendarMonth, null, Modifier.size(24.dp), tint = cat)
+            }
             Text(
                 dayLabel, color = Color.White, maxLines = 1,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.padding(8.dp).clip(CircleShape)
-                    .then(if (isToday) Modifier.background(Agora.colors.brandGradient) else Modifier.background(Color(0x800F172A)))
+                    .then(if (isToday) Modifier.background(Agora.colors.brandGradient) else Modifier.background(Color(0x9E1A1917)))
                     .border(1.dp, Color.White.copy(alpha = if (isToday) 0.45f else 0.3f), CircleShape)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
@@ -406,7 +401,7 @@ private fun NextCard(event: AgoraEvent, user: User, today: String, modifier: Mod
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
             }
             Text(event.title, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.ExtraBold))
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold))
             if (event.location.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Place, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(event.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium,
@@ -503,6 +498,6 @@ private fun CountBadge(count: Int, color: Color, modifier: Modifier = Modifier) 
         modifier.heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(color).padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(if (count > 99) "99+" else "$count", color = Color.White, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold))
+        Text(if (count > 99) "99+" else "$count", color = Color.White, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
     }
 }

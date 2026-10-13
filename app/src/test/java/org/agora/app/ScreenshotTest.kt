@@ -1,5 +1,6 @@
 package org.agora.app
 
+import androidx.compose.ui.test.hasContentDescription
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -50,7 +51,8 @@ class ScreenshotTest {
         name: String, user: String?, route: String? = null, dark: Boolean = false, eventIndex: Int? = null, cover: Boolean = false,
         tap: List<String> = emptyList(), scroll: Boolean = false, sheet: Boolean = false,
         scrollTo: String? = null, prepare: (suspend (AppContainer) -> Unit)? = null,
-        longDescription: Boolean = false
+        longDescription: Boolean = false,
+        pick: ((List<org.agora.app.data.model.AgoraEvent>) -> org.agora.app.data.model.AgoraEvent?)? = null
     ) {
         assumeTrue("set -Pscreenshots=<server url>", server.isNotBlank())
         val container = AppContainer(ApplicationProvider.getApplicationContext())
@@ -63,9 +65,9 @@ class ScreenshotTest {
                 container.store.login("$user@test.de", "test1234")
                 prepare?.invoke(container)
                 container.store.refreshAll()
-                val eventId = eventIndex?.let { i ->
-                    container.store.data.value.events.sortedWith(compareBy({ it.date }, { it.startTime })).getOrNull(i)?.id
-                }
+                val sorted = container.store.data.value.events.sortedWith(compareBy({ it.date }, { it.startTime }))
+                // [pick]: an event chosen by what it offers (e.g. registration) instead of its position
+                val eventId = pick?.let { p -> checkNotNull(p(sorted)) { "No event matches the pick" }.id } ?: eventIndex?.let { i -> sorted.getOrNull(i)?.id }
                 if (route != null || eventId != null) link = DeepLink(route ?: "events", eventId)
             }
         }
@@ -122,8 +124,18 @@ class ScreenshotTest {
     private fun scrollToText(text: String) {
         val lists = compose.onAllNodes(hasScrollToNodeAction())
         val count = lists.fetchSemanticsNodes().size
-        check((0 until count).any { i -> runCatching { lists[i].performScrollToNode(hasText(text)) }.isSuccess }) { "No list contains $text" }
+        // "@Label": a node by its content description (icon buttons)
+        val matcher = if (text.startsWith("@")) hasContentDescription(text.removePrefix("@")) else hasText(text)
+        val list = (0 until count).firstOrNull { i -> runCatching { lists[i].performScrollToNode(matcher) }.isSuccess }
+        checkNotNull(list) { "No list contains $text" }
         compose.waitForIdle()
+        // The list runs on under the frosted bottom bar: a target left at the lower edge would be covered, so a tap
+        // there hits the navigation - move it up a bit first
+        val rootHeight = compose.onRoot().fetchSemanticsNode().size.height
+        if (compose.onAllNodes(matcher).onFirst().fetchSemanticsNode().boundsInRoot.bottom > rootHeight * 0.8f) {
+            lists[list].performTouchInput { swipeUp(startY = height * 0.6f, endY = height * 0.35f, durationMillis = 800) }
+            repeat(4) { Thread.sleep(250); compose.waitForIdle() }
+        }
     }
 
     @Test fun login() = shoot("login", null)
@@ -153,7 +165,17 @@ class ScreenshotTest {
     @Test fun ownerEventDetail() = shoot("owner-event-detail", "owner", eventIndex = 1)
     @Test fun ownerEventDetailCover() = shoot("owner-event-detail-cover", "owner", eventIndex = 2, cover = true)
     @Test fun ownerDutyRoster() = shoot("owner-duty-roster", "owner", eventIndex = 1, tap = listOf("Duty roster"))
-    @Test fun ownerRegistration() = shoot("owner-registration", "owner", eventIndex = 3, tap = listOf("Attendees"))
+    @Test fun ownerRegistration() = shoot(
+        "owner-registration", "owner", tap = listOf("Attendees"),
+        // The first upcoming event with registration, with the owner registered so the attendee list has someone
+        pick = { events -> events.firstOrNull { it.requiresRegistration && it.date >= org.agora.app.util.Dates.todayIso() } },
+        prepare = { c ->
+            c.store.refreshAll()
+            c.store.data.value.events.sortedWith(compareBy({ it.date }, { it.startTime }))
+                .firstOrNull { it.requiresRegistration && it.date >= org.agora.app.util.Dates.todayIso() && !it.isRegistered }
+                ?.let { e -> runCatching { c.repo.register(e.id, true) } }
+        }
+    )
     @Test fun maxDutyRequest() = shoot("max-duty-request", "max", eventIndex = 1, tap = listOf("Duty roster"))
     @Test fun ownerMentoring() = shoot("owner-mentoring", "owner", "mentoring")
     @Test fun ownerAi() = shoot("owner-ai", "owner", "ai")
@@ -173,9 +195,9 @@ class ScreenshotTest {
     @Test fun maxNewRequestSheet() = shoot("sheet-new-request", "max", "finances", tap = listOf("Report a payment"), sheet = true)
     @Test fun ownerBookPaymentSheet() = shoot("sheet-book-payment", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", "Record payment"), sheet = true)
     @Test fun ownerChangeStatusSheet() = shoot("sheet-change-status", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", "Status"), sheet = true)
-    @Test fun maxDeleteAccountSheet() = shoot("sheet-delete-account", "max", "settings", scrollTo = "Delete account", tap = listOf("Delete account"), sheet = true)
+    @Test fun maxDeleteAccountSheet() = shoot("sheet-delete-account", "max", "settings", tap = listOf("Account & privacy", ">Delete account"), sheet = true)
     @Test fun ownerStandingOrderSheet() = shoot(
-        "sheet-standing-order", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", ">Manage"), sheet = true,
+        "sheet-standing-order", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", ">@Manage"), sheet = true,
         prepare = { c -> c.repo.bookPayment(c.repo.allPeople().first { it.name == "Max Mitglied" }.id, 25.0, "2026-07-01", "Beitrag", standingOrder = true) }
     )
 
@@ -281,6 +303,21 @@ class ScreenshotTest {
     // beta3: requests like the web (beta18)
     @Test fun ownerRequestDetail() = shoot("sheet-request-detail", "owner", "finances", tap = listOf("Max Mitglied"), sheet = true)
     @Test fun maxRequestDetail() = shoot("sheet-my-request", "max", "finances", tap = listOf(">Expense"), sheet = true)
+
+    // v3.1: Extras hub and its apps (web: HUB_TABS)
+    @Test fun ownerExtras() = shoot("owner-extras", "owner", "extras")
+    @Test fun maxExtrasDark() = shoot("max-extras-dark", "max", "extras", dark = true)
+    @Test fun ownerSongbook() = shoot("owner-songbook", "owner", "extras", tap = listOf("Songbook"))
+    @Test fun maxSongbookDark() = shoot("max-songbook-dark", "max", "extras", dark = true, tap = listOf("Songbook"))
+    @Test fun ownerPrayers() = shoot("owner-prayers", "owner", "extras", tap = listOf("Prayer requests"))
+    @Test fun maxPrayers() = shoot("max-prayers", "max", "extras", tap = listOf("Prayer requests"))
+    @Test fun ownerAiFromExtras() = shoot("owner-ai-extras", "owner", "extras", tap = listOf("AI Support"))
+
+    // Frosted glass: content scrolled up under the header, status bar and bottom bar (Frost.kt)
+    @Test fun ownerTermineScrolled() = shoot("owner-termine-scrolled", "owner", "events", scroll = true)
+    @Test fun ownerFinancesScrolled() = shoot("owner-finances-scrolled", "owner", "finances", scroll = true)
+    @Test fun maxFinancesScrolledDark() = shoot("max-finances-scrolled-dark", "max", "finances", dark = true, scroll = true)
+    @Test fun ownerSettingsScrolled() = shoot("owner-settings-scrolled", "owner", "settings", scroll = true)
     @Test fun maxFinancesRequests() = shoot("max-finances-requests", "max", "finances", scroll = true)
     @Test fun ownerFinanceHistory() = shoot("owner-finance-history", "owner", "finances", scrollTo = "History")
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")

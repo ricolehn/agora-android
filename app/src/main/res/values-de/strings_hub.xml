@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_hub">Extras</string>
+    <string name="hub_subtitle">Weitere Angebote der Gemeinde an einem Ort.</string>
+    <string name="hub_ai_title">KI-Support</string>
+    <string name="hub_ai_desc">Fragen zur Gemeinde, zu Terminen und Finanzen</string>
+    <string name="hub_songbook_title">Liederbuch</string>
+    <string name="hub_songbook_desc">Lieder und Texte für Gottesdienst und Kleingruppe</string>
+    <string name="hub_prayers_title">Gebetsanliegen</string>
+    <string name="hub_prayers_desc">Anliegen teilen und füreinander beten</string>
+</resources>

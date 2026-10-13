@@ -468,7 +468,7 @@
     <string name="req_actions_title">What would you like to submit?</string>
     <string name="req_action_payment_title">Report a payment</string>
     <string name="req_action_payment_desc">Transferred your fee or set up a standing order</string>
-    <string name="req_action_expense_title">Get an expense refunded</string>
+    <string name="req_action_expense_title">Get refunded</string>
     <string name="req_action_expense_desc">Paid for something for the church? Submit it with a receipt</string>
     <string name="req_action_status_title">Change status</string>
     <string name="req_action_status_desc">E.g. apply for low earner or a pause</string>
@@ -575,4 +575,16 @@
     <string name="notif_summary_email">E-mail only</string>
     <string name="notif_summary_off">Off</string>
     <string name="notif_device_title">This device</string>
+    <!-- Redesign (web app parity, 2026-10) -->
+    <string name="ai_chat_hello">How can I help?</string>
+    <string name="ai_new_chat">New chat</string>
+    <string name="ai_chat_hint_finance_v2">Ask about members, finances, events or duties.</string>
+    <string name="ai_chat_hint_member_v2">Ask about events, duties, your fee or how the app works.</string>
+    <string name="ai_suggest_admin_1">Who is behind with their fee?</string>
+    <string name="ai_suggest_admin_2">What is coming up this week?</string>
+    <string name="ai_suggest_admin_3">Which requests are still open?</string>
+    <string name="ai_suggest_member_1">Until when is my fee paid?</string>
+    <string name="ai_suggest_member_2">What is coming up this week?</string>
+    <string name="ai_suggest_member_3">Where am I on duty next?</string>
+    <string name="fee_per_month">%1$s a month</string>
 </resources>

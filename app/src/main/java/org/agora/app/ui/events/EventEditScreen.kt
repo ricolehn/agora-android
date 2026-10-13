@@ -1,5 +1,7 @@
 package org.agora.app.ui.events
 
+import org.agora.app.ui.components.frosted
+import org.agora.app.ui.components.FrostScaffold
 import androidx.activity.compose.rememberLauncherForActivityResult
 import org.agora.app.ui.components.readingPadding
 import androidx.activity.result.PickVisualMediaRequest
@@ -280,7 +282,7 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
         }
     }
 
-    Scaffold(
+    FrostScaffold(
         topBar = {
             SubPageHeader(
                 stringResource(when {
@@ -293,7 +295,7 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
         },
         // Cancel / save stay at the bottom while scrolling through the form
         bottomBar = {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background.copy(alpha = 0.96f)).navigationBarsPadding().imePadding()) {
+            Column(Modifier.fillMaxWidth().frosted().navigationBarsPadding().imePadding()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 error?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
@@ -315,12 +317,11 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
                 }
             }
         },
-        snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
-        containerColor = MaterialTheme.colorScheme.background
+        snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } }
     ) { padding ->
         Column(
             // Tablets: a readable column in the middle of the window
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(readingPadding(8.dp, 8.dp, maxWidth = 820.dp)),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(readingPadding(8.dp, 8.dp, maxWidth = 820.dp)),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Cover: the picture with frosted buttons at its bottom right, or a drop zone

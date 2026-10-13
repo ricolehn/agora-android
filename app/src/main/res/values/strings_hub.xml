@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Extras hub (web v3.1: one nav entry for further apps; the AI chat is one of them) -->
+    <string name="nav_hub">Extras</string>
+    <string name="hub_subtitle">More offers of the community in one place.</string>
+    <string name="hub_ai_title">AI Support</string>
+    <string name="hub_ai_desc">Questions about the community, appointments and finances</string>
+    <string name="hub_songbook_title">Songbook</string>
+    <string name="hub_songbook_desc">Songs and lyrics for services and small groups</string>
+    <string name="hub_prayers_title">Prayer requests</string>
+    <string name="hub_prayers_desc">Share requests and pray for each other</string>
+</resources>

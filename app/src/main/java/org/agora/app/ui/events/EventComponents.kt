@@ -1,5 +1,7 @@
 package org.agora.app.ui.events
 
+import androidx.compose.ui.platform.LocalResources
+import org.agora.app.ui.components.GlassSpheres
 import org.agora.app.ui.components.softShadow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -113,7 +115,7 @@ fun DutyRequestCard(requests: List<DutyRequest>, busy: Boolean, onRespond: (Duty
         Text(
             stringResource(R.string.duty_feedback_requested).uppercase(),
             color = Color.White,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp),
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
             modifier = Modifier.padding(top = 10.dp).clip(CircleShape).background(Agora.colors.warning).padding(horizontal = 12.dp, vertical = 4.dp)
         )
         requests.forEach { req ->
@@ -122,7 +124,7 @@ fun DutyRequestCard(requests: List<DutyRequest>, busy: Boolean, onRespond: (Duty
                 onClick = { onOpenEvent(req.eventId) },
                 color = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().softShadow(Color(0xFF0F172A).copy(alpha = 0.10f), blur = 6.dp, shape = RoundedCornerShape(16.dp), offsetY = 2.dp)
+                modifier = Modifier.fillMaxWidth().softShadow(Agora.colors.shadow.copy(alpha = 0.10f), blur = 6.dp, shape = RoundedCornerShape(16.dp), offsetY = 2.dp)
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Text(req.eventTitle, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading)
@@ -159,38 +161,41 @@ fun DutyRequestCard(requests: List<DutyRequest>, busy: Boolean, onRespond: (Duty
 
 /** Date box of the Termine list (`.termin-date-box`): outlined for Termine, cyan for events, indigo for highlights. */
 @Composable
-fun DateBox(event: AgoraEvent, modifier: Modifier = Modifier, floating: Boolean = false, day: String = event.date) {
+fun DateBox(event: AgoraEvent, modifier: Modifier = Modifier, floating: Boolean = false, day: String = event.date, compact: Boolean = false) {
     val locale = Dates.locale(LocalContext.current)
     val date = Dates.parse(day)
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(if (compact) 11.dp else 12.dp)
     // Tear-off calendar leaf like the PWA (`.event-cal`): month strip in the category colour, big day, weekday
     Column(
         modifier
-            .width(50.dp)
-            .softShadow(Color(0xFF0F172A).copy(alpha = if (floating) 0.28f else 0.10f), blur = if (floating) 10.dp else 4.dp, shape = shape, offsetY = if (floating) 3.dp else 1.dp)
+            .width(if (compact) 44.dp else 50.dp)
+            .softShadow(Agora.colors.shadow.copy(alpha = if (floating) 0.28f else 0.08f), blur = if (floating) 10.dp else 4.dp, shape = shape, offsetY = if (floating) 3.dp else 1.dp)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .then(if (floating) Modifier else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)),
+            .then(if (floating) Modifier else Modifier.border(1.dp, Agora.colors.hairline, shape)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             date?.let { Dates.monthShort(it, locale) } ?: "",
             color = Color.White,
             textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp, fontSize = 10.sp),
-            modifier = Modifier.fillMaxWidth().background(categoryColor(event)).padding(top = 3.dp, bottom = 2.dp)
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, fontSize = if (compact) 9.sp else 10.sp,
+                lineHeight = if (compact) 11.sp else 14.sp),
+            modifier = Modifier.fillMaxWidth().background(categoryColor(event)).padding(top = if (compact) 2.dp else 3.dp, bottom = if (compact) 1.dp else 2.dp)
         )
         Text(
             date?.dayOfMonth?.toString() ?: "?",
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp, lineHeight = 22.sp),
-            fontWeight = FontWeight.ExtraBold, color = Agora.colors.heading,
-            modifier = Modifier.padding(top = 3.dp)
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = if (compact) 18.sp else 21.sp, lineHeight = if (compact) 19.sp else 22.sp,
+                letterSpacing = if (compact) (-0.5).sp else 0.sp),
+            fontWeight = FontWeight.Bold, color = Agora.colors.heading,
+            modifier = Modifier.padding(top = if (compact) 2.dp else 3.dp)
         )
         Text(
             date?.let { Dates.weekdayShort(it, locale) } ?: "",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = if (compact) 10.sp else 11.sp,
+                lineHeight = if (compact) 12.sp else 16.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 5.dp)
+            modifier = Modifier.padding(bottom = if (compact) 4.dp else 5.dp)
         )
     }
 }
@@ -200,23 +205,26 @@ fun DateBox(event: AgoraEvent, modifier: Modifier = Modifier, floating: Boolean 
 fun categoryColor(event: AgoraEvent): Color = when {
     event.isPinned -> Agora.colors.duty
     !event.isTermin -> MaterialTheme.colorScheme.primary
-    else -> Color(0xFF64748B)
+    else -> Color(0xFF78716C)
 }
 
 /** [showRegistered] = false where the list only contains own registrations anyway (Termine). */
+/** The own status of an event as text, colour and icon - shown as a quiet note in the time line of a card. */
+private data class StatusNote(val text: String, val color: Color, val icon: androidx.compose.ui.graphics.vector.ImageVector? = null)
+
 @Composable
-fun EventStatusBadge(event: AgoraEvent, user: User, showRegistered: Boolean = true) {
-    val duty = Agora.colors.duty
-    val confirmed = event.myConfirmedDuty(user)
-    when {
-        confirmed != null -> Pill(confirmed.roleName, duty, icon = Icons.Outlined.Handyman)
-        event.myGroupDuty(user) != null -> Pill(event.myGroupDuty(user)!!.roleName, duty, icon = Icons.Outlined.Handyman)
-        event.myOpenRequest(user) != null -> Pill(stringResource(R.string.duty_request_open), duty)
-        event.isWaitlisted -> Pill(stringResource(R.string.event_waitlist), Agora.colors.warning)
-        event.isRegistered -> if (showRegistered) Pill(stringResource(R.string.event_registered), Agora.colors.success)
-        event.requiresRegistration && event.isFull -> Pill(stringResource(R.string.event_full), Agora.colors.danger)
+private fun statusNote(event: AgoraEvent, user: User, showRegistered: Boolean): StatusNote? {
+    val duty = MaterialTheme.colorScheme.primary
+    val myDuty = event.myConfirmedDuty(user) ?: event.myGroupDuty(user)
+    return when {
+        myDuty != null -> StatusNote(myDuty.roleName, duty, Icons.Outlined.Handyman)
+        event.myOpenRequest(user) != null -> StatusNote(stringResource(R.string.duty_request_open), Agora.colors.warning)
+        event.isWaitlisted -> StatusNote(stringResource(R.string.event_waitlist), Agora.colors.warning)
+        event.isRegistered -> if (showRegistered) StatusNote(stringResource(R.string.event_registered), Agora.colors.success) else null
+        event.requiresRegistration && event.isFull -> StatusNote(stringResource(R.string.event_full), Agora.colors.danger)
         event.canAccessDutyPlan && event.openDutySlots() > 0 ->
-            Pill(pluralStringResource(R.plurals.duties_free, event.openDutySlots(), event.openDutySlots()), MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusNote(pluralStringResource(R.plurals.duties_free, event.openDutySlots(), event.openDutySlots()), MaterialTheme.colorScheme.onSurfaceVariant)
+        else -> null
     }
 }
 
@@ -227,46 +235,59 @@ fun EventStatusBadge(event: AgoraEvent, user: User, showRegistered: Boolean = tr
 @Composable
 fun EventRow(event: AgoraEvent, user: User, day: String = event.date, showRegistered: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val locale = Dates.locale(context)
     val today = Dates.todayIso()
     // A later day of a multi-day event (Termine list) is "today" only on that day
     val isToday = if (day != event.date) day == today else event.date <= today && event.lastDay >= today
     val category = categoryColor(event)
+    // Slim card like the web (.event-card, polish.css "Termine"): 16dp radius, hairline border, today with a brand ring
     AgoraCard(
         modifier = modifier,
         onClick = onClick,
         contentPadding = PaddingValues(0.dp),
-        border = if (isToday) BorderStroke(2.dp, category) else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        shape = RoundedCornerShape(16.dp),
+        elevation = 3.dp,
+        border = if (isToday) BorderStroke(1.5.dp, Agora.colors.brand.copy(alpha = 0.55f)) else BorderStroke(1.dp, Agora.colors.hairline)
     ) {
         Row(Modifier.height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
-            // Thin category stripe on the left edge
-            Box(Modifier.width(4.dp).fillMaxHeight().background(category.copy(alpha = if (event.isTermin) 0.45f else 0.85f)))
-            Row(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                DateBox(event, day = day)
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(event.title, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // The category stripe as a slim rounded tab inside the card
+            Box(Modifier.fillMaxHeight().padding(vertical = 12.dp).width(3.dp)
+                .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                .background(category.copy(alpha = if (event.isTermin) 0.45f else 0.85f)))
+            Row(Modifier.weight(1f).padding(start = 11.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                DateBox(event, day = day, compact = true)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(event.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.5.sp, lineHeight = 19.sp, letterSpacing = (-0.2).sp),
+                        fontWeight = FontWeight.SemiBold, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (isToday) Text(
-                            context.getString(R.string.today).uppercase(),
+                            resources.getString(R.string.today),
                             color = if (event.isTermin) MaterialTheme.colorScheme.primary else category,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp),
-                            modifier = Modifier.padding(end = 6.dp).clip(RoundedCornerShape(6.dp))
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp, lineHeight = 14.sp),
+                            modifier = Modifier.padding(end = 6.dp).clip(CircleShape)
                                 .background((if (event.isTermin) MaterialTheme.colorScheme.primary else category).copy(alpha = 0.12f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .padding(horizontal = 7.dp, vertical = 1.dp)
                         )
                         RowLine(
                             if (event.isMultiDay) Icons.Outlined.CalendarMonth else Icons.Outlined.Schedule,
                             when {
                                 event.isMultiDay -> Dates.spanShort(event.date, event.endDate, locale)
-                                event.startTime.isBlank() -> context.getString(R.string.all_day)
-                                else -> "${Dates.timeRange(event.startTime, event.endTime)} ${context.getString(R.string.time_suffix)}".trim()
+                                event.startTime.isBlank() -> resources.getString(R.string.all_day)
+                                else -> "${Dates.timeRange(event.startTime, event.endTime)} ${resources.getString(R.string.time_suffix)}".trim()
                             },
                             Agora.colors.heading, bold = true
                         )
+                        // The own status ends the time line: the time stays whole, a long duty name ends with "…"
+                        statusNote(event, user, showRegistered)?.let { note ->
+                            Text(" · ", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp))
+                            note.icon?.let { Icon(it, null, Modifier.size(13.dp).padding(end = 3.dp), tint = note.color) }
+                            Text(note.text, color = note.color, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp), fontWeight = FontWeight.SemiBold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        }
                     }
                     if (event.location.isNotBlank()) RowLine(Icons.Outlined.Place, event.location)
                 }
-                EventStatusBadge(event, user, showRegistered)
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }
@@ -276,9 +297,10 @@ fun EventRow(event: AgoraEvent, user: User, day: String = event.date, showRegist
 @Composable
 private fun RowLine(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, bold: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = color, fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
+        Icon(icon, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+        Text(text, style = MaterialTheme.typography.bodyMedium.copy(fontSize = if (bold) 13.sp else 12.8.sp, lineHeight = 17.sp), color = color,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp))
     }
 }
 
@@ -309,7 +331,7 @@ private fun CoverLabel(text: String, pinned: Boolean) {
     val shape = CircleShape
     Text(
         text.uppercase(), color = Color.White, maxLines = 1,
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.6.sp),
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
         modifier = Modifier
             .softShadow(Color.Black.copy(alpha = 0.25f), blur = 8.dp, shape = shape, offsetY = 2.dp)
             .clip(shape)
@@ -336,7 +358,7 @@ private fun CoverStatus(text: String, color: Color, icon: androidx.compose.ui.gr
             Spacer(Modifier.width(4.dp))
         }
         Text(text, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold))
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
     }
 }
 
@@ -349,6 +371,7 @@ private fun CoverStatus(text: String, color: Color, icon: androidx.compose.ui.gr
 fun EventCoverCard(event: AgoraEvent, user: User, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val container = LocalContainer.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val locale = Dates.locale(context)
     val past = event.isPast()
     val dark = isDark()
@@ -360,7 +383,7 @@ fun EventCoverCard(event: AgoraEvent, user: User, modifier: Modifier = Modifier,
         contentPadding = PaddingValues(8.dp),
         shape = RoundedCornerShape(24.dp),
         elevation = 8.dp,
-        border = if (event.isPinned) BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF6366F1), Color(0xFF06B6D4), Color(0xFF10B981))))
+        border = if (event.isPinned) BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF6366F1), Color(0xFF0D9E94), Color(0xFF14A87C))))
         else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(18.dp)).background(surfaceAlt)) {
@@ -373,32 +396,13 @@ fun EventCoverCard(event: AgoraEvent, user: User, modifier: Modifier = Modifier,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
-                val mesh = if (event.isPinned) Modifier.colorMesh(
-                    surfaceAlt,
-                    Triple(0.2f, 0.25f, Color(0xFF6366F1).copy(alpha = 0.42f)),
-                    Triple(0.85f, 0.3f, Color(0xFF06B6D4).copy(alpha = 0.32f)),
-                    Triple(0.5f, 1f, Color(0xFFA855F7).copy(alpha = 0.25f))
-                ) else Modifier.colorMesh(
-                    surfaceAlt,
-                    Triple(0.18f, 0.22f, Color(0xFF06B6D4).copy(alpha = 0.38f)),
-                    Triple(0.82f, 0.28f, Color(0xFF6366F1).copy(alpha = 0.32f)),
-                    Triple(0.55f, 1f, Color(0xFF10B981).copy(alpha = 0.28f))
-                )
-                Box(Modifier.fillMaxSize().then(mesh), contentAlignment = Alignment.Center) {
-                    val tile = RoundedCornerShape(18.dp)
-                    Box(
-                        Modifier.size(56.dp)
-                            .softShadow(Color(0xFF0F172A).copy(alpha = 0.22f), blur = 14.dp, shape = tile, offsetY = 6.dp)
-                            .clip(tile)
-                            .background(if (dark) Color(0x730F172A) else Color.White.copy(alpha = 0.55f))
-                            .border(1.dp, Color.White.copy(alpha = if (dark) 0.18f else 0.7f), tile),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(24.dp), tint = accent) }
+                GlassSpheres(Modifier.fillMaxSize(), wash = if (event.isPinned) highlightIndigo() else Agora.colors.brand) {
+                    Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(26.dp), tint = accent)
                 }
             }
             // Darker top and bottom edge so the labels stay readable on bright pictures
             Box(Modifier.matchParentSize().background(Brush.verticalGradient(
-                0f to Color(0x470F172A), 0.34f to Color.Transparent, 0.7f to Color.Transparent, 1f to Color(0x2E0F172A)
+                0f to Color(0x471A1917), 0.34f to Color.Transparent, 0.7f to Color.Transparent, 1f to Color(0x2E1A1917)
             )))
             DateBox(event, Modifier.padding(10.dp).align(Alignment.TopStart), floating = true)
             Row(Modifier.align(Alignment.TopEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -418,7 +422,7 @@ fun EventCoverCard(event: AgoraEvent, user: User, modifier: Modifier = Modifier,
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     event.title, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.2).sp),
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
                     modifier = Modifier.weight(1f)
                 )
                 // Own registration next to the title, independent of the status on the picture

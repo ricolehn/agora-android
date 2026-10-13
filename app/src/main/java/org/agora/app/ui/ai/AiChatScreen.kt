@@ -1,5 +1,21 @@
 package org.agora.app.ui.ai
 
+import androidx.compose.ui.layout.onSizeChanged
+import org.agora.app.ui.components.frostSurface
+import org.agora.app.ui.components.frostSource
+import dev.chrisbanes.haze.rememberHazeState
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.IconButton
+import org.agora.app.ui.components.frosted
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.ime
@@ -72,6 +88,7 @@ import org.agora.app.data.model.User
 import org.agora.app.data.remote.AiChunk
 import org.agora.app.ui.components.EmptyState
 import org.agora.app.ui.components.containerViewModel
+import org.agora.app.ui.theme.Agora
 
 data class AiEntry(val role: String, val content: String, val reasoning: String = "", val streaming: Boolean = false, val error: Boolean = false)
 
@@ -128,7 +145,7 @@ class AiChatViewModel(private val c: AppContainer) : ViewModel() {
 }
 
 @Composable
-fun AiChatScreen(user: User, contentPadding: PaddingValues) {
+fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)? = null) {
     val vm = containerViewModel { AiChatViewModel(it) }
     val entries by vm.entries.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -153,26 +170,36 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues) {
             .fillMaxSize()
             .padding(top = contentPadding.calculateTopPadding(), bottom = maxOf(contentPadding.calculateBottomPadding(), keyboard))
     ) {
-        // `.ai-chat-header`: icon + heavy title, "Verlauf löschen" as secondary button
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(24.dp), tint = org.agora.app.ui.theme.Agora.colors.heading)
-            Text(stringResource(R.string.nav_ai), style = MaterialTheme.typography.titleLarge, color = org.agora.app.ui.theme.Agora.colors.heading,
-                modifier = Modifier.weight(1f).padding(start = 12.dp))
-            SecondaryButton(onClick = vm::clear, enabled = entries.isNotEmpty(), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-                Text(stringResource(R.string.btn_clear_chat))
+        // Title and "New chat" as a quiet M3 button (web: .ai-chat-header-styled, .ai-new-chat-btn)
+        Row(Modifier.fillMaxWidth().padding(start = if (onBack != null) 8.dp else 20.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Back to Extras (the chat is one of its apps)
+            if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), tint = Agora.colors.heading) }
+            Text(stringResource(R.string.nav_ai), style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, modifier = Modifier.weight(1f))
+            OutlinedButton(
+                onClick = vm::clear, enabled = entries.isNotEmpty(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                border = BorderStroke(1.dp, Agora.colors.hairline)
+            ) {
+                Icon(Icons.Outlined.Edit, null, Modifier.size(16.dp))
+                Text(stringResource(R.string.ai_new_chat), modifier = Modifier.padding(start = 6.dp))
             }
         }
+        // The messages run on under the input bar, which blurs them (web: frosted .ai-chat-input-styled)
+        val frost = rememberHazeState()
+        var inputHeight by remember { mutableStateOf(0.dp) }
         Box(Modifier.weight(1f)) {
-            if (entries.isEmpty()) EmptyState(
-                Icons.Outlined.ChatBubbleOutline,
-                stringResource(R.string.ai_chat_ready),
-                stringResource(if (user.canViewFinances) R.string.ai_chat_hint_finance else R.string.ai_chat_hint_member),
-                modifier = Modifier.align(Alignment.Center)
-            )
+          Box(Modifier.fillMaxSize().frostSource(frost).background(MaterialTheme.colorScheme.background)) {
+            if (entries.isEmpty()) AiWelcome(
+                hint = stringResource(if (user.canViewFinances) R.string.ai_chat_hint_finance_v2 else R.string.ai_chat_hint_member_v2),
+                ideas = if (user.canViewFinances) listOf(R.string.ai_suggest_admin_1, R.string.ai_suggest_admin_2, R.string.ai_suggest_admin_3)
+                else listOf(R.string.ai_suggest_member_1, R.string.ai_suggest_member_2, R.string.ai_suggest_member_3),
+                enabled = !busy,
+                modifier = Modifier.align(Alignment.Center).padding(bottom = inputHeight)
+            ) { idea -> vm.send(idea) { failed -> input = failed } }
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp + inputHeight),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(entries) { index, entry ->
@@ -180,8 +207,14 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues) {
                     AiBubble(entry, onReport = if (reportable) ({ reporting = index }) else null)
                 }
             }
-        }
-        Surface(color = MaterialTheme.colorScheme.background) {
+          }
+        Surface(
+            color = Color.Transparent,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { inputHeight = with(density) { it.height.toDp() } }
+                .frosted(frost, tint = frostSurface())
+        ) {
           Column {
             // Transparency for AI-generated content (Google Play AI policy)
             Text(
@@ -202,6 +235,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues) {
                 }
             }
           }
+        }
         }
     }
 
@@ -225,47 +259,78 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues) {
     }
 }
 
+/** A new chat: a friendly start with three questions the assistant can answer (web: .ai-chat-welcome). */
+@Composable
+private fun AiWelcome(hint: String, ideas: List<Int>, enabled: Boolean, modifier: Modifier = Modifier, onAsk: (String) -> Unit) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        val tile = RoundedCornerShape(22.dp)
+        Box(
+            Modifier.size(64.dp)
+                .softShadow(Agora.colors.shadow.copy(alpha = 0.08f), blur = 6.dp, shape = tile, offsetY = 2.dp)
+                .clip(tile)
+                .background(MaterialTheme.colorScheme.surface)
+                .background(Brush.linearGradient(listOf(Color(0xFFA78BFA).copy(alpha = 0.20f), Color.Transparent, Agora.colors.brand.copy(alpha = 0.22f))))
+                .border(1.dp, Agora.colors.hairline, tile),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary) }
+        Text(stringResource(R.string.ai_chat_hello), style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp))
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp).widthIn(max = 340.dp))
+        Column(Modifier.padding(top = 18.dp).widthIn(max = 400.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ideas.forEach { id ->
+                val idea = stringResource(id)
+                OutlinedCard(
+                    onClick = { onAsk(idea) }, enabled = enabled, shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, Agora.colors.hairline), modifier = Modifier.fillMaxWidth()
+                ) { Text(idea, style = MaterialTheme.typography.bodyMedium, color = Agora.colors.heading, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
     val mine = entry.role == "user"
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
-        val shape = RoundedCornerShape(18.dp, 18.dp, if (mine) 4.dp else 18.dp, if (mine) 18.dp else 4.dp)
-        Surface(
-            color = when {
-                entry.error -> MaterialTheme.colorScheme.errorContainer
-                mine -> androidx.compose.ui.graphics.Color.Transparent
-                else -> MaterialTheme.colorScheme.surface
-            },
-            contentColor = when {
-                entry.error -> MaterialTheme.colorScheme.onErrorContainer
-                mine -> androidx.compose.ui.graphics.Color.White
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-            shape = shape,
-            modifier = Modifier.widthIn(max = if (mine) 320.dp else 640.dp)
-                .softShadow(Color(0xFF0F172A).copy(alpha = 0.10f), blur = 4.dp, shape = shape, offsetY = 1.dp)
-                .then(if (mine && !entry.error) Modifier.background(org.agora.app.ui.theme.Agora.colors.brandGradient, shape) else Modifier)
-        ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp).animateContentSize()) {
-                when {
-                    entry.error -> Text(stringResource(R.string.ai_error, entry.content))
-                    mine -> Text(entry.content, style = MaterialTheme.typography.bodyLarge)
-                    else -> {
-                        val (visible, inlineThinking) = splitThinking(entry.content)
-                        val thinking = listOf(entry.reasoning.trim(), inlineThinking).filter { it.isNotBlank() }.joinToString("\n\n")
-                        if (thinking.isNotBlank()) ThinkingSection(thinking)
-                        if (visible.isBlank() && entry.streaming) LinearProgressIndicator(Modifier.widthIn(min = 60.dp, max = 120.dp).padding(vertical = 8.dp))
-                        else SelectionContainer { org.agora.app.ui.components.AgoraMarkdown(visible) }
-                        if (onReport != null) Row(
-                            Modifier.padding(top = 6.dp).clip(RoundedCornerShape(50)).clickable(onClick = onReport).padding(horizontal = 6.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Outlined.Flag, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(stringResource(R.string.ai_report), style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
-                        }
-                    }
-                }
+    if (mine || entry.error) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+            val shape = RoundedCornerShape(20.dp, 20.dp, if (mine) 6.dp else 20.dp, 20.dp)
+            Surface(
+                color = if (entry.error) MaterialTheme.colorScheme.errorContainer else Agora.colors.brand.copy(alpha = 0.13f).compositeOver(MaterialTheme.colorScheme.surface),
+                contentColor = if (entry.error) MaterialTheme.colorScheme.onErrorContainer else Agora.colors.heading,
+                shape = shape,
+                border = if (entry.error) null else BorderStroke(1.dp, Agora.colors.brand.copy(alpha = 0.16f)),
+                modifier = Modifier.widthIn(max = 320.dp)
+            ) {
+                Text(
+                    if (entry.error) stringResource(R.string.ai_error, entry.content) else entry.content,
+                    style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp)
+                )
+            }
+        }
+        return
+    }
+    // The reply: plain text beside a small sparkle, like modern assistants
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Box(
+            Modifier.padding(top = 1.dp).size(28.dp).clip(CircleShape).background(Agora.colors.brand.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary) }
+        Column(Modifier.weight(1f).widthIn(max = 640.dp).padding(start = 10.dp, top = 3.dp).animateContentSize()) {
+            val (visible, inlineThinking) = splitThinking(entry.content)
+            val thinking = listOf(entry.reasoning.trim(), inlineThinking).filter { it.isNotBlank() }.joinToString("\n\n")
+            if (thinking.isNotBlank()) ThinkingSection(thinking)
+            if (visible.isBlank() && entry.streaming) LinearProgressIndicator(Modifier.widthIn(min = 60.dp, max = 120.dp).padding(vertical = 8.dp))
+            else SelectionContainer { org.agora.app.ui.components.AgoraMarkdown(visible) }
+            if (onReport != null) Row(
+                Modifier.padding(top = 8.dp).clip(RoundedCornerShape(50)).border(1.dp, Agora.colors.hairline, RoundedCornerShape(50))
+                    .clickable(onClick = onReport).padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Outlined.Flag, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ai_report), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
             }
         }
     }

@@ -1,5 +1,8 @@
 package org.agora.app.ui.mentoring
 
+import org.agora.app.ui.components.frostSurface
+import org.agora.app.ui.components.frosted
+import org.agora.app.ui.components.FrostScaffold
 import androidx.compose.ui.graphics.RectangleShape
 import org.agora.app.ui.components.softShadow
 import androidx.compose.material.icons.outlined.Block
@@ -116,7 +119,7 @@ fun ChatScreen(threadId: String, onBack: () -> Unit) {
         if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
-    Scaffold(
+    FrostScaffold(
         topBar = {
             SubPageHeader(
                 title = thread?.partnerName ?: "",
@@ -151,9 +154,8 @@ fun ChatScreen(threadId: String, onBack: () -> Unit) {
             }
         },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
-        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.softShadow(Color.Black.copy(alpha = 0.07f), blur = 16.dp, shape = RectangleShape, offsetY = (-4).dp)) {
+            Surface(color = Color.Transparent, modifier = Modifier.frosted(tint = frostSurface())) {
                 if (thread?.isClosed == true) Row(
                     Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -215,7 +217,7 @@ fun ChatScreen(threadId: String, onBack: () -> Unit) {
                     Column(
                         Modifier
                             .widthIn(max = 300.dp)
-                            .softShadow(Color(0xFF0F172A).copy(alpha = 0.10f), blur = 4.dp, shape = shape, offsetY = 1.dp)
+                            .softShadow(Agora.colors.shadow.copy(alpha = 0.10f), blur = 4.dp, shape = shape, offsetY = 1.dp)
                             .clip(shape)
                             .then(if (message.isMine) Modifier.background(Agora.colors.brandGradient) else Modifier.background(MaterialTheme.colorScheme.surface))
                             .padding(horizontal = 14.dp, vertical = 9.dp)

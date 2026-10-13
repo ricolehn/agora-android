@@ -1,5 +1,11 @@
 package org.agora.app.ui.events
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -212,9 +218,7 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
                     item(key = "termine-anchor") { Spacer(Modifier.fillMaxWidth()) }
                     if (termine.isEmpty()) item { EmptyState(Icons.Outlined.CalendarMonth, stringResource(R.string.events_empty_termine)) }
                     termineByMonth.forEach { (month, days) ->
-                        if (month != null) item(key = "m-$month") {
-                            SectionTitle(Dates.monthYear(month, locale), Modifier.padding(start = listStart), count = days.size)
-                        }
+                        if (month != null) item(key = "m-$month") { MonthHeader(Dates.monthYear(month, locale), days.size, listStart) }
                         items(days, key = { (event, day) -> "t-${event.id}-$day" }) { (event, day) ->
                             // The cards of the day chosen in the calendar light up briefly
                             val glow = remember { Animatable(0f) }
@@ -294,3 +298,18 @@ fun EventsScreen(user: User, contentPadding: PaddingValues, onOpenEvent: (String
         }
     }
 }
+
+/** Month label of the Termine list (web: .events-month-header): caps label, count and a hairline. */
+@Composable
+private fun MonthHeader(label: String, count: Int, start: Dp, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().padding(start = start + 2.dp, top = 10.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+            color = Agora.colors.heading, maxLines = 1)
+        Text("($count)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+        Box(Modifier.weight(1f).padding(start = 10.dp).height(1.dp).background(Agora.colors.hairline))
+    }
+}
+

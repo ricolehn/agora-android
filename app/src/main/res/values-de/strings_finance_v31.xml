@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beitragsliste und aufgeklappte Mitgliedskarte wie Web v3.1 -->
+<resources>
+    <string name="so_state_active">Aktiv</string>
+    <string name="so_state_ended">Beendet</string>
+    <string name="so_start_date">Start: %1$s</string>
+    <string name="so_end_date">Ende: %1$s</string>
+</resources>

@@ -1,5 +1,19 @@
 package org.agora.app.ui.finance
 
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Description
 import org.agora.app.ui.components.pagePadding
@@ -320,7 +334,7 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
 @Composable
 private fun TransactionRow(tx: Transaction, avatarUid: String?, onClick: () -> Unit) {
     val (icon, tint) = txTypeStyle(tx)
-    AgoraCard(onClick = onClick, contentPadding = PaddingValues(12.dp)) {
+    AgoraCard(onClick = onClick, contentPadding = PaddingValues(12.dp), shape = RoundedCornerShape(18.dp), elevation = 3.dp, border = BorderStroke(1.dp, Agora.colors.hairline)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (tx.type != "don" && tx.who.isNotBlank()) Box(Modifier.size(40.dp)) {
                 UserAvatar(avatarUid, tx.who, 40.dp)
@@ -391,113 +405,77 @@ private fun txTypeStyle(tx: Transaction): Pair<androidx.compose.ui.graphics.vect
 }
 
 /**
- * Member card of the Beitragsliste like the PWA's `.person-item`: name, status and paid-until pill; tap expands
- * the summary (status, paid until, open amount), standing orders, actions and the combined history in place.
+ * Member card of the Beitragsliste like web v3.1 (.person-item): picture or initials, name up to two lines, status,
+ * a quiet tinted "paid until" pill and the chevron on the far right. Tapping opens the card in place: the fee state
+ * (round symbol, state, paid until, open amount, fee and status), compact actions, standing orders as calm rows and
+ * the combined history.
  */
 @Composable
 private fun ExpandablePersonCard(person: Person, canManage: Boolean, onChanged: () -> Unit) {
     val container = LocalContainer.current
     val locale = Dates.locale(LocalContext.current)
+    val appData by container.store.data.collectAsStateWithLifecycle()
     var expanded by rememberSaveable(person.id) { mutableStateOf(false) }
     var booking by rememberSaveable { mutableStateOf(false) }
     var changingStatus by rememberSaveable { mutableStateOf(false) }
     var managingOrder by remember { mutableStateOf<StandingOrder?>(null) }
     var detail by remember { mutableStateOf<Person?>(null) }
     var reload by remember { mutableStateOf(0) }
-    // Load the full record (payments, history) when opened, like the PWA's lazy "Lade Verlauf…"
+    // Load the full record (payments, history) when opened, like the web's lazy "Lade Verlauf…"
     LaunchedEffect(expanded, reload, person) {
         if (expanded) detail = runCatching { container.repo.person(person.id) }.getOrNull() ?: person
     }
     val meta = person.statusMeta
     val color = personStatusColor(person)
+    val surface = MaterialTheme.colorScheme.surface
     val standingOrderCovers = meta.isActiveStandingOrder && !meta.isOverdue
+    val chevronTurn by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
 
-    AgoraCard(contentPadding = PaddingValues(0.dp)) {
+    AgoraCard(contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(18.dp), elevation = 3.dp, border = BorderStroke(1.dp, Agora.colors.hairline)) {
         Row(
-            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(person.name, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
-                    Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 4.dp).size(20.dp),
-                        tint = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                CapsLabel(statusName(person.effectiveStatus), Modifier.padding(top = 2.dp))
+            UserAvatar(person.uid.ifBlank { null }, person.name, 42.dp)
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                Text(person.name, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.5.sp, lineHeight = 19.sp), fontWeight = FontWeight.SemiBold,
+                    color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(statusName(person.effectiveStatus), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 1.dp))
             }
-            Column(horizontalAlignment = Alignment.End) {
+            // The tinted month already tells the state; without it (standing order) the state in words
+            Column(Modifier.widthIn(max = 150.dp), horizontalAlignment = Alignment.End) {
                 if (!standingOrderCovers) Text(
-                    paidUntilText(person), color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clip(CircleShape).background(color).padding(horizontal = 10.dp, vertical = 3.dp)
+                    paidUntilText(person), color = color, maxLines = 1,
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.5.sp),
+                    modifier = Modifier.clip(CircleShape).background(color.copy(alpha = 0.14f).compositeOver(surface)).padding(horizontal = 10.dp, vertical = 3.dp)
                 )
-                Text(statusMetaText(meta.text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 3.dp))
+                else Text(statusMetaText(meta.text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End, maxLines = 2)
             }
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(start = 4.dp).size(20.dp).rotate(chevronTurn),
+                tint = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f))
         }
         AnimatedVisibility(expanded) {
             val p = detail ?: person
             Column {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Summary: status, paid until, open amount
-                    val summaryShape = RoundedCornerShape(16.dp)
-                    Column(
-                        Modifier.fillMaxWidth().clip(summaryShape).background(color.copy(alpha = 0.06f))
-                            .border(1.dp, color.copy(alpha = 0.25f), summaryShape).padding(14.dp)
-                    ) {
-                        Row {
-                            Column(Modifier.weight(1f)) {
-                                CapsLabel(stringResource(R.string.status_label))
-                                Text(statusName(p.effectiveStatus), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading,
-                                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
-                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp))
-                            }
-                            Column(Modifier.weight(1f)) {
-                                CapsLabel(stringResource(R.string.paid_until_label))
-                                if (standingOrderCovers) Pill(stringResource(R.string.status_standing_order_active), MaterialTheme.colorScheme.primary,
-                                    Modifier.padding(top = 6.dp), icon = Icons.Outlined.Autorenew)
-                                else Text(paidUntilText(p), color = Color.White, style = MaterialTheme.typography.titleSmall,
-                                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).background(color).padding(horizontal = 10.dp, vertical = 4.dp))
-                            }
-                        }
-                        if (meta.isOverdue) Row(
-                            Modifier.padding(top = 12.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Agora.colors.danger.copy(alpha = 0.08f))
-                                .border(1.dp, Agora.colors.danger.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Outlined.ErrorOutline, null, Modifier.size(16.dp), tint = Agora.colors.danger)
-                            Text(stringResource(R.string.overdue_amount_label), style = MaterialTheme.typography.labelLarge, color = Agora.colors.danger,
-                                modifier = Modifier.weight(1f).padding(start = 8.dp))
-                            Text(Money.format(p.overdueAmount), style = MaterialTheme.typography.titleMedium, color = Agora.colors.danger)
-                        }
+                HorizontalDivider(color = Agora.colors.hairline)
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PersonStatusHero(p, appData.fees, showDetails = true, compact = true)
+                    if (canManage) Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MemberAction(stringResource(R.string.record_payment_btn), Icons.Outlined.Payments, Agora.colors.success, Modifier.weight(1f)) { booking = true }
+                        MemberAction(stringResource(R.string.status_btn), Icons.Outlined.SwapHoriz, Color(0xFF6366F1), Modifier.weight(1f)) { changingStatus = true }
                     }
-                    // Standing orders
-                    p.standingOrders.forEach { so ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Agora.colors.surfaceAlt)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp)).padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    if (p.standingOrders.isNotEmpty()) {
+                        SectionTitle(stringResource(if (p.standingOrders.size == 1) R.string.standing_order else R.string.standing_orders), Modifier.padding(top = 2.dp))
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(surface).border(1.dp, Agora.colors.hairline, RoundedCornerShape(16.dp))
                         ) {
-                            Icon(Icons.Outlined.Autorenew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                                Text("${Money.format(so.amount)} ${stringResource(R.string.per_month)}", style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
-                                Text(
-                                    stringResource(R.string.since_date, Dates.short(so.startDate, locale)) + (so.endDate?.let { " – " + Dates.short(it, locale) } ?: "") +
-                                        (so.note.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            // End (also retroactively) or remove the order, like the PWA's "Verwalten"
-                            if (canManage) SecondaryButton(onClick = { managingOrder = so }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                                ButtonLabel(stringResource(R.string.so_manage), Icons.Outlined.Edit)
+                            p.standingOrders.forEachIndexed { index, so ->
+                                if (index > 0) HorizontalDivider(color = Agora.colors.hairline)
+                                StandingOrderRow(so, canManage, locale) { managingOrder = so }
                             }
                         }
-                    }
-                    if (canManage) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PrimaryButton(onClick = { booking = true }, modifier = Modifier.fillMaxWidth()) { ButtonLabel(stringResource(R.string.record_payment_btn), Icons.Outlined.Payments) }
-                        SecondaryButton(onClick = { changingStatus = true }, modifier = Modifier.fillMaxWidth()) { ButtonLabel(stringResource(R.string.status_btn), Icons.Outlined.SwapHoriz) }
                     }
                     SectionTitle(stringResource(R.string.history_label))
                     if (detail == null) LoadingBox() else FinanceTimeline(p, plainStatus = true)
@@ -510,5 +488,72 @@ private fun ExpandablePersonCard(person: Person, canManage: Boolean, onChanged: 
     if (changingStatus) ChangeStatusSheet(p, onDismiss = { changingStatus = false }, onSaved = { reload++; onChanged() })
     managingOrder?.let { order ->
         ManageStandingOrderSheet(p, order, onDismiss = { managingOrder = null }, onSaved = { reload++; onChanged() })
+    }
+}
+
+/** Compact action of an opened member card: a small round tinted icon beside the label (web: .member-action). */
+@Composable
+private fun MemberAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val surface = MaterialTheme.colorScheme.surface
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.05f).compositeOver(surface)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.16f)),
+        modifier = modifier.fillMaxHeight()
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 9.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(color.copy(alpha = 0.14f).compositeOver(surface)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(15.dp), tint = color)
+            }
+            Text(label, style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, lineHeight = 15.sp), color = Agora.colors.heading,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 7.dp))
+        }
+    }
+}
+
+/** A standing order as a calm row (web: .so-row): round icon, "50,00 € im Monat", start · end · note, state, edit. */
+@Composable
+private fun StandingOrderRow(so: StandingOrder, canManage: Boolean, locale: java.util.Locale, onManage: () -> Unit) {
+    val surface = MaterialTheme.colorScheme.surface
+    val ended = so.endDate?.let { it.take(10) < Dates.todayIso() } == true
+    Row(
+        Modifier.fillMaxWidth().alpha(if (ended) 0.6f else 1f).padding(start = 12.dp, end = 10.dp, top = 11.dp, bottom = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(34.dp).clip(CircleShape).background(Agora.colors.brand.copy(alpha = 0.12f).compositeOver(surface)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.Autorenew, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            val amount = Money.format(so.amount)
+            val text = stringResource(R.string.fee_per_month, amount)
+            Text(
+                buildAnnotatedString {
+                    append(text)
+                    val at = text.indexOf(amount)
+                    if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading), at, at + amount.length)
+                },
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val facts = listOfNotNull(
+                stringResource(R.string.so_start_date, Dates.short(so.startDate, locale)),
+                so.endDate?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.so_end_date, Dates.short(it, locale)) },
+                so.note.takeIf { it.isNotBlank() && it != "Ohne Notiz" && it != "No note" }
+            ).joinToString(" · ")
+            Text(facts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        val stateColor = if (ended) MaterialTheme.colorScheme.onSurfaceVariant else Agora.colors.success
+        Text(
+            stringResource(if (ended) R.string.so_state_ended else R.string.so_state_active), color = stateColor,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.clip(CircleShape).background(if (ended) Agora.colors.surfaceAlt else stateColor.copy(alpha = 0.13f).compositeOver(surface))
+                .padding(horizontal = 9.dp, vertical = 3.dp)
+        )
+        // End (also retroactively) or remove the order, like the web's edit button
+        if (canManage) IconButton(onClick = onManage, modifier = Modifier.padding(start = 4.dp).size(36.dp)) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(Agora.colors.surfaceAlt).border(1.dp, Agora.colors.hairline, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Edit, stringResource(R.string.so_manage), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }

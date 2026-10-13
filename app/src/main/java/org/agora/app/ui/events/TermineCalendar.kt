@@ -86,7 +86,7 @@ fun TermineCalendar(
             NavButton(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, stringResource(R.string.calendar_prev_month), enabled = month > currentMonth) { onMonth(month.minusMonths(1)) }
             Text(
                 Dates.monthYear(month, locale).replaceFirstChar { it.titlecase(locale) },
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Agora.colors.heading,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f)
             )
             NavButton(Icons.AutoMirrored.Outlined.KeyboardArrowRight, stringResource(R.string.calendar_next_month), enabled = true) { onMonth(month.plusMonths(1)) }
@@ -96,7 +96,7 @@ fun TermineCalendar(
             DayOfWeek.entries.forEach { day ->
                 Text(
                     day.getDisplayName(TextStyle.SHORT, locale).removeSuffix(".").uppercase(locale),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f)
                 )
@@ -162,7 +162,7 @@ private fun DayCell(day: String, number: Int, categories: Set<TerminCategory>?, 
     ) {
         Text(
             "$number",
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (categories != null || isToday) FontWeight.ExtraBold else FontWeight.SemiBold),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (categories != null || isToday) FontWeight.Bold else FontWeight.SemiBold),
             color = when {
                 isSelected -> Color.White
                 isToday -> primary

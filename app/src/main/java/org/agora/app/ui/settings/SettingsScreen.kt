@@ -1,5 +1,6 @@
 package org.agora.app.ui.settings
 
+import org.agora.app.ui.components.FrostScaffold
 import org.agora.app.ui.components.AvatarRings
 import androidx.compose.foundation.lazy.items
 import org.agora.app.ui.components.isWide
@@ -262,12 +263,11 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
     BackHandler(page != null) { page = null }
     val pages = SettingsPage.entries.filter { it != SettingsPage.Fees || user.isAdmin }
 
-    Scaffold(
+    FrostScaffold(
         topBar = {
             SubPageHeader(stringResource(page?.title ?: R.string.nav_settings), onBack = { if (page != null) page = null else onBack() })
         },
-        snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
-        containerColor = MaterialTheme.colorScheme.background
+        snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } }
     ) { padding ->
         val listPadding = readingPadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 32.dp, maxWidth = 720.dp)
         AnimatedContent(
@@ -554,7 +554,7 @@ private fun InviteCard() {
         ) {
             CapsLabel(stringResource(R.string.invite_current))
             Text(inviteCode ?: "…", style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 6.sp), fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Black, color = Agora.colors.heading, modifier = Modifier.padding(top = 4.dp))
+                fontWeight = FontWeight.Bold, color = Agora.colors.heading, modifier = Modifier.padding(top = 4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
                 SecondaryButton(onClick = { inviteCode?.let { copyToClipboard(context, it); scope.launch { snackbar.showSnackbar(copied) } } },
                     enabled = inviteCode != null) {

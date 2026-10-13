@@ -68,6 +68,7 @@ import kotlinx.coroutines.launch
 import org.agora.app.AppContainer
 import org.agora.app.R
 import org.agora.app.data.remote.ApiException
+import org.agora.app.ui.theme.Agora
 
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer not provided") }
 val LocalSnackbar = staticCompositionLocalOf { SnackbarHostState() }
@@ -124,7 +125,7 @@ fun AgoraCard(
     val colors = CardDefaults.cardColors(containerColor = containerColor)
     // Wide, faint shadow like the PWA's `box-shadow: 0 4px 12px rgba(15,23,42,.06)`; its size is fixed, so it stays
     // within the 12dp gap to the next card ([elevation] scales it, 0 = flat)
-    val shadow = Modifier.softShadow(Color(0xFF0F172A).copy(alpha = 0.10f), blur = elevation * 2, shape = shape, offsetY = elevation / 2)
+    val shadow = Modifier.softShadow(Agora.colors.shadow.copy(alpha = 0.10f), blur = elevation * 2, shape = shape, offsetY = elevation / 2)
     val inner: @Composable ColumnScope.() -> Unit = { Column(Modifier.padding(contentPadding), content = content) }
     if (onClick != null) Card(onClick = onClick, modifier = modifier.fillMaxWidth().then(shadow), colors = colors, border = border, shape = shape, content = inner)
     else Card(modifier = modifier.fillMaxWidth().then(shadow), colors = colors, border = border, shape = shape, content = inner)
@@ -152,7 +153,7 @@ fun GradientCard(brush: Brush, modifier: Modifier = Modifier, content: @Composab
     Box(
         modifier
             .fillMaxWidth()
-            .softShadow(Color(0xFF06B6D4).copy(alpha = 0.28f), blur = 14.dp, shape = MaterialTheme.shapes.large, offsetY = 4.dp)
+            .softShadow(Agora.colors.shadow.copy(alpha = 0.14f), blur = 14.dp, shape = MaterialTheme.shapes.large, offsetY = 4.dp)
             .clip(MaterialTheme.shapes.large)
             .background(brush)
             .drawBehind {
@@ -175,7 +176,7 @@ fun SectionTitle(
     Row(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 2.dp, start = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text.uppercase(),
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp),
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
             color = color,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -207,7 +208,7 @@ fun Pill(text: String, color: Color, modifier: Modifier = Modifier, icon: ImageV
             Text(
                 if (caps) text.uppercase() else text,
                 style = MaterialTheme.typography.labelMedium.copy(letterSpacing = if (caps) 0.8.sp else 0.sp),
-                fontWeight = if (caps) FontWeight.ExtraBold else FontWeight.Bold,
+                fontWeight = if (caps) FontWeight.Bold else FontWeight.Bold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
@@ -254,7 +255,7 @@ fun UserAvatar(uid: String?, name: String, size: Dp = 40.dp, ring: AvatarRing? =
         .size(size)
         .then(
             if (ring != null) Modifier
-                .softShadow(ring.glow.copy(alpha = 0.38f), blur = 10.dp, shape = CircleShape, offsetY = 2.dp)
+                .softShadow(Agora.colors.shadow.copy(alpha = 0.16f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp)
                 .clip(CircleShape)
                 .background(ring.brush)
                 .padding(3.dp)
@@ -265,10 +266,13 @@ fun UserAvatar(uid: String?, name: String, size: Dp = 40.dp, ring: AvatarRing? =
         )
         .clip(CircleShape)
     val fallback: @Composable () -> Unit = {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+        // One look for every picture without a photo (web: .avatar): initials on a soft violet-to-teal tint
+        val surface = MaterialTheme.colorScheme.surface
+        val tint = Brush.linearGradient(listOf(Color(0xFF7C3AED).copy(alpha = 0.16f).compositeOver(surface), Agora.colors.brand.copy(alpha = 0.16f).compositeOver(surface)))
+        Box(Modifier.fillMaxSize().background(tint), contentAlignment = Alignment.Center) {
             Text(
                 initials(name),
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = Agora.colors.heading,
                 fontWeight = FontWeight.Bold,
                 fontSize = (size.value * 0.38f).sp
             )

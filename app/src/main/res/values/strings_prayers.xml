@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Prayer requests (Extras), like the web app v3.1 -->
+<resources>
+    <string name="prayers_title">Prayer requests</string>
+    <string name="prayers_note">Share what is on your heart, with your name or anonymously. When it is done, simply remove it.</string>
+    <string name="prayers_filter_all">All</string>
+    <string name="prayers_filter_mine">Mine</string>
+    <string name="prayers_load_failed">Prayer requests could not be loaded</string>
+    <string name="prayers_retry">Try again</string>
+    <string name="prayers_anonymous_name">Anonymous</string>
+    <string name="prayers_member_fallback">Member</string>
+    <string name="prayers_expired">Expired</string>
+    <string name="prayers_remove">Remove</string>
+    <string name="prayers_expired_hint">No longer shown - extend it to show it again</string>
+    <string name="prayers_until">Shown until %1$s</string>
+    <string name="prayers_until_short">until %1$s</string>
+    <string name="prayers_empty_open">No prayer requests right now</string>
+    <string name="prayers_empty_mine">You have not shared a request yet</string>
+    <string name="prayers_empty_hint">Share a request with the plus at the bottom right.</string>
+    <string name="prayers_shared">Your prayer request has been shared</string>
+    <string name="prayers_extended">Shown for another month</string>
+    <string name="prayers_remove_confirm">Remove this prayer request for everyone?</string>
+    <string name="prayers_deleted">Prayer request deleted</string>
+    <string name="prayers_read_more">Read more</string>
+    <string name="prayers_read_less">Show less</string>
+    <string name="prayers_new">Share a prayer request</string>
+    <string name="prayers_your_request">Your request</string>
+    <string name="prayers_text_ph">What can we pray for?</string>
+    <string name="prayers_how_long_short">Shown for</string>
+    <string name="prayers_week">1 week</string>
+    <string name="prayers_month">1 month</string>
+    <string name="prayers_quarter">3 months</string>
+    <string name="prayers_anonymous">Share anonymously</string>
+    <string name="prayers_anonymous_desc">Nobody sees who it is from, not even the leaders.</string>
+    <string name="prayers_share">Share</string>
+    <string name="prayers_yours">Your prayer request</string>
+    <string name="prayers_extend_month">One more month</string>
+    <string name="prayers_done">Done - remove</string>
+    <string name="prayers_done_toast">Removed - thank you for sharing</string>
+    <string name="prayers_options">Options</string>
+</resources>

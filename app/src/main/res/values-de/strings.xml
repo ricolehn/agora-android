@@ -466,7 +466,7 @@
     <string name="req_actions_title">Was möchtest du einreichen?</string>
     <string name="req_action_payment_title">Zahlung melden</string>
     <string name="req_action_payment_desc">Beitrag überwiesen oder Dauerauftrag eingerichtet</string>
-    <string name="req_action_expense_title">Auslage erstatten lassen</string>
+    <string name="req_action_expense_title">Ausgabe erstatten</string>
     <string name="req_action_expense_desc">Etwas für die Gemeinde bezahlt? Mit Beleg einreichen</string>
     <string name="req_action_status_title">Status ändern</string>
     <string name="req_action_status_desc">Z. B. Geringverdiener oder eine Pause beantragen</string>
@@ -573,4 +573,16 @@
     <string name="notif_summary_email">Nur E-Mail</string>
     <string name="notif_summary_off">Aus</string>
     <string name="notif_device_title">Dieses Gerät</string>
+    <!-- Redesign (web app parity, 2026-10) -->
+    <string name="ai_chat_hello">Wie kann ich helfen?</string>
+    <string name="ai_new_chat">Neuer Chat</string>
+    <string name="ai_chat_hint_finance_v2">Frag nach Mitgliedern, Finanzen, Terminen oder Diensten.</string>
+    <string name="ai_chat_hint_member_v2">Frag nach Terminen, Diensten, deinem Beitrag oder wie die App funktioniert.</string>
+    <string name="ai_suggest_admin_1">Wer ist mit dem Beitrag im Rückstand?</string>
+    <string name="ai_suggest_admin_2">Was steht diese Woche an?</string>
+    <string name="ai_suggest_admin_3">Welche Anfragen sind noch offen?</string>
+    <string name="ai_suggest_member_1">Bis wann ist mein Beitrag bezahlt?</string>
+    <string name="ai_suggest_member_2">Was steht diese Woche an?</string>
+    <string name="ai_suggest_member_3">Wo bin ich als Nächstes eingeteilt?</string>
+    <string name="fee_per_month">%1$s im Monat</string>
 </resources>

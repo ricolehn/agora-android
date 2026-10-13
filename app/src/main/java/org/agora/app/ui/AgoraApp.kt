@@ -1,11 +1,24 @@
 package org.agora.app.ui
 
+import android.annotation.SuppressLint
+import org.agora.app.ui.components.FrostStatusBar
+import org.agora.app.ui.components.ClearStatusBar
+import org.agora.app.ui.components.SoftIcons
+import org.agora.app.ui.songbook.SongbookScreen
+import org.agora.app.ui.prayers.PrayersScreen
+import androidx.compose.material.icons.outlined.GridView
+import org.agora.app.ui.hub.hubApps
+import org.agora.app.ui.hub.HubScreen
 import org.agora.app.ui.components.ContainerOrigin
 import org.agora.app.ui.components.LocalContainerOrigin
 import org.agora.app.ui.components.LocalNavAnimation
 import org.agora.app.ui.components.LocalSharedTransition
 import org.agora.app.ui.components.containerTransform
 import org.agora.app.ui.components.sharedChrome
+import org.agora.app.ui.components.LocalFrost
+import org.agora.app.ui.components.frosted
+import org.agora.app.ui.components.frostSource
+import dev.chrisbanes.haze.rememberHazeState
 import org.agora.app.ui.components.StatusBarScrim
 import org.agora.app.ui.components.SystemBarAppearance
 import org.agora.app.ui.components.rememberCollapsingHeader
@@ -137,12 +150,16 @@ data class DeepLink(val route: String, val eventId: String? = null, val nonce: L
 
 // The PWA uses line icons for both states and only recolours the active tab
 private enum class Tab(val route: String, val label: Int, val icon: ImageVector, val selectedIcon: ImageVector) {
-    HOME("home", R.string.nav_start, Icons.Outlined.Home, Icons.Outlined.Home),
-    FINANCES("finances", R.string.nav_finances, Icons.Outlined.Euro, Icons.Outlined.Euro),
-    EVENTS("events", R.string.nav_events, Icons.Outlined.CalendarMonth, Icons.Outlined.CalendarMonth),
-    MENTORING("mentoring", R.string.nav_mentoring, Icons.Outlined.People, Icons.Outlined.People),
-    AI("ai", R.string.nav_ai, Icons.Outlined.ChatBubbleOutline, Icons.Outlined.ChatBubbleOutline)
+    HOME("home", R.string.nav_start, SoftIcons.Home, SoftIcons.Home),
+    FINANCES("finances", R.string.nav_finances, SoftIcons.Finances, SoftIcons.Finances),
+    EVENTS("events", R.string.nav_events, SoftIcons.Events, SoftIcons.Events),
+    MENTORING("mentoring", R.string.nav_mentoring, SoftIcons.Mentoring, SoftIcons.Mentoring),
+    EXTRAS("extras", R.string.nav_hub, SoftIcons.Extras, SoftIcons.Extras)
 }
+
+/** Apps inside "Extras": they keep its nav entry highlighted (web: HUB_TABS). */
+private val HUB_ROUTES = setOf("ai", "songbook", "prayers")
+private fun tabOf(route: String?): String? = if (route in HUB_ROUTES) "extras" else route
 
 @Composable
 fun AgoraApp(container: AppContainer, deepLink: DeepLink?) {
@@ -179,6 +196,8 @@ fun AgoraApp(container: AppContainer, deepLink: DeepLink?) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+// The shell's Scaffold only hosts the snackbar: each destination handles the insets itself (TabChrome, pages)
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar: SnackbarHostState) {
     val container = LocalContainer.current
@@ -192,8 +211,8 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
     var menuOpen by remember { mutableStateOf(false) }
     var askedPermission by rememberSaveable { mutableStateOf(false) }
 
-    val tabs = Tab.entries.filter { it != Tab.AI || (user.accessesAi && data.aiEnabled) }
-    val isTopLevel = tabs.any { it.route == route }
+    val tabs = Tab.entries.toList()
+    val isTopLevel = tabs.any { it.route == tabOf(route) }
 
     // Live updates only while the app is visible; refresh when coming back
     LifecycleStartEffect(user.userId) {
@@ -215,6 +234,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
         nav.currentBackStackEntryFlow.first()
         // Intent extras come from outside (MainActivity is exported): only visible tabs and plain event ids
         if (tabs.any { it.route == link.route }) nav.navigateTab(link.route)
+        else if (link.route in HUB_ROUTES) { nav.navigateTab("extras"); nav.navigate(link.route) }
         else if (link.route == "settings") nav.navigate("settings")
         link.eventId?.takeIf { EVENT_ID.matches(it) }?.let { nav.navigate("event/$it") }
     }
@@ -268,7 +288,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
                     }
                 )
             },
-            selected = tabs.indexOfFirst { it.route == current },
+            selected = tabs.indexOfFirst { it.route == tabOf(current) },
             onSelect = { nav.navigateTab(tabs[it].route) }
         )
     }
@@ -277,7 +297,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
     CompositionLocalProvider(LocalSharedTransition provides this) {
     Scaffold(
         // Above the bottom bar on tabs, like before
-        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (isTopLevel) 60.dp else 0.dp)) { AgoraSnackbar(it) } },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (isTopLevel) 80.dp else 0.dp)) { AgoraSnackbar(it) } },
         containerColor = MaterialTheme.colorScheme.background
     ) { _ ->
         AgoraNavHost(nav, user) { current, content -> TabChrome(header, { bottomBar(current) }, content) }
@@ -295,20 +315,32 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
 @Composable
 private fun TabChrome(header: @Composable () -> Unit, bottomBar: @Composable () -> Unit, content: @Composable (PaddingValues) -> Unit) {
     val headerScroll = rememberCollapsingHeader()
-    Scaffold(
-        modifier = Modifier.nestedScroll(headerScroll.connection),
-        topBar = {
-            Box(
-                Modifier
-                    .sharedChrome("header")
-                    .onSizeChanged { headerScroll.limit = -it.height.toFloat() }
-                    .graphicsLayer { translationY = headerScroll.offset }
-            ) { header() }
-        },
-        bottomBar = { Box(Modifier.sharedChrome("bottom-bar")) { bottomBar() } },
-        containerColor = Color.Transparent,
-        content = content
-    )
+    // Frosted glass: the page is the source, header and bottom bar blur what runs on under them (Frost.kt)
+    val frost = rememberHazeState()
+    ClearStatusBar(true)
+    CompositionLocalProvider(LocalFrost provides frost) {
+        Scaffold(
+            modifier = Modifier.nestedScroll(headerScroll.connection),
+            topBar = {
+                Box(
+                    Modifier
+                        .sharedChrome("header")
+                        .onSizeChanged { headerScroll.limit = -it.height.toFloat() }
+                        .graphicsLayer { translationY = headerScroll.offset }
+                        .frosted(frost)
+                ) { header() }
+            },
+            bottomBar = { Box(Modifier.sharedChrome("bottom-bar")) { bottomBar() } },
+            containerColor = Color.Transparent
+        ) { padding ->
+            Box(Modifier.fillMaxSize()) {
+                // Page colour inside the source, so the glass hides the sharp original (Frost.kt)
+                Box(Modifier.fillMaxSize().frostSource(frost).background(MaterialTheme.colorScheme.background)) { content(padding) }
+                // Under the header while it is shown; once it slid away the content blurs under the clock
+                FrostStatusBar(state = frost)
+            }
+        }
+    }
 }
 
 private fun NavHostController.navigateTab(route: String) = navigate(route) {
@@ -321,7 +353,7 @@ private fun NavHostController.navigateTab(route: String) = navigate(route) {
 private val NavBackStackEntry.fromCard: Boolean get() = arguments?.getString("ct") != null
 
 private val EVENT_ID = Regex("[A-Za-z0-9_-]{1,64}")
-private val TAB_ROUTES = setOf("home", "finances", "events", "mentoring", "ai")
+private val TAB_ROUTES = setOf("home", "finances", "events", "mentoring", "extras")
 
 /** Switching between the bottom bar tabs (also "back" to the start tab) only fades. */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.betweenTabs(): Boolean =
@@ -415,7 +447,14 @@ private fun AgoraNavHost(
             EventsScreen(user, padding, onOpenEvent = openEvent, onCreate = { type -> nav.navigate("event-edit?type=$type") })
         } } }
         composable("mentoring") { Shared { chrome("mentoring") { padding -> MentoringScreen(user, padding, onOpenThread = openThread) } } }
-        composable("ai") { Shared { chrome("ai") { padding -> AiChatScreen(user, padding) } } }
+        composable("extras") { Shared { chrome("extras") { padding ->
+            val data by LocalContainer.current.store.data.collectAsStateWithLifecycle()
+            HubScreen(hubApps(user.accessesAi && data.aiEnabled), padding, onOpen = { nav.navigate(it) })
+        } } }
+        // A page of its own like the songbook and the prayers: it slides in and out like every other page
+        composable("ai") { Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding -> AiChatScreen(user, padding, onBack = { nav.popBackStack() }) } }
+        composable("songbook") { SongbookScreen(onBack = { nav.popBackStack() }) }
+        composable("prayers") { PrayersScreen(user, onBack = { nav.popBackStack() }) }
         composable("settings") { SettingsScreen(user, onBack = { nav.popBackStack() }) }
         composable("event/{id}?ct={ct}", arguments = listOf(navArgument("id") { type = NavType.StringType }, ctArg)) { entry -> Shared {
             Box(Modifier.fillMaxSize().containerTransform(entry.arguments?.getString("ct"), page = true).background(MaterialTheme.colorScheme.background)) {
