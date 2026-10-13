@@ -44,12 +44,17 @@ jobs:
       - name: Build signed release
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: Name the APK after the version
+      # Agora-<release tag>.apk (e.g. Agora-v1.1.0-beta1.apk); manual runs use v<versionName> from the build file
+      - name: Name the APK after the release tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          version="$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)"
-          test -n "$version"
-          cp app/build/outputs/apk/release/app-release.apk "agora-${version}.apk"
-          echo "APK=agora-${version}.apk" >> "$GITHUB_ENV"
+          if [ -z "$TAG" ]; then
+            TAG="v$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)"
+          fi
+          test "$TAG" != "v"
+          cp app/build/outputs/apk/release/app-release.apk "Agora-${TAG}.apk"
+          echo "APK=Agora-${TAG}.apk" >> "$GITHUB_ENV"
 
       - name: Attach to the release
         if: github.event_name == 'release'
