@@ -36,7 +36,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
@@ -55,8 +58,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
-import coil3.request.ImageRequest
 import org.agora.app.R
 import org.agora.app.data.remote.ApiException
 import androidx.compose.foundation.background
@@ -101,25 +102,24 @@ private fun AuthScaffold(content: @Composable () -> Unit) {
     }
 }
 
-/** Church logo from the server (SVG), falling back to the bundled Agora logo. */
+/**
+ * Church logo of the server: the last known one at once (kept on the device, LogoStore), then checked against the
+ * server and swapped when it changed; the bundled Agora knot while there is none (or the server shows its default).
+ */
 @Composable
 fun ChurchLogo(size: androidx.compose.ui.unit.Dp) {
     val container = LocalContainer.current
-    val fallback = @Composable {
+    val context = LocalContext.current
+    val base = container.api.baseUrl
+    // Read the kept logo before collecting, so the first frame already has it
+    val logo by remember(base) { container.logos.prime(base); container.logos.logo }.collectAsState()
+    LaunchedEffect(base) { container.logos.refresh(context.applicationContext) }
+    val current = logo
+    if (current == null) {
         Image(painterResource(R.drawable.agora_logo), null, Modifier.size(size).clip(MaterialTheme.shapes.medium))
+    } else {
+        Image(current, null, Modifier.size(size), contentScale = ContentScale.Fit)
     }
-    if (container.api.baseUrl.isBlank()) fallback()
-    else SubcomposeAsyncImage(
-        // Never read from the disk cache: Coil keeps files there regardless of the server's no-store, so a new or
-        // changed logo would never show (offline the bundled knot stands in)
-        model = ImageRequest.Builder(LocalContext.current).data(container.api.absolute("/assets/church-logo.svg"))
-            .diskCachePolicy(coil3.request.CachePolicy.WRITE_ONLY).build(),
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
-        modifier = Modifier.size(size),
-        error = { fallback() },
-        loading = { fallback() }
-    )
 }
 
 @Composable

@@ -17,6 +17,7 @@ import org.agora.app.data.AgoraRepository
 import org.agora.app.data.AppStore
 import org.agora.app.data.local.SessionStore
 import org.agora.app.data.local.DataCache
+import org.agora.app.data.local.LogoStore
 import org.agora.app.data.remote.AgoraApi
 import org.agora.app.push.Notifier
 import org.agora.app.push.PollWorker
@@ -36,6 +37,8 @@ class AppContainer(context: Context) {
     val sessionStore = SessionStore(context, json)
     val repo = AgoraRepository(api)
     val store = AppStore(repo, sessionStore, appScope, DataCache(context, json))
+    /** The church logo kept per server (no flash of the bundled knot when the app opens). */
+    val logos = LogoStore(context, api)
     val push = PushManager(context, repo, sessionStore)
 }
 
