@@ -1,9 +1,18 @@
 name: Release APK
 
+# Create the release in the GitHub UI as usual: choose the branch, a new tag (v1.2.0 or v1.2.0-beta1) and
+# whether it is a pre-release. When it is published, this workflow:
+# - commits "chore: version <tag without v> (code <n>)" on top of the tagged commit, to that branch only;
+#   versionCode = the one in the build file + 1 (or higher, if an earlier release tag already has a higher one)
+# - moves the tag onto that commit, builds the signed APK from it and attaches Agora-<tag>.apk to the release
 on:
   release:
     types: [published]
-  workflow_dispatch: # Allows you to manually trigger a build from the GitHub Actions tab
+  workflow_dispatch: # Test build of the selected branch as it is (no commit), kept as a workflow artifact
+
+# One release at a time, so each one sees the versionCode of the one before
+concurrency:
+  group: release-apk
 
 jobs:
   build-and-attach:
@@ -11,9 +20,14 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      BRANCH: ${{ github.event.release.target_commitish }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # all branches and tags: the release branch and the highest released versionCode
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -23,6 +37,48 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      # Commits versionName (the tag without v) and versionCode (+1) locally; pushed only after the build
+      - name: Set version
+        if: github.event_name == 'release'
+        run: |
+          VERSION="${TAG#v}"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
+            || { echo "::error::The tag must look like v1.2.0 or v1.2.0-beta1, not '$TAG'"; exit 1; }
+
+          # Continue from where the tag is on GitHub now: the published commit, or its version commit on a re-run
+          # (the checkout above always takes the commit the release was published with)
+          git fetch -q origin "+refs/tags/$TAG:refs/tags/$TAG"
+          git checkout -q --detach "refs/tags/$TAG"
+
+          code_of() { sed -n 's/^ *versionCode = \([0-9][0-9]*\)$/\1/p'; }
+          name_of() { sed -n 's/^ *versionName = "\(.*\)"$/\1/p'; }
+          CODE=$(code_of < app/build.gradle.kts)
+          test -n "$CODE" || { echo "::error::No 'versionCode = <number>' line in app/build.gradle.kts"; exit 1; }
+
+          # Re-run after the version commit was pushed: the tag is already on it, so build it as it is
+          if [ "$(git log -1 --format=%s)" = "chore: version $VERSION (code $CODE)" ]; then
+            echo "::notice::$TAG already has its version commit, building it as it is"; exit 0
+          fi
+          test "$(git rev-parse -q --verify "origin/$BRANCH")" = "$(git rev-parse HEAD)" \
+            || { echo "::error::$TAG is not on the newest commit of '$BRANCH': delete the release and the tag, then create it again"; exit 1; }
+
+          for t in $(git tag -l 'v*'); do
+            c=$(git show "$t:app/build.gradle.kts" 2>/dev/null | code_of || true)
+            if [ -n "$c" ] && [ "$c" -gt "$CODE" ]; then CODE=$c; fi
+          done
+          CODE=$((CODE + 1))
+
+          sed -i -e "s/^\( *versionCode = \)[0-9][0-9]*$/\1$CODE/" \
+                 -e "s/^\( *versionName = \)\".*\"$/\1\"$VERSION\"/" app/build.gradle.kts
+          test "$(code_of < app/build.gradle.kts)" = "$CODE" && test "$(name_of < app/build.gradle.kts)" = "$VERSION" \
+            || { echo "::error::Could not set the version in app/build.gradle.kts"; exit 1; }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qam "chore: version $VERSION (code $CODE)"
+          echo "PUSH=true" >> "$GITHUB_ENV"
+          echo "::notice::$TAG gets versionCode $CODE on $BRANCH"
 
       # Signing key from repository secrets (base64 of the .jks); keystore.properties is git-ignored
       - name: Prepare signing
@@ -46,8 +102,6 @@ jobs:
 
       # Agora-<release tag>.apk (e.g. Agora-v1.1.0-beta1.apk); manual runs use v<versionName> from the build file
       - name: Name the APK after the release tag
-        env:
-          TAG: ${{ github.event.release.tag_name }}
         run: |
           if [ -z "$TAG" ]; then
             TAG="v$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)"
@@ -56,11 +110,16 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "Agora-${TAG}.apk"
           echo "APK=Agora-${TAG}.apk" >> "$GITHUB_ENV"
 
+      # The version commit goes on the release branch and the tag moves onto it: both or neither
+      - name: Push version commit and move the tag
+        if: env.PUSH == 'true'
+        run: git push --atomic origin "HEAD:refs/heads/$BRANCH" "+HEAD:refs/tags/$TAG"
+
       - name: Attach to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "$APK" --clobber
+        run: gh release upload "$TAG" "$APK" --clobber
 
       - name: Upload artifact (manual runs)
         if: github.event_name != 'release'
