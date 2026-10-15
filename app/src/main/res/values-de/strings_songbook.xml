@@ -32,7 +32,7 @@
     <string name="songbook_song">Lied</string>
     <string name="songbook_title_ph">Titel</string>
     <string name="songbook_artist_ph">Autor(en)</string>
-    <string name="songbook_key_ph">Tonart, z. B. G</string>
+    <string name="songbook_key_ph">Tonart</string>
     <string name="songbook_text">Text &amp; Akkorde</string>
     <string name="songbook_help">Akkorde in eckigen Klammern direkt vor die Silbe: [G]Großer [D]Gott. Abschnitte mit # am Zeilenanfang, z. B. # Refrain. Leere Zeile = neuer Absatz.</string>
     <string name="songbook_preview">Vorschau</string>
