@@ -310,7 +310,7 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         InfoTile(Icons.Outlined.Place, Agora.colors.success, stringResource(R.string.location_label), event.location,
-                            onClick = if (openMap) mapAction else null, grouped = true) {
+                            onClick = if (openMap) mapAction else null, grouped = true, oneLine = true) {
                             if (openMap) IconTile(Icons.AutoMirrored.Outlined.OpenInNew, Agora.colors.success, size = 36.dp)
                         }
                     }

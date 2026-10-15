@@ -460,8 +460,9 @@ fun InfoTile(
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             if (grouped) Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium), color = MaterialTheme.colorScheme.onSurfaceVariant)
             else CapsLabel(label)
-            // One line that shrinks to fit on narrow phones (date and time of an event)
+            // One line that shrinks to fit on narrow phones (date and place of an event), ellipsis once even the smallest size is too wide
             if (oneLine) Text(value, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, softWrap = false,
+                overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MaterialTheme.typography.titleSmall.fontSize, stepSize = 0.5.sp))
             else Text(value, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
         }
