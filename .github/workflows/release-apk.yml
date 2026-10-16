@@ -2,8 +2,10 @@ name: Release APK
 
 # Create the release in the GitHub UI as usual: choose the branch, a new tag (v1.2.0 or v1.2.0-beta1) and
 # whether it is a pre-release. When it is published, this workflow:
-# - commits "chore: version <tag without v> (code <n>)" on top of the tagged commit, to that branch only;
+# - commits "chore: version <tag without v> (code <n>)" on top of the tagged commit, to that branch;
 #   versionCode = the one in the build file + 1 (or higher, if an earlier release tag already has a higher one)
+# - moves the other branches of develop, beta and latest onto that commit as well, each one that has no commits
+#   the release does not have (one with commits of its own stays as it is, with a warning: nothing is force-pushed)
 # - moves the tag onto that commit, builds the signed APK from it and attaches Agora-<tag>.apk to the release
 on:
   release:
@@ -114,6 +116,24 @@ jobs:
       - name: Push version commit and move the tag
         if: env.PUSH == 'true'
         run: git push --atomic origin "HEAD:refs/heads/$BRANCH" "+HEAD:refs/tags/$TAG"
+
+      # develop, beta and latest stay on one line: the others follow when that is a fast-forward. Only warnings
+      # here, the release goes on either way
+      - name: Version commit on the other branches
+        if: env.PUSH == 'true'
+        run: |
+          for other in develop beta latest; do
+            [ "$other" = "$BRANCH" ] && continue
+            if ! git fetch -q origin "refs/heads/$other"; then
+              echo "::notice::There is no branch '$other'"
+            elif ! git merge-base --is-ancestor FETCH_HEAD HEAD; then
+              echo "::warning::'$other' has commits that are not in $TAG: it stays as it is"
+            elif git push -q origin "HEAD:refs/heads/$other"; then
+              echo "::notice::'$other' is on the version commit of $TAG too"
+            else
+              echo "::warning::Could not move '$other' onto the version commit of $TAG"
+            fi
+          done
 
       - name: Attach to the release
         if: github.event_name == 'release'
