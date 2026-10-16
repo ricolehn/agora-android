@@ -29,6 +29,7 @@
     <string name="error_generic">Something went wrong. Please try again.</string>
     <string name="error_fill_all">Please fill in all fields.</string>
     <string name="error_invalid_amount">Invalid amount.</string>
+    <string name="amount_format_hint">Please enter it like 1500 or 1,500.00.</string>
     <string name="error_upload">Upload failed.</string>
     <string name="error_title_required">Title is required</string>
     <string name="error_password_short">The password must be at least 6 characters long.</string>
@@ -129,6 +130,8 @@
     <string name="rejection_reason_label">Reason for rejection</string>
     <string name="toast_request_approved">Request approved</string>
     <string name="toast_request_rejected">Request rejected</string>
+    <string name="toast_request_already_decided">This request was already decided.</string>
+    <string name="request_amount_unreadable">The amount of this request cannot be read, so nothing was booked. Please reject it.</string>
     <string name="action_capture_donation">Record donation</string>
     <string name="action_book_expense">Book expense</string>
     <string name="donor_name">Donor</string>

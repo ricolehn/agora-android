@@ -43,6 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.agora.app.AppContainer
 import org.agora.app.R
+import org.agora.app.data.model.parseTypedAmount
 import org.agora.app.util.Dates
 import java.time.Instant
 import java.time.LocalDate
@@ -128,13 +129,17 @@ fun TimeField(label: String, value: String, onValueChange: (String) -> Unit, mod
     }
 }
 
+/** Amount input; one that cannot be read unambiguously ("1.500": 1500 or 1.5?) is marked with how to write it. */
 @Composable
 fun AmountField(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val unclear = value.isNotBlank() && parseTypedAmount(value) == null
     AgoraTextField(
         value = value,
         onValueChange = { input -> onValueChange(input.filter { it.isDigit() || it == ',' || it == '.' }) },
         label = { Text(label) },
         suffix = { Text("€") },
+        supportingText = if (unclear) ({ Text(stringResource(R.string.amount_format_hint)) }) else null,
+        isError = unclear,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = modifier.fillMaxWidth()

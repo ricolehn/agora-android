@@ -71,6 +71,15 @@ data class EventInput(
     val duties: List<String> = emptyList()
 )
 
+/** How approving or rejecting a request ended. */
+enum class RequestDecision {
+    DONE,
+    /** Approved or rejected meanwhile (another treasurer, a second device): nothing was booked. */
+    ALREADY_DECIDED,
+    /** The amount of the request cannot be read: it is not booked as 0 €, the request stays open. */
+    UNREADABLE_AMOUNT
+}
+
 class AgoraRepository(val api: AgoraApi) {
     private val json get() = api.json
 
@@ -294,17 +303,18 @@ class AgoraRepository(val api: AgoraApi) {
         }
     }
 
-    /** Donations/expenses are stored as whole lists: read, change, write back. */
-    private suspend fun mutateCollection(name: String, change: (List<JsonElement>) -> List<JsonElement>) {
+    /** Donations/expenses are stored as whole lists: read, change, write back ([change] null: nothing to write). */
+    private suspend fun mutateCollection(name: String, change: (List<JsonElement>) -> List<JsonElement>?) {
         val current = api.get<JsonElement>("/api/db", mapOf("path" to name))
         val list = when (current) {
             is JsonArray -> current.toList()
             is JsonObject -> current.values.toList()
             else -> emptyList()
         }.filterNot { it is JsonNull }
+        val next = change(list) ?: return
         api.put<JsonObject>("/api/db", buildJsonObject {
             put("path", name)
-            put("value", JsonArray(change(list)))
+            put("value", JsonArray(next))
         })
     }
 
@@ -356,47 +366,51 @@ class AgoraRepository(val api: AgoraApi) {
             else put("receipt", json.encodeToString(ListSerializer(String.serializer()), receipts))
         } }
 
-    suspend fun approveRequest(request: FinanceRequest) {
-        val amount = request.field("amount")?.let(::parseAmount) ?: 0.0
-        val date = request.field("date").orEmpty()
-        when (request.type) {
-            "expense" -> mutateCollection("expenses") { it + buildJsonObject {
-                put("id", System.currentTimeMillis().toString())
-                put("amount", amount)
-                // The requester is the issuer of the expense, like for expenses booked by hand (web beta18)
-                put("description", request.field("description").orEmpty())
-                put("issuer", request.personName)
-                put("date", date)
-                put("receipt", request.data["receipt"] ?: JsonNull)
-            } }
-            "payment" -> mutatePerson(request.personId) { person ->
-                person.appendTo("payments", buildJsonObject {
-                    put("id", System.currentTimeMillis().toString())
-                    put("amount", amount)
-                    put("date", date)
-                    put("description", request.field("note")?.takeIf { it.isNotBlank() } ?: "Zahlung (Genehmigt)")
-                }).withTotal(amount)
-            }
-            "standing_order" -> mutatePerson(request.personId) { person ->
-                person.appendTo("standingOrders", buildJsonObject {
-                    put("id", System.currentTimeMillis().toString())
-                    put("amount", amount)
-                    put("startDate", date)
-                    put("note", request.field("note")?.takeIf { it.isNotBlank() } ?: "Dauerauftrag (Genehmigt)")
-                    put("lastAutoPayment", JsonNull)
-                })
-            }
-            // Same history rewrite as a treasurer status change (the PWA request applier drops the new entry)
-            "status" -> mutatePerson(request.personId) { StatusHistory.apply(it, request.field("newStatus").orEmpty(), date) }
+    /** Whether the request is still open on the server: the list on screen can be older than a decision made elsewhere. */
+    private suspend fun isPending(requestId: String): Boolean = requestId.isNotBlank() &&
+        api.call("GET", "/api/db", FinanceRequest.serializer().nullable, query = mapOf("path" to "requests/$requestId"))?.status == "pending"
+
+    /**
+     * Books an approved request and marks it approved, like the PWA. Approving a request twice (two treasurers, a
+     * second device, a retry) used to book the money twice: only a pending request is booked, and the booking
+     * carries the request's id, so a request that is booked already changes nothing ([RequestBookings]).
+     */
+    suspend fun approveRequest(request: FinanceRequest): RequestDecision {
+        if (!isPending(request.id)) return RequestDecision.ALREADY_DECIDED
+        val amount = request.field("amount")?.let(::parseAmount)
+        if (amount == null && request.type != "status") return RequestDecision.UNREADABLE_AMOUNT
+        var before: JsonObject? = null
+        if (request.type == "expense") mutateCollection("expenses") { RequestBookings.addExpense(it, request, amount ?: 0.0) }
+        else mutatePerson(request.personId) { person ->
+            before = person
+            RequestBookings.apply(person, request, amount ?: 0.0)
         }
-        patchRequest(request.id, buildJsonObject { put("status", "approved") })
+        try {
+            patchRequest(request.id, buildJsonObject { put("status", "approved") })
+        } catch (e: ApiException) {
+            if (e.status != 409) throw e
+            // Rejected by someone else between the check and now (the server keeps the first decision): the booking
+            // is taken back
+            if (request.type == "expense") mutateCollection("expenses") { RequestBookings.withoutExpense(it, request) }
+            else mutatePerson(request.personId) { RequestBookings.withoutBooking(it, request, before) }
+            return RequestDecision.ALREADY_DECIDED
+        }
+        return RequestDecision.DONE
     }
 
-    suspend fun rejectRequest(requestId: String, reason: String) =
-        patchRequest(requestId, buildJsonObject {
-            put("status", "rejected")
-            put("rejectionReason", reason.ifBlank { "Kein Grund angegeben" })
-        })
+    suspend fun rejectRequest(requestId: String, reason: String): RequestDecision {
+        if (!isPending(requestId)) return RequestDecision.ALREADY_DECIDED
+        try {
+            patchRequest(requestId, buildJsonObject {
+                put("status", "rejected")
+                put("rejectionReason", reason.ifBlank { "Kein Grund angegeben" })
+            })
+        } catch (e: ApiException) {
+            if (e.status != 409) throw e
+            return RequestDecision.ALREADY_DECIDED
+        }
+        return RequestDecision.DONE
+    }
 
     private suspend fun patchRequest(id: String, value: JsonObject) {
         api.patch<JsonObject>("/api/db", buildJsonObject {
@@ -650,4 +664,79 @@ object StatusHistory {
         return JsonObject(person + mapOf("status" to JsonPrimitive(newStatus), "statusHistory" to JsonArray(history)))
     }
 
+}
+
+/**
+ * What an approved request books, ported from the PWA (assets/finance.js) so both clients write identical records.
+ * Every booking carries the id "req_<request id>": approving the request again finds it and adds nothing, also when
+ * the other app approved it first.
+ */
+object RequestBookings {
+    fun id(request: FinanceRequest) = "req_${request.id}"
+
+    private fun JsonObject.list(key: String): List<JsonElement> = (this[key] as? JsonArray)?.toList().orEmpty()
+    private fun JsonElement.idText(): String? = ((this as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull
+    private fun List<JsonElement>.hasId(id: String) = any { it.idText() == id }
+    private fun List<JsonElement>.withoutId(id: String) = filterNot { it.idText() == id }
+
+    /** The member's record with the approved [request] booked ([amount]: its amount, unused for a status change). */
+    fun apply(person: JsonObject, request: FinanceRequest, amount: Double): JsonObject {
+        val id = id(request)
+        val date = request.field("date").orEmpty()
+        val note = request.field("note")?.takeIf { it.isNotBlank() }
+        return when (request.type) {
+            "payment" -> if (person.list("payments").hasId(id)) person else person.appendTo("payments", buildJsonObject {
+                put("id", id)
+                put("amount", amount)
+                put("date", date)
+                put("description", note ?: "Zahlung (Genehmigt)")
+            }).withTotal(amount)
+            "standing_order" -> if (person.list("standingOrders").hasId(id)) person else person.appendTo("standingOrders", buildJsonObject {
+                put("id", id)
+                put("amount", amount)
+                put("startDate", date)
+                put("note", note ?: "Dauerauftrag (Genehmigt)")
+                put("lastAutoPayment", JsonNull)
+            })
+            // Same history rewrite as a treasurer status change, like the PWA (applied again, it changes nothing)
+            "status" -> StatusHistory.apply(person, request.field("newStatus").orEmpty(), date)
+            else -> person
+        }
+    }
+
+    /** The expense list with the approved expense [request] (the requester is the issuer), null when it is booked already. */
+    fun addExpense(expenses: List<JsonElement>, request: FinanceRequest, amount: Double): List<JsonElement>? {
+        val id = id(request)
+        if (expenses.hasId(id)) return null
+        return expenses + buildJsonObject {
+            put("id", id)
+            put("amount", amount)
+            put("description", request.field("description").orEmpty())
+            put("issuer", request.personName)
+            put("date", request.field("date").orEmpty())
+            put("receipt", request.data["receipt"] ?: JsonNull)
+        }
+    }
+
+    /**
+     * The record without what approving [request] booked, for an approval that lost against a rejection made at the
+     * same moment: its payment or standing order goes, a status change goes back to the record [before] it.
+     */
+    fun withoutBooking(person: JsonObject, request: FinanceRequest, before: JsonObject?): JsonObject {
+        if (request.type == "status") {
+            val old = before ?: return person
+            return JsonObject(person - "status" - "statusHistory" + old.filterKeys { it == "status" || it == "statusHistory" })
+        }
+        val id = id(request)
+        return JsonObject(person + mapOf(
+            "payments" to JsonArray(person.list("payments").withoutId(id)),
+            "standingOrders" to JsonArray(person.list("standingOrders").withoutId(id))
+        ))
+    }
+
+    /** The expense list without the expense the approved [request] booked, null when it is not there. */
+    fun withoutExpense(expenses: List<JsonElement>, request: FinanceRequest): List<JsonElement>? {
+        val id = id(request)
+        return if (expenses.hasId(id)) expenses.withoutId(id) else null
+    }
 }

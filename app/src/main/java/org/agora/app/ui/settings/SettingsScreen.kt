@@ -117,7 +117,7 @@ import androidx.compose.material.icons.outlined.Payments
 import org.agora.app.ui.components.IconTile
 import org.agora.app.ui.components.readingPadding
 import org.agora.app.data.model.User
-import org.agora.app.data.model.parseAmount
+import org.agora.app.data.model.parseTypedAmount
 import org.agora.app.push.Notifier
 import org.agora.app.ui.components.AgoraCard
 import org.agora.app.ui.components.AmountField
@@ -700,8 +700,9 @@ private fun FeeEditor(rates: Map<String, Double>, onSave: (Map<String, Double>) 
         keys.forEachIndexed { i, (_, label) ->
             AmountField(stringResource(label), values[i].value, { values[i].value = it }, Modifier.padding(bottom = 8.dp))
         }
-        PrimaryButton(onClick = {
-            onSave(keys.mapIndexedNotNull { i, (key, _) -> parseAmount(values[i].value)?.let { key to it } }.toMap())
-        }) { Text(stringResource(R.string.save)) }
+        // An empty field keeps its rate; an unclear one ("1.500") is not saved as 1,50 € (its field says how to write it)
+        val typed = keys.indices.filter { values[it].value.isNotBlank() }
+        val newRates = typed.mapNotNull { i -> parseTypedAmount(values[i].value)?.let { keys[i].first to it } }
+        PrimaryButton(onClick = { onSave(newRates.toMap()) }, enabled = newRates.size == typed.size) { Text(stringResource(R.string.save)) }
     }
 }

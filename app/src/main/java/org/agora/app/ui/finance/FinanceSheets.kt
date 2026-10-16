@@ -37,7 +37,7 @@ import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 import org.agora.app.R
 import org.agora.app.data.model.Person
-import org.agora.app.data.model.parseAmount
+import org.agora.app.data.model.parseTypedAmount
 import org.agora.app.ui.components.AgoraSheet
 import org.agora.app.ui.components.AgoraTextField
 import org.agora.app.ui.components.AmountField
@@ -77,7 +77,7 @@ internal fun BookPaymentSheet(person: Person, onDismiss: () -> Unit, onSaved: ()
             SheetActions(
                 confirmLabel = stringResource(R.string.book),
                 onConfirm = {
-                    parseAmount(amount)?.let { value ->
+                    parseTypedAmount(amount)?.let { value ->
                         runner.run(bookedMsg) {
                             container.repo.bookPayment(person.id, value, date, note.trim(), standingOrder)
                             onSaved()
@@ -86,7 +86,7 @@ internal fun BookPaymentSheet(person: Person, onDismiss: () -> Unit, onSaved: ()
                     }
                 },
                 onCancel = { sheet.dismiss() },
-                enabled = (parseAmount(amount) ?: 0.0) > 0 && date.isNotBlank(),
+                enabled = (parseTypedAmount(amount) ?: 0.0) > 0 && date.isNotBlank(),
                 busy = runner.busy
             )
         }
@@ -152,7 +152,7 @@ fun FinanceEntrySheet(kind: String, onDismiss: () -> Unit, onSaved: () -> Unit) 
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris ->
         scope.launch { uris.forEach { uri -> readPickedFile(context, uri)?.let { receipts += it } } }
     }
-    val value = parseAmount(amount)
+    val value = parseTypedAmount(amount)
     val valid = value != null && value > 0 && name.isNotBlank() && date.isNotBlank() && (!isExpense || description.isNotBlank())
     AgoraSheet(
         title = stringResource(if (isExpense) R.string.action_book_expense else R.string.action_capture_donation),

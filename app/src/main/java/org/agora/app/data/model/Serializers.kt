@@ -18,6 +18,25 @@ fun parseAmount(raw: String?): Double? {
     return normalized.toDoubleOrNull()
 }
 
+private val TYPED_AMOUNT = Regex("""([+-]?)(\d+|\d{1,3}([.,])\d{3}(?:\3\d{3})*)?(?:([.,])(\d{1,2}|-{1,2})?)?""")
+private val CURRENCY = Regex("""€|euro?""", RegexOption.IGNORE_CASE)
+
+/**
+ * An amount as people type it, the same rules as the web app (assets/finance.js): "1.234,56", "1,234.56", "1234,56",
+ * "1234.56", "1 234,56", "50 €", "50,-", ",50". One or two digits after the last "." or "," are the cents, groups of
+ * three digits before it thousands. A lone "1.500" or "1,500" is 1500 in one language and 1.5 in the other: null, it
+ * is not guessed ([parseAmount] read it as 1,50 €). Stored amounts are still read with [parseAmount].
+ */
+fun parseTypedAmount(raw: String?): Double? {
+    val match = TYPED_AMOUNT.matchEntire(CURRENCY.replace(raw.orEmpty().filterNot(Char::isWhitespace), "")) ?: return null
+    if (match.value.none(Char::isDigit)) return null
+    val (sign, whole, group, point, cents) = match.destructured
+    // The cents need the other separator ("1.234.56"), and a single group of three could be cents ("1.500")
+    if (group.isNotEmpty() && (point == group || (point.isEmpty() && whole.split(group).size == 2))) return null
+    val fraction = cents.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: "0"
+    return "$sign${whole.filter(Char::isDigit).ifEmpty { "0" }}.$fraction".toDouble()
+}
+
 /** Ids are strings for new records but plain numbers (timestamps) for legacy ones. */
 object FlexStringSerializer : KSerializer<String> {
     override val descriptor = PrimitiveSerialDescriptor("FlexString", PrimitiveKind.STRING)

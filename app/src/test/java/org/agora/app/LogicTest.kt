@@ -1,15 +1,21 @@
 package org.agora.app
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import org.agora.app.data.RequestBookings
 import org.agora.app.data.StatusHistory
 import org.agora.app.data.model.AgoraEvent
 import org.agora.app.data.model.Duty
+import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.Person
 import org.agora.app.data.model.Registration
 import org.agora.app.data.model.User
 import org.agora.app.data.model.parseAmount
+import org.agora.app.data.model.parseTypedAmount
 import org.agora.app.ui.ai.splitThinking
 import org.agora.app.ui.events.terminFilter
 import org.agora.app.ui.finance.receiptFiles
@@ -78,6 +84,63 @@ class LogicTest {
         assertEquals(50.0, parseAmount("50 €")!!, 0.001)
         assertNull(parseAmount(""))
         assertNull(parseAmount("abc"))
+    }
+
+    /** The same cases as the web app's test (tests/finance.test.js in agora). */
+    @Test fun typedAmountsAreReadAsTypedAndAmbiguousOnesRefused() {
+        for ((typed, amount) in listOf("50" to 50.0, "12,5" to 12.5, "1234,56" to 1234.56, "1234.56" to 1234.56, "1.234,56" to 1234.56,
+            "1,234.56" to 1234.56, "1 234,56" to 1234.56, "50 €" to 50.0, "50 EUR" to 50.0, "50,-" to 50.0, "50.-" to 50.0, "50." to 50.0,
+            ",50" to 0.5, "1.500,00" to 1500.0, "1.500,-" to 1500.0, "1.500.000" to 1500000.0, "-20" to -20.0)) {
+            assertEquals(typed, amount, parseTypedAmount(typed)!!, 0.0001)
+        }
+        // "1.500" means 1500 € in German and 1.5 in English: it used to be booked as 1,50 €
+        for (typed in listOf("1.500", "1,500", "2.000", "1.234.56", "1 234.567", "1e3", "abc", "", ",", "-", null)) {
+            assertNull(typed, parseTypedAmount(typed))
+        }
+    }
+
+    private fun request(type: String, vararg data: Pair<String, String>) = FinanceRequest(
+        id = "1760001", type = type, personName = "Paula", data = JsonObject(data.associate { (key, value) -> key to JsonPrimitive(value) })
+    )
+
+    private fun JsonObject.items(key: String) = (this[key] as JsonArray).map { it.jsonObject }
+    private fun JsonObject.text(key: String) = (this[key] as JsonPrimitive).content
+
+    @Test fun approvingTheSameRequestAgainBooksNothingTwice() {
+        val payment = request("payment", "amount" to "120.00", "date" to "2026-10-01", "note" to "Q4")
+        val once = RequestBookings.apply(base, payment, 120.0)
+        // A second treasurer, a second device or a retry approves it again: the record already holds the booking
+        val twice = RequestBookings.apply(once, payment, 120.0)
+        assertEquals(listOf("req_1760001"), twice.items("payments").map { it.text("id") })
+        assertEquals("120.0", twice.text("totalPaid"))
+
+        val order = request("standing_order", "amount" to "30.00", "date" to "2026-11-01")
+        val orders = RequestBookings.apply(RequestBookings.apply(base, order, 30.0), order, 30.0).items("standingOrders")
+        assertEquals(listOf("req_1760001"), orders.map { it.text("id") })
+
+        val expense = request("expense", "amount" to "45.90", "date" to "2026-10-02", "description" to "Kaffee")
+        val expenses = RequestBookings.addExpense(emptyList(), expense, 45.9)!!
+        assertEquals("Paula", expenses.single().jsonObject.text("issuer"))
+        assertNull(RequestBookings.addExpense(expenses, expense, 45.9))
+
+        // An approved status change is the treasurer's status change, also when it is applied twice
+        val status = request("status", "newStatus" to "pausiert", "date" to "2026-10-01")
+        assertEquals(StatusHistory.apply(base, "pausiert", "2026-10-01"), RequestBookings.apply(RequestBookings.apply(base, status, 0.0), status, 0.0))
+    }
+
+    @Test fun anApprovalThatLostAgainstARejectionIsTakenBack() {
+        val payment = request("payment", "amount" to "120.00", "date" to "2026-10-01")
+        assertEquals(emptyList<JsonObject>(), RequestBookings.withoutBooking(RequestBookings.apply(base, payment, 120.0), payment, base).items("payments"))
+
+        val status = request("status", "newStatus" to "pausiert", "date" to "2026-10-01")
+        val restored = RequestBookings.withoutBooking(RequestBookings.apply(base, status, 0.0), status, base)
+        assertEquals(base["status"], restored["status"])
+        assertEquals(base["statusHistory"], restored["statusHistory"])
+
+        val expense = request("expense", "amount" to "45.90", "date" to "2026-10-02", "description" to "Kaffee")
+        val other = buildJsonObject { put("id", JsonPrimitive(1717)) }
+        assertEquals(listOf(other), RequestBookings.withoutExpense(RequestBookings.addExpense(listOf(other), expense, 45.9)!!, expense))
+        assertNull(RequestBookings.withoutExpense(listOf(other), expense))
     }
 
     @Test fun personWithLegacyValues() {

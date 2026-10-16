@@ -65,6 +65,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import org.agora.app.R
+import org.agora.app.data.RequestDecision
 import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.parseAmount
 import org.agora.app.ui.components.AgoraCard
@@ -75,6 +76,7 @@ import org.agora.app.ui.components.ButtonProgress
 import org.agora.app.ui.components.CapsLabel
 import org.agora.app.ui.components.IconTile
 import org.agora.app.ui.components.LocalContainer
+import org.agora.app.ui.components.LocalSnackbar
 import org.agora.app.ui.components.PrimaryButton
 import org.agora.app.ui.components.SecondaryButton
 import org.agora.app.ui.components.SecondaryStyle
@@ -327,8 +329,22 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
     val (stateText, stateColor) = requestState(request.status)
     val approvedMsg = stringResource(R.string.toast_request_approved)
     val rejectedMsg = stringResource(R.string.toast_request_rejected)
+    val alreadyDecidedMsg = stringResource(R.string.toast_request_already_decided)
+    val unreadableAmountMsg = stringResource(R.string.request_amount_unreadable)
+    val snackbar = LocalSnackbar.current
     val decide = canDecide && request.status == "pending"
     val name = request.personName.ifBlank { "–" }
+    // Also when it was decided meanwhile: the list is reloaded and says so
+    fun submit(doneMsg: String, decision: suspend () -> RequestDecision) = runner.run {
+        val message = when (decision()) {
+            RequestDecision.DONE -> doneMsg
+            RequestDecision.ALREADY_DECIDED -> alreadyDecidedMsg
+            RequestDecision.UNREADABLE_AMOUNT -> unreadableAmountMsg
+        }
+        onDecided()
+        sheet.dismiss()
+        snackbar.showSnackbar(message)
+    }
 
     AgoraSheet(
         title = typeLabel,
@@ -343,7 +359,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
                     ButtonLabel(stringResource(R.string.reject), Icons.Outlined.Close)
                 }
                 PrimaryButton(onClick = {
-                    runner.run(approvedMsg) { container.repo.approveRequest(request); onDecided(); sheet.dismiss() }
+                    submit(approvedMsg) { container.repo.approveRequest(request) }
                 }, enabled = !runner.busy, modifier = Modifier.weight(1.4f).height(46.dp)) {
                     if (runner.busy) ButtonProgress() else ButtonLabel(stringResource(R.string.approve), Icons.Outlined.Check)
                 }
@@ -352,7 +368,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
                     Text(stringResource(R.string.cancel))
                 }
                 PrimaryButton(onClick = {
-                    runner.run(rejectedMsg) { container.repo.rejectRequest(request.id, reason.trim()); onDecided(); sheet.dismiss() }
+                    submit(rejectedMsg) { container.repo.rejectRequest(request.id, reason.trim()) }
                 }, enabled = !runner.busy, danger = true, modifier = Modifier.weight(1.4f).height(46.dp)) {
                     if (runner.busy) ButtonProgress() else ButtonLabel(stringResource(R.string.request_reject_confirm), Icons.Outlined.Close)
                 }

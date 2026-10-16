@@ -78,6 +78,7 @@ import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.Person
 import org.agora.app.data.model.User
 import org.agora.app.data.model.parseAmount
+import org.agora.app.data.model.parseTypedAmount
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.Cancel
@@ -247,7 +248,7 @@ private fun NewRequestSheet(user: User, person: Person?, initialType: String, on
             PrimaryButton(
                 onClick = {
                     error = null
-                    val value = parseAmount(amount)
+                    val value = parseTypedAmount(amount)
                     if ((type != "status" && amount.isBlank()) || date.isBlank() || (type == "expense" && description.isBlank())) {
                         error = fillAll
                         return@PrimaryButton

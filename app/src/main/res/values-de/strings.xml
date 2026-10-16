@@ -27,6 +27,7 @@
     <string name="error_generic">Etwas ist schiefgelaufen. Bitte erneut versuchen.</string>
     <string name="error_fill_all">Bitte alle Felder ausfüllen.</string>
     <string name="error_invalid_amount">Ungültiger Betrag.</string>
+    <string name="amount_format_hint">Bitte z. B. 1500 oder 1.500,00 eingeben.</string>
     <string name="error_upload">Hochladen fehlgeschlagen.</string>
     <string name="error_title_required">Titel ist erforderlich</string>
     <string name="error_password_short">Das Passwort muss mindestens 6 Zeichen lang sein.</string>
@@ -127,6 +128,8 @@
     <string name="rejection_reason_label">Grund für Ablehnung</string>
     <string name="toast_request_approved">Anfrage genehmigt</string>
     <string name="toast_request_rejected">Anfrage abgelehnt</string>
+    <string name="toast_request_already_decided">Diese Anfrage wurde bereits entschieden.</string>
+    <string name="request_amount_unreadable">Der Betrag dieser Anfrage ist nicht lesbar, deshalb wurde nichts gebucht. Bitte lehne sie ab.</string>
     <string name="action_capture_donation">Spende erfassen</string>
     <string name="action_book_expense">Ausgabe buchen</string>
     <string name="donor_name">Spender</string>
