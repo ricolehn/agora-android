@@ -43,8 +43,6 @@ import org.agora.app.ui.components.PillTabs
 import org.agora.app.ui.components.SecondaryStyle
 import org.agora.app.ui.components.SubPageHeader
 import org.agora.app.ui.components.GlassBackButton
-import org.agora.app.ui.components.GlassIconButton
-import org.agora.app.ui.components.RoundIconButton
 import androidx.compose.material.icons.outlined.Share
 import org.agora.app.data.model.Attendee
 import org.agora.app.ui.components.GlassChip
@@ -201,27 +199,14 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     // While the cover is under the status bar: no fade, white icons (the cover is darkened at the top)
     val coverUnderStatusBar by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     ImmersiveStatusBar(hasCover && coverUnderStatusBar)
-    val shareLabel = stringResource(R.string.share_event)
     FrostScaffold(
-        // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header with the
-        // share button among its actions (M3 top app bar)
-        topBar = {
-            if (!hasCover && !hasBand) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) {
-                if (event != null) RoundIconButton(Icons.Outlined.Share, shareLabel, { sharing = true })
-            }
-        },
+        // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header
+        topBar = { if (!hasCover && !hasBand) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
         // Picture or sphere band up under the status bar: no glass there, it runs on like a photo
         statusBarFrost = !((hasCover || hasBand) && coverUnderStatusBar),
-        // Pinned over the list so they stay reachable while scrolling (the tags scroll away with the cover): back on the
-        // left, its twin for sharing on the right (web: .event-detail-share-btn)
-        overlay = {
-            if (hasCover || hasBand) {
-                GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp))
-                if (event != null) GlassIconButton(Icons.Outlined.Share, shareLabel, { sharing = true },
-                    Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 14.dp, top = 10.dp))
-            }
-        }
+        // Pinned over the list so it stays reachable while scrolling (the tags scroll away with the cover)
+        overlay = { if (hasCover || hasBand) GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp)) }
     ) { padding ->
         if (event == null) {
             if (!data.loaded) LoadingBox(Modifier.padding(padding))
@@ -279,17 +264,26 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
                     if (event.isPinned) Pill(typeLabel, Agora.colors.warning, icon = Icons.Outlined.StarOutline, caps = true)
                     if (event.status == "cancelled") Pill(cancelled, Agora.colors.danger, caps = true)
                 }
-                Text(event.title, style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading, modifier = Modifier.padding(top = if (hasCover || hasBand) 4.dp else 10.dp))
-                if (event.createdByName.isNotBlank()) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Person, null, Modifier.size(18.dp), tint = Agora.colors.warning)
-                    Text(
-                        buildAnnotatedString {
-                            append(stringResource(R.string.organizer_label) + " ")
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading)) { append(event.createdByName) }
-                        },
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
+                // Title and organiser; on their right the share icon, no button around it (web: .event-detail-title-row)
+                Row(Modifier.padding(top = if (hasCover || hasBand) 4.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(event.title, style = MaterialTheme.typography.headlineMedium, color = Agora.colors.heading)
+                        if (event.createdByName.isNotBlank()) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Person, null, Modifier.size(18.dp), tint = Agora.colors.warning)
+                            Text(
+                                buildAnnotatedString {
+                                    append(stringResource(R.string.organizer_label) + " ")
+                                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading)) { append(event.createdByName) }
+                                },
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
+                        }
+                    }
+                    // The icon ends where the cards below end; its touch target reaches into the page margin
+                    IconButton(onClick = { sharing = true }, modifier = Modifier.offset(x = 12.dp)) {
+                        Icon(Icons.Outlined.Share, stringResource(R.string.share_event), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 // Target groups as a line under the organiser ("Event für die Gruppe „Technik“") instead of tags on the picture
                 if (groupNames.isNotEmpty()) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -615,8 +609,8 @@ private fun AttendeeRow(event: AgoraEvent, attendee: Attendee, waitlist: Boolean
 private fun BoxScope.HeadBadges(pinned: Boolean, cancelled: Boolean, typeLabel: String, cancelledLabel: String) {
     if (!pinned && !cancelled) return
     Row(
-        // Left of the share button (40dp at 14dp from the edge), centred on the row of the floating buttons
-        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(start = 14.dp, end = 62.dp, top = 10.dp).height(40.dp),
+        // Centred on the row of the floating back button
+        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(start = 14.dp, end = 14.dp, top = 10.dp).height(40.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
     ) {
         if (pinned) GlassChip(typeLabel, icon = Icons.Outlined.StarOutline, highlight = true)

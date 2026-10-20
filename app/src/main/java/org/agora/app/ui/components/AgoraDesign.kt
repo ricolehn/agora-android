@@ -308,7 +308,7 @@ fun Modifier.fullBleed(horizontal: Dp): Modifier = layout { measurable, constrai
 fun GlassBackButton(onBack: () -> Unit, modifier: Modifier = Modifier) =
     GlassIconButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), onBack, modifier)
 
-/** Round frosted button floating over a cover image or the page (back, share). */
+/** Round frosted button floating over a cover image or the page. */
 @Composable
 fun GlassIconButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(

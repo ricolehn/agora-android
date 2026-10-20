@@ -236,7 +236,7 @@ class ScreenshotTest {
     @Test fun ownerEventDescriptionCollapsed() = shoot("owner-event-description", "owner", eventIndex = 1, longDescription = true)
     @Test fun ownerDeleteEventSheet() = shoot("sheet-delete-event", "owner", eventIndex = 1, tap = listOf("Delete"), sheet = true)
     @Test fun ownerNewRequestSheetDark() = shoot("sheet-new-request-dark", "max", "finances", dark = true, tap = listOf("Report a payment"), sheet = true)
-    // Sharing (v3.2): the round button on the right; the switch only for those who may edit the event
+    // Sharing (v3.2): the share icon right of the title; the switch only for those who may edit the event
     @Test fun ownerShareSheet() = shoot("sheet-share-event", "owner", eventIndex = 1, tap = listOf("@Share"), sheet = true)
     @Test fun maxShareSheet() = shoot("sheet-share-event-member", "max", eventIndex = 0, tap = listOf("@Share"), sheet = true)
 
@@ -263,7 +263,7 @@ class ScreenshotTest {
     @Test fun tabletSettings() = shoot("tablet-settings", "owner", "settings")
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
     @Test fun tabletEventDetailCover() = shoot("tablet-event-detail-cover", "owner", eventIndex = 2, cover = true)
-    // Tablets keep the normal header: the share button is one of its actions
+    // Tablets keep the normal header; the share icon sits right of the title as on phones
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
     @Test fun tabletEventDetailShare() = shoot("tablet-event-detail-share", "owner", eventIndex = 1)
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
