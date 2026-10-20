@@ -435,6 +435,11 @@ class AgoraRepository(val api: AgoraApi) {
         api.delete<JsonObject>("/api/events/$eventId/attendees/$userId")
     }
 
+    /** The share switch: whether people without an account may open the event's link (only its editors). */
+    suspend fun setEventPublic(eventId: String, isPublic: Boolean) {
+        api.patch<JsonObject>("/api/events/$eventId", buildJsonObject { put("isPublic", isPublic) })
+    }
+
     suspend fun respondToDuty(dutyId: String, accept: Boolean) {
         api.post<JsonObject>("/api/events/duties/$dutyId/respond", buildJsonObject { put("action", if (accept) "accept" else "decline") })
     }

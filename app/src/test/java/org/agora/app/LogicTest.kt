@@ -243,4 +243,54 @@ class LogicTest {
         assertEquals(listOf("so2"), result.ids("standingOrders"))
         assertEquals(5, result.ids("payments").size)
     }
+
+    /** Expected links were produced by the web app's slugify / itemSlug / encodeURIComponent (assets/app.js). */
+    @Test
+    fun shareLinksAreTheWebAppsAddresses() {
+        val events = listOf(
+            AgoraEvent(id = "a1", title = "Jugendfreizeit 2026", date = "2026-11-06"),
+            AgoraEvent(id = "g1", title = "Gottesdienst", date = "2026-10-11"),
+            AgoraEvent(id = "g2", title = "Gottesdienst", date = "2026-10-18"),
+            AgoraEvent(id = "g3", title = "Gottesdienst", date = "2026-10-18"),
+            AgoraEvent(id = "u1", title = "  Größer Gott – Lobpreis & Gebet! ", date = "2026-12-01"),
+            AgoraEvent(id = "e1", title = "!!!", date = "2026-12-02"),
+            AgoraEvent(id = "l1", title = "x".repeat(90), date = "2026-12-03")
+        )
+        val link = { i: Int -> org.agora.app.util.EventLinks.shareUrl("https://agora.example/", events[i], events) }
+        assertEquals("https://agora.example/events/Jugendfreizeit_2026", link(0))
+        // Repeated titles: the date tells them apart, on the same date the id
+        assertEquals("https://agora.example/events/Gottesdienst_2026-10-11", link(1))
+        assertEquals("https://agora.example/events/Gottesdienst~g2", link(2))
+        assertEquals("https://agora.example/events/Gottesdienst~g3", link(3))
+        assertEquals("https://agora.example/events/Gr%C3%B6%C3%9Fer_Gott_Lobpreis_Gebet", link(4))
+        assertEquals("https://agora.example/events/e1", link(5))
+        assertEquals("https://agora.example/events/" + "x".repeat(80), link(6))
+        // With the switch on the link carries the share key; off (or an old server) it is the members' address
+        val shared = events[0].copy(isPublic = true, publicToken = "Oygrx2H59aHvWr7KkdIaaQ")
+        assertEquals("https://agora.example/events/Jugendfreizeit_2026?share=Oygrx2H59aHvWr7KkdIaaQ",
+            org.agora.app.util.EventLinks.shareUrl("https://agora.example", shared, listOf(shared)))
+        assertEquals("https://agora.example/events/Jugendfreizeit_2026",
+            org.agora.app.util.EventLinks.shareUrl("https://agora.example", shared.copy(isPublic = false), listOf(shared)))
+    }
+
+    @Test
+    fun sharingAndGuestsFromServersOldAndNew() {
+        // Before v3.2 there is no switch (null: the sheet shows none), from v3.2 on its state and the link's key
+        assertNull(json.decodeFromString(AgoraEvent.serializer(), """{"id":"e1","title":"Fest"}""").isPublic)
+        val shared = json.decodeFromString(AgoraEvent.serializer(), """{"id":"e1","title":"Fest","isPublic":true,"publicToken":"abc"}""")
+        assertEquals(true, shared.isPublic)
+        assertEquals("abc", shared.publicToken)
+        val attendees = json.decodeFromString(org.agora.app.data.model.Attendees.serializer(), """{"registered":[
+            {"id":"r1","userId":"u1","name":"Max","status":"registered"},
+            {"id":"g1","userId":"guest:g1","name":"Anna Gast","status":"registered","guest":true,"email":"anna@example.org","age":16},
+            {"id":"g2","userId":"guest:g2","name":"Ben Gast","status":"registered","guest":true}]}""")
+        val (member, guest, guestSeenByMember) = attendees.registered
+        assertFalse(member.guest)
+        assertTrue(guest.guest)
+        assertEquals("anna@example.org", guest.email)
+        assertEquals(16, guest.age)
+        // Members who may not edit the event get no contact details
+        assertEquals("", guestSeenByMember.email)
+        assertNull(guestSeenByMember.age)
+    }
 }

@@ -305,7 +305,12 @@ fun Modifier.fullBleed(horizontal: Dp): Modifier = layout { measurable, constrai
 
 /** Round frosted back button over a cover image. */
 @Composable
-fun GlassBackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun GlassBackButton(onBack: () -> Unit, modifier: Modifier = Modifier) =
+    GlassIconButton(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), onBack, modifier)
+
+/** Round frosted button floating over a cover image or the page (back, share). */
+@Composable
+fun GlassIconButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(40.dp)
@@ -313,9 +318,9 @@ fun GlassBackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
             .clip(CircleShape)
             .frosted(tint = frostSurface())
             .border(1.dp, Agora.colors.hairline, CircleShape)
-            .clickable(role = Role.Button, onClick = onBack),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), Modifier.size(21.dp), tint = Agora.colors.heading) }
+    ) { Icon(icon, contentDescription, Modifier.size(21.dp), tint = Agora.colors.heading) }
 }
 
 /** Round gradient send button of the chat inputs (`.chat-send-btn`). */

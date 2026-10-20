@@ -302,7 +302,10 @@ data class AgoraEvent(
     val myRegistration: Registration? = null,
     val isFull: Boolean = false,
     val canEdit: Boolean = false,
-    val canAccessDutyPlan: Boolean = false
+    val canAccessDutyPlan: Boolean = false,
+    // Share switch (server v3.2+, null on older ones): people without an account open the link with publicToken
+    val isPublic: Boolean? = null,
+    val publicToken: String = ""
 ) {
     val isTermin: Boolean get() = eventType == "termin"
     val lastDay: String get() = endDate.ifBlank { date }
@@ -328,7 +331,16 @@ data class DutyRequest(
 )
 
 @Serializable
-data class Attendee(val id: String = "", val userId: String = "", val name: String = "", val status: String = "")
+data class Attendee(
+    val id: String = "",
+    val userId: String = "",
+    val name: String = "",
+    val status: String = "",
+    // Signed up without an account through the shared link (server v3.2+); e-mail and age only reach the editors
+    val guest: Boolean = false,
+    val email: String = "",
+    val age: Int? = null
+)
 
 @Serializable
 data class Attendees(

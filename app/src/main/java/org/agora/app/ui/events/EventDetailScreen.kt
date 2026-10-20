@@ -43,6 +43,10 @@ import org.agora.app.ui.components.PillTabs
 import org.agora.app.ui.components.SecondaryStyle
 import org.agora.app.ui.components.SubPageHeader
 import org.agora.app.ui.components.GlassBackButton
+import org.agora.app.ui.components.GlassIconButton
+import org.agora.app.ui.components.RoundIconButton
+import androidx.compose.material.icons.outlined.Share
+import org.agora.app.data.model.Attendee
 import org.agora.app.ui.components.GlassChip
 import org.agora.app.ui.components.ImmersiveStatusBar
 import org.agora.app.ui.components.isTablet
@@ -183,6 +187,7 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     val locale = Dates.locale(context)
     val runner = rememberActionRunner()
     var confirmDelete by remember { mutableStateOf(false) }
+    var sharing by rememberSaveable { mutableStateOf(false) }
     var descriptionExpanded by rememberSaveable { mutableStateOf(false) }
 
     val hasPicture = event?.imageUrl?.isNotBlank() == true
@@ -196,14 +201,27 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
     // While the cover is under the status bar: no fade, white icons (the cover is darkened at the top)
     val coverUnderStatusBar by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     ImmersiveStatusBar(hasCover && coverUnderStatusBar)
+    val shareLabel = stringResource(R.string.share_event)
     FrostScaffold(
-        // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header
-        topBar = { if (!hasCover && !hasBand) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) },
+        // With a cover image the back button floats on the image (PWA), otherwise the plain sub-page header with the
+        // share button among its actions (M3 top app bar)
+        topBar = {
+            if (!hasCover && !hasBand) SubPageHeader(stringResource(if (event?.isTermin == true) R.string.event_badge_termin else R.string.event_label_event), onBack) {
+                if (event != null) RoundIconButton(Icons.Outlined.Share, shareLabel, { sharing = true })
+            }
+        },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } },
         // Picture or sphere band up under the status bar: no glass there, it runs on like a photo
         statusBarFrost = !((hasCover || hasBand) && coverUnderStatusBar),
-        // Pinned over the list so it stays reachable while scrolling (the tags scroll away with the cover)
-        overlay = { if (hasCover || hasBand) GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp)) }
+        // Pinned over the list so they stay reachable while scrolling (the tags scroll away with the cover): back on the
+        // left, its twin for sharing on the right (web: .event-detail-share-btn)
+        overlay = {
+            if (hasCover || hasBand) {
+                GlassBackButton(onBack, Modifier.statusBarsPadding().padding(start = 14.dp, top = 10.dp))
+                if (event != null) GlassIconButton(Icons.Outlined.Share, shareLabel, { sharing = true },
+                    Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(end = 14.dp, top = 10.dp))
+            }
+        }
     ) { padding ->
         if (event == null) {
             if (!data.loaded) LoadingBox(Modifier.padding(padding))
@@ -373,6 +391,8 @@ fun EventDetailScreen(eventId: String, user: User, onBack: () -> Unit, onEdit: (
         }
     }
 
+    if (sharing && event != null) EventShareSheet(event, data.events, onDismiss = { sharing = false })
+
     if (confirmDelete && event != null) ConfirmSheet(
         title = stringResource(R.string.delete_event),
         text = stringResource(R.string.events_delete_confirm),
@@ -508,7 +528,7 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (registered.isNotEmpty()) {
-                AvatarStack(registered.map { it.userId to it.name })
+                AvatarStack(registered.map { (if (it.guest) "" else it.userId) to it.name })
                 Spacer(Modifier.width(10.dp))
             }
             Text(
@@ -524,10 +544,10 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
                 if (attendees == null) LoadingBox()
                 else if (registered.isEmpty() && waitlist.isEmpty()) Text(stringResource(R.string.reg_attendees_empty), style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
-                registered.forEach { AttendeeRow(event, it.userId, it.name, false) { reload++ } }
+                registered.forEach { AttendeeRow(event, it, false) { reload++ } }
                 if (waitlist.isNotEmpty()) {
                     CapsLabel(stringResource(R.string.reg_waitlist_header, waitlist.size), Modifier.padding(top = 10.dp, bottom = 2.dp), color = Agora.colors.warning)
-                    waitlist.forEach { AttendeeRow(event, it.userId, it.name, true) { reload++ } }
+                    waitlist.forEach { AttendeeRow(event, it, true) { reload++ } }
                 }
             }
         }
@@ -560,16 +580,30 @@ private fun AvatarStack(people: List<Pair<String, String>>, max: Int = 5) {
     }
 }
 
+// Guests (signed up without an account through the shared link) are marked; editors see how to reach them
 @Composable
-private fun AttendeeRow(event: AgoraEvent, userId: String, name: String, waitlist: Boolean, onRemoved: () -> Unit) {
+private fun AttendeeRow(event: AgoraEvent, attendee: Attendee, waitlist: Boolean, onRemoved: () -> Unit) {
     val container = LocalContainer.current
+    val context = LocalContext.current
     val runner = rememberActionRunner()
     Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-        UserAvatar(userId, name, 32.dp)
-        Text(name, Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-            color = if (waitlist) MaterialTheme.colorScheme.onSurfaceVariant else Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        UserAvatar(attendee.userId.takeUnless { attendee.guest }, attendee.name, 32.dp)
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(attendee.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    color = if (waitlist) MaterialTheme.colorScheme.onSurfaceVariant else Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (attendee.guest) Pill(stringResource(R.string.attendee_guest), MaterialTheme.colorScheme.primary, Modifier.padding(start = 6.dp), caps = true)
+            }
+            if (attendee.guest && attendee.email.isNotBlank()) Text(
+                listOfNotNull(attendee.email, attendee.age?.let { stringResource(R.string.attendee_age, it) }).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + attendee.email))) }
+                }
+            )
+        }
         if (event.canEdit) IconButton(onClick = {
-            runner.run { container.repo.removeAttendee(event.id, userId); container.store.refreshAll(); onRemoved() }
+            runner.run { container.repo.removeAttendee(event.id, attendee.userId); container.store.refreshAll(); onRemoved() }
         }, enabled = !runner.busy, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Outlined.Close, stringResource(R.string.remove), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -581,7 +615,8 @@ private fun AttendeeRow(event: AgoraEvent, userId: String, name: String, waitlis
 private fun BoxScope.HeadBadges(pinned: Boolean, cancelled: Boolean, typeLabel: String, cancelledLabel: String) {
     if (!pinned && !cancelled) return
     Row(
-        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp),
+        // Left of the share button (40dp at 14dp from the edge), centred on the row of the floating buttons
+        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(start = 14.dp, end = 62.dp, top = 10.dp).height(40.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
     ) {
         if (pinned) GlassChip(typeLabel, icon = Icons.Outlined.StarOutline, highlight = true)

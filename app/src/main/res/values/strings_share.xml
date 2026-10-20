@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sharing an event and guests without an account (web v3.2: #event-share-modal, guests in the attendee list) -->
+<resources>
+    <string name="share_event">Share</string>
+    <string name="share_public">Visible without an account</string>
+    <string name="share_public_desc_reg">Anyone with the link sees the event and can sign up – no account needed.</string>
+    <string name="share_public_desc">Anyone with the link sees the event – no account needed.</string>
+    <string name="share_link">Link</string>
+    <string name="share_hint_public">Anyone with this link can see the event.</string>
+    <string name="share_hint_members">Only members can open this link.</string>
+    <string name="share_copy">Copy link</string>
+    <string name="share_copied">Copied</string>
+    <string name="share_send">Share…</string>
+    <string name="attendee_guest">Guest</string>
+    <string name="attendee_age">Age %1$d</string>
+</resources>
