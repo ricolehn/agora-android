@@ -6,7 +6,8 @@ name: Release APK
 #   versionCode = the one in the build file + 1 (or higher, if an earlier release tag already has a higher one)
 # - moves the other branches of develop, beta and latest onto that commit as well, each one that has no commits
 #   the release does not have (one with commits of its own stays as it is, with a warning: nothing is force-pushed)
-# - moves the tag onto that commit, builds the signed APK from it and attaches Agora-<tag>.apk to the release
+# - moves the tag onto that commit, builds the signed APK and AAB from it, attaches Agora-<tag>.apk to the release
+#   and keeps Agora-<tag>.aab as a workflow artifact for Google Play
 on:
   release:
     types: [published]
@@ -100,17 +101,19 @@ jobs:
           } > keystore.properties
 
       - name: Build signed release
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
 
-      # Agora-<release tag>.apk (e.g. Agora-v1.1.0-beta1.apk); manual runs use v<versionName> from the build file
-      - name: Name the APK after the release tag
+      # Agora-<release tag>.apk / .aab (e.g. Agora-v1.1.0-beta1.apk); manual runs use v<versionName> from the build file
+      - name: Name the APK and AAB after the release tag
         run: |
           if [ -z "$TAG" ]; then
             TAG="v$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)"
           fi
           test "$TAG" != "v"
           cp app/build/outputs/apk/release/app-release.apk "Agora-${TAG}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "Agora-${TAG}.aab"
           echo "APK=Agora-${TAG}.apk" >> "$GITHUB_ENV"
+          echo "AAB=Agora-${TAG}.aab" >> "$GITHUB_ENV"
 
       # The version commit goes on the release branch and the tag moves onto it: both or neither
       - name: Push version commit and move the tag
@@ -135,13 +138,20 @@ jobs:
             fi
           done
 
-      - name: Attach to the release
+      - name: Attach APK to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$TAG" "$APK" --clobber
 
-      - name: Upload artifact (manual runs)
+      - name: Upload AAB artifact (Google Play)
+        uses: actions/upload-artifact@v4
+        with:
+          name: agora-release-aab
+          path: ${{ env.AAB }}
+          retention-days: 30
+
+      - name: Upload APK artifact (manual runs)
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v4
         with:
