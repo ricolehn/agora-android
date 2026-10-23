@@ -317,7 +317,7 @@ fun Modifier.colorMesh(base: Color, vararg spots: Triple<Float, Float, Color>): 
 }
 
 @Composable
-private fun isDark(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.2f
+internal fun isDark(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.2f
 
 /** Indigo of highlights (`#6366f1`, lighter in the dark theme). */
 @Composable

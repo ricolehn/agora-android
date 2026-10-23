@@ -409,7 +409,7 @@ private fun EventCardHead(icon: ImageVector, tint: Color, title: String, meta: S
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconTile(icon, tint, size = 38.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading)
+            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold), color = Agora.colors.heading)
             if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (expanded != null) Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
