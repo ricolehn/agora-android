@@ -8,12 +8,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -104,9 +109,16 @@ fun AgoraSheet(
                     .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
             )
         },
+        // Bottom only: a full sheet ends below the status bar instead of running under it with its content padded by the
+        // part of the bar it covers. That padding changed while the sheet was dragged, and with it the height of sheets
+        // about as tall as the screen, which then jumped back up or, dragged by the handle, swallowed every touch
+        contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
+        // statusBarsPadding reads the bar of the sheet's own window (WindowInsets.statusBars here would be the screen's).
         // The sheet is its own window: it has to ask for the high refresh rate itself while it is dragged, otherwise
-        // adaptive-refresh phones drop to a low rate and the sheet stutters behind the finger
-        modifier = modifier.highFrameRateWhileTouching()
+        // adaptive-refresh phones drop to a low rate and the sheet stutters behind the finger. On the modifier, which
+        // stays put while the sheet moves: Compose drops a move when the finger stays on the same spot of every node it
+        // touches, which is what the nodes dragged along with the sheet see
+        modifier = modifier.statusBarsPadding().highFrameRateWhileTouching()
     ) {
         // Own layer: dragging only moves the already drawn content instead of redrawing it (and its blurred
         // soft shadows) in every frame
