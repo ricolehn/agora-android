@@ -36,17 +36,11 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ProvideTextStyle
@@ -548,44 +542,6 @@ fun SubPageHeader(
 @Composable
 fun RoundIconButton(icon: ImageVector, contentDescription: String?, onClick: () -> Unit, tint: Color = Agora.colors.heading) {
     IconButton(onClick = onClick) { Icon(icon, contentDescription, tint = tint) }
-}
-
-data class BottomNavItem(val label: String, val icon: ImageVector, val selectedIcon: ImageVector, val badge: Int = 0)
-
-/**
- * Bottom navigation: the M3 NavigationBar on frosted glass - the active tab in a tinted pill behind its icon,
- * like the web app. Badges for unread chats and open duty requests.
- */
-@Composable
-fun AgoraBottomBar(items: List<BottomNavItem>, selected: Int, onSelect: (Int) -> Unit) {
-    Column(Modifier.frosted(tint = frostSurface())) {
-        HorizontalDivider(color = Agora.colors.hairline)
-        NavigationBar(containerColor = Color.Transparent, tonalElevation = 0.dp) {
-            items.forEachIndexed { i, item ->
-                val active = i == selected
-                NavigationBarItem(
-                    selected = active,
-                    onClick = { onSelect(i) },
-                    icon = {
-                        BadgedBox(badge = {
-                            if (item.badge > 0) Badge(containerColor = Agora.colors.danger, contentColor = Color.White) { Text("${item.badge}") }
-                        }) { Icon(if (active) item.selectedIcon else item.icon, null) }
-                    },
-                    label = {
-                        Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium))
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Agora.colors.navPillContent,
-                        selectedTextColor = Agora.colors.heading,
-                        indicatorColor = Agora.colors.navPill,
-                        unselectedIconColor = Agora.colors.navInactive,
-                        unselectedTextColor = Agora.colors.navInactive
-                    )
-                )
-            }
-        }
-    }
 }
 
 /** Dark rounded toast like the PWA's `.toast`. */

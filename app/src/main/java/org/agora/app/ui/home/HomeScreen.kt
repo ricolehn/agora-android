@@ -88,6 +88,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -455,10 +456,16 @@ private fun NewMessagesCard(unread: List<MentoringThread>, onOpenThread: (String
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(18.dp))
             }
         }
-        unread.take(HOME_MESSAGE_ROWS).forEach { thread ->
+        val rows = unread.take(HOME_MESSAGE_ROWS)
+        // The row at the card's foot has the card's lower corners itself: also while it grows into the chat and back,
+        // when the card's clip is not around it (ContainerTransform.kt)
+        val foot = MaterialTheme.shapes.medium.copy(topStart = CornerSize(0.dp), topEnd = CornerSize(0.dp))
+        rows.forEachIndexed { i, thread ->
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
-                Modifier.fillMaxWidth().containerTransform("home-chat-${thread.id}").background(MaterialTheme.colorScheme.surface)
+                Modifier.fillMaxWidth().containerTransform("home-chat-${thread.id}")
+                    .then(if (i == rows.lastIndex && unread.size <= HOME_MESSAGE_ROWS) Modifier.clip(foot) else Modifier)
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable(onClick = openFrom("home-chat-${thread.id}") { onOpenThread(thread.id) }).padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

@@ -66,6 +66,7 @@
     <string name="nav_superadmin_settings">Systemeinstellungen</string>
     <string name="nav_history">Historie</string>
     <string name="logout">Abmelden</string>
+    <string name="profile_menu">Profilmenü</string>
 
     <!-- Start -->
     <string name="your_duties">Deine Dienste</string>

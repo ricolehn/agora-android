@@ -55,9 +55,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CloudOff
@@ -67,12 +64,8 @@ import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -81,12 +74,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -123,14 +116,18 @@ import org.agora.app.ui.ai.AiChatScreen
 import org.agora.app.ui.auth.ChurchLogo
 import org.agora.app.ui.auth.LoginScreen
 import org.agora.app.ui.auth.ServerScreen
-import androidx.compose.ui.text.font.FontWeight
 import org.agora.app.ui.components.AgoraBottomBar
 import org.agora.app.ui.components.AgoraHeader
 import org.agora.app.ui.components.AgoraSnackbar
 import org.agora.app.ui.components.BottomNavItem
 import org.agora.app.ui.components.LocalContainer
+import org.agora.app.ui.components.MorphMenu
+import org.agora.app.ui.components.MorphMenuButton
+import org.agora.app.ui.components.MorphMenuItem
+import org.agora.app.ui.components.rememberMorphMenuState
 import org.agora.app.ui.components.ProvideAppLocals
 import org.agora.app.ui.components.UserAvatar
+import org.agora.app.ui.components.rememberBottomBarState
 import org.agora.app.ui.events.EventDetailScreen
 import org.agora.app.ui.events.EventEditScreen
 import org.agora.app.ui.events.EventsScreen
@@ -208,11 +205,14 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val scope = rememberCoroutineScope()
-    var menuOpen by remember { mutableStateOf(false) }
+    val menu = rememberMorphMenuState()
     var askedPermission by rememberSaveable { mutableStateOf(false) }
 
     val tabs = Tab.entries.toList()
-    val isTopLevel = tabs.any { it.route == tabOf(route) }
+    val tabIndex = tabs.indexOfFirst { it.route == tabOf(route) }
+    val isTopLevel = tabIndex >= 0
+    // Above the tab screens: every tab has its own bottom bar, the pill slides on from one to the next (BottomBar.kt)
+    val tabBar = rememberBottomBarState(tabIndex.coerceAtLeast(0))
 
     // Live updates only while the app is visible; refresh when coming back
     LifecycleStartEffect(user.userId) {
@@ -238,45 +238,37 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
         else if (link.route == "settings") nav.navigate("settings")
         link.eventId?.takeIf { EVENT_ID.matches(it) }?.let { nav.navigate("event/$it") }
     }
+    // The pill also follows tab changes that don't come from the bar (back to the start tab, a notification); after a
+    // page, which covered the bar, it is simply there
+    var shownTab by remember { mutableIntStateOf(tabIndex) }
+    LaunchedEffect(tabIndex) {
+        if (tabIndex >= 0) tabBar.sync(tabIndex, animate = shownTab >= 0)
+        shownTab = tabIndex
+    }
 
     // Header and bottom bar are part of every tab screen (TabChrome): a page opened from a card grows over them and
     // they leave together with the tab, so they never vanish early or flash at the end of the animation
     val header: @Composable () -> Unit = {
         AgoraHeader(appName, logo = { ChurchLogo(36.dp) }) {
             if (data.error != null) Icon(Icons.Outlined.CloudOff, stringResource(R.string.offline), Modifier.padding(end = 8.dp), tint = MaterialTheme.colorScheme.error)
-            Box {
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(48.dp)) {
-                    UserAvatar(user.userId, user.fullName, 40.dp, ring = AvatarRings.of(user), glow = false)
-                }
-                // Profile menu of the PWA (`.profile-dropdown`)
-                DropdownMenu(
-                    menuOpen, { menuOpen = false },
-                    shape = RoundedCornerShape(20.dp),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    shadowElevation = 12.dp
-                ) {
-                    Text(user.fullName, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp))
-                    if (user.email.isNotBlank()) Text(user.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp))
-                    HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    val itemPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
-                    DropdownMenuItem(text = { Text(stringResource(R.string.nav_settings), fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.Outlined.Settings, null, tint = Agora.colors.heading) }, contentPadding = itemPadding,
-                        onClick = { menuOpen = false; nav.navigate("settings") })
-                    if (user.isAdmin) DropdownMenuItem(text = { Text(stringResource(R.string.nav_superadmin_settings), fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.Outlined.Shield, null, tint = Agora.colors.heading) }, contentPadding = itemPadding,
-                        trailingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp)) },
-                        onClick = { menuOpen = false; openInBrowser(context, container.api.baseUrl + "/#super-admin-settings") })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.logout), color = Agora.colors.danger, fontWeight = FontWeight.Bold) },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null, tint = Agora.colors.danger) }, contentPadding = itemPadding,
-                        onClick = { menuOpen = false; scope.launch { store.logout() } })
-                }
+            // Tapped, the picture turns into the profile menu (MorphMenu.kt)
+            MorphMenuButton(menu) {
+                UserAvatar(user.userId, user.fullName, 40.dp, ring = AvatarRings.of(user), glow = false)
             }
         }
     }
-    val bottomBar: @Composable (String) -> Unit = { current ->
+    // Profile menu of the PWA (`.profile-dropdown`): name and e-mail next to the picture, then the entries
+    val profileMenu: @Composable () -> Unit = {
+        MorphMenu(menu, title = user.fullName, subtitle = user.email.takeIf { it.isNotBlank() }, paneTitle = stringResource(R.string.profile_menu)) {
+            MorphMenuItem(stringResource(R.string.nav_settings), Icons.Outlined.Settings, onClick = { nav.navigate("settings") })
+            if (user.isAdmin) MorphMenuItem(
+                stringResource(R.string.nav_superadmin_settings), Icons.Outlined.Shield, trailingIcon = Icons.AutoMirrored.Outlined.OpenInNew,
+                onClick = { openInBrowser(context, container.api.baseUrl + "/#super-admin-settings") }
+            )
+            MorphMenuItem(stringResource(R.string.logout), Icons.AutoMirrored.Outlined.Logout, color = Agora.colors.danger, onClick = { scope.launch { store.logout() } })
+        }
+    }
+    val bottomBar: @Composable () -> Unit = {
         AgoraBottomBar(
             items = tabs.map { tab ->
                 BottomNavItem(
@@ -288,7 +280,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
                     }
                 )
             },
-            selected = tabs.indexOfFirst { it.route == tabOf(current) },
+            state = tabBar,
             onSelect = { nav.navigateTab(tabs[it].route) }
         )
     }
@@ -300,7 +292,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
         snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (isTopLevel) 80.dp else 0.dp)) { AgoraSnackbar(it) } },
         containerColor = MaterialTheme.colorScheme.background
     ) { _ ->
-        AgoraNavHost(nav, user) { current, content -> TabChrome(header, { bottomBar(current) }, content) }
+        AgoraNavHost(nav, user) { content -> TabChrome(header, bottomBar, profileMenu, content) }
     }
     }
     }
@@ -311,14 +303,21 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
  * screens fade; a page opened from a card covers them and they go with the tab.
  * The header slides away with the content and comes back on the first scroll up (CollapsingHeader); only its
  * drawing moves, so the list keeps its layout while scrolling and runs up under the status bar.
+ * [overlay] lies above all of it (the profile menu); a page opened from the tab covers it like the rest.
  */
 @Composable
-private fun TabChrome(header: @Composable () -> Unit, bottomBar: @Composable () -> Unit, content: @Composable (PaddingValues) -> Unit) {
+private fun TabChrome(
+    header: @Composable () -> Unit,
+    bottomBar: @Composable () -> Unit,
+    overlay: @Composable () -> Unit,
+    content: @Composable (PaddingValues) -> Unit
+) {
     val headerScroll = rememberCollapsingHeader()
     // Frosted glass: the page is the source, header and bottom bar blur what runs on under them (Frost.kt)
     val frost = rememberHazeState()
     ClearStatusBar(true)
     CompositionLocalProvider(LocalFrost provides frost) {
+      Box(Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.nestedScroll(headerScroll.connection),
             topBar = {
@@ -340,6 +339,8 @@ private fun TabChrome(header: @Composable () -> Unit, bottomBar: @Composable () 
                 FrostStatusBar(state = frost)
             }
         }
+        overlay()
+      }
     }
 }
 
@@ -376,7 +377,7 @@ private fun AnimatedVisibilityScope.Shared(content: @Composable () -> Unit) =
 private fun AgoraNavHost(
     nav: NavHostController,
     user: User,
-    chrome: @Composable (route: String, content: @Composable (PaddingValues) -> Unit) -> Unit
+    chrome: @Composable (content: @Composable (PaddingValues) -> Unit) -> Unit
 ) {
     val origin = remember { ContainerOrigin() }
     // A page opened from a card carries the card's key, so it can grow out of it and shrink back into it
@@ -434,20 +435,20 @@ private fun AgoraNavHost(
             }
         }
     ) {
-        composable("home") { Shared { chrome("home") { padding ->
+        composable("home") { Shared { chrome { padding ->
             HomeScreen(user, padding, onOpenFinances = { nav.navigateTab("finances") }, onOpenEvent = openEvent, onOpenThread = openThread,
                 onOpenMentoring = { nav.navigateTab("mentoring") },
                 onOpenTermine = { EventsTabRequest.termine = true; nav.navigateTab("events") })
         } } }
-        composable("finances") { Shared { chrome("finances") { padding ->
+        composable("finances") { Shared { chrome { padding ->
             if (user.canViewFinances) TreasurerScreen(user, padding)
             else MemberFinanceScreen(user, padding)
         } } }
-        composable("events") { Shared { chrome("events") { padding ->
+        composable("events") { Shared { chrome { padding ->
             EventsScreen(user, padding, onOpenEvent = openEvent, onCreate = { type -> nav.navigate("event-edit?type=$type") })
         } } }
-        composable("mentoring") { Shared { chrome("mentoring") { padding -> MentoringScreen(user, padding, onOpenThread = openThread) } } }
-        composable("extras") { Shared { chrome("extras") { padding ->
+        composable("mentoring") { Shared { chrome { padding -> MentoringScreen(user, padding, onOpenThread = openThread) } } }
+        composable("extras") { Shared { chrome { padding ->
             val data by LocalContainer.current.store.data.collectAsStateWithLifecycle()
             HubScreen(hubApps(user.accessesAi && data.aiEnabled), padding, onOpen = { nav.navigate(it) })
         } } }

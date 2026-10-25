@@ -68,6 +68,7 @@
     <string name="nav_superadmin_settings">System settings</string>
     <string name="nav_history">History</string>
     <string name="logout">Sign out</string>
+    <string name="profile_menu">Profile menu</string>
 
     <!-- Home -->
     <string name="your_duties">Your duties</string>
