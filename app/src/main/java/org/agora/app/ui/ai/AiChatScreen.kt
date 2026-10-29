@@ -59,6 +59,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -256,16 +257,23 @@ fun AiOrb(size: Dp, thinking: Boolean = false, glow: Boolean = size >= 48.dp) {
  */
 @Composable
 private fun Modifier.riseIn(delayMs: Int = 0, distance: Dp = 10.dp, enabled: Boolean = true): Modifier {
+    val progress = riseProgress(delayMs, enabled)
+    return graphicsLayer {
+        alpha = progress.value
+        translationY = (1f - progress.value) * distance.toPx()
+    }
+}
+
+/** How far [riseIn] has come (0 to 1), for elements that fade in their shadow themselves (see [IdeaCard]). */
+@Composable
+private fun riseProgress(delayMs: Int = 0, enabled: Boolean = true): State<Float> {
     val progress = remember { Animatable(if (enabled) 0f else 1f) }
     LaunchedEffect(Unit) {
         if (progress.value >= 1f) return@LaunchedEffect
         delay(delayMs.toLong())
         progress.animateTo(1f, tween(450, easing = FastOutSlowInEasing))
     }
-    return graphicsLayer {
-        alpha = progress.value
-        translationY = (1f - progress.value) * distance.toPx()
-    }
+    return progress.asState()
 }
 
 @Composable
@@ -445,20 +453,27 @@ private fun AiWelcome(firstName: String, hint: String, ideas: List<Pair<ImageVec
         Column(Modifier.padding(top = 26.dp).widthIn(max = 420.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ideas.forEachIndexed { index, (icon, id) ->
                 val idea = stringResource(id)
-                IdeaCard(icon, idea, IdeaColors[index % IdeaColors.size], enabled, Modifier.riseIn(220 + index * 70)) { onAsk(idea) }
+                val rise = riseProgress(220 + index * 70)
+                IdeaCard(icon, idea, IdeaColors[index % IdeaColors.size], enabled, rise = { rise.value }) { onAsk(idea) }
             }
         }
     }
 }
 
 @Composable
-private fun IdeaCard(icon: ImageVector, text: String, color: Color, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun IdeaCard(
+    icon: ImageVector, text: String, color: Color, enabled: Boolean, modifier: Modifier = Modifier, rise: () -> Float = { 1f }, onClick: () -> Unit
+) {
     val shape = RoundedCornerShape(18.dp)
     val surface = MaterialTheme.colorScheme.surface
     val dark = surface.luminance() < 0.5f
     Row(
         modifier.fillMaxWidth()
-            .softShadow(Agora.colors.shadow.copy(alpha = 0.07f), blur = 8.dp, shape = shape, offsetY = 2.dp)
+            // Rises in like riseIn, but the shadow fades in on its own, outside of the alpha layer: that one is drawn
+            // offscreen and cut to the card's bounds, so the shadow would only pop up once the card is there
+            .graphicsLayer { translationY = (1f - rise()) * 10.dp.toPx() }
+            .softShadow(Agora.colors.shadow.copy(alpha = 0.07f), blur = 8.dp, shape = shape, offsetY = 2.dp, alpha = rise)
+            .graphicsLayer { alpha = rise() }
             .clip(shape).background(surface).border(1.dp, Agora.colors.hairline, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),

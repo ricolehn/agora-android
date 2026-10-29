@@ -287,12 +287,11 @@ private fun Picture(file: MediaFile, zoom: ZoomState, onTap: () -> Unit) {
         SHOWN_AS_IS.matches(file.contentType) -> repo.mediaFileUrl(file).toString()
         else -> null
     }
-    // Zoomed in once, the largest preview stays (it is sharp at every zoom)
+    // Zoomed in once, the largest preview is fetched (it is sharp at every zoom)
     var wantsLarge by remember(file.path) { mutableStateOf(false) }
     val zoomedIn by remember(zoom) { derivedStateOf { zoom.scale > 1.4f } }
     LaunchedEffect(zoomedIn) { if (zoomedIn && file.hasPreview) wantsLarge = true }
     var state by remember(url) { mutableStateOf<AsyncImagePainter.State?>(null) }
-    var largeShown by remember(file.path) { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().zoomable(zoom, onTap), contentAlignment = Alignment.Center) {
         if (url == null || state is AsyncImagePainter.State.Error) {
             ViewerMessage(stringResource(R.string.media_no_preview))
@@ -303,13 +302,17 @@ private fun Picture(file: MediaFile, zoom: ZoomState, onTap: () -> Unit) {
             contentDescription = file.name,
             contentScale = ContentScale.Fit,
             onState = { state = it },
-            modifier = Modifier.fillMaxSize().zoomed(zoom).graphicsLayer { alpha = if (largeShown) 0f else 1f }
+            modifier = Modifier.fillMaxSize().zoomed(zoom)
         )
-        if (wantsLarge) AsyncImage(
-            model = remember(file.path) { ImageRequest.Builder(context).data(repo.mediaPreviewUrl(file, ZOOM_PREVIEW_SIZE)).build() },
+        // Laid over the screen-size picture, never in its place: whatever becomes of the large one, the picture stays
+        // and the screen never goes black. Decoded at its own size (Coil would scale it down to the screen, no sharper
+        // than the one below), and only while zoomed in, as it is large.
+        if (wantsLarge && zoom.zoomed) AsyncImage(
+            model = remember(file.path) {
+                ImageRequest.Builder(context).data(repo.mediaPreviewUrl(file, ZOOM_PREVIEW_SIZE)).size(ZOOM_PREVIEW_SIZE).build()
+            },
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            onState = { largeShown = it is AsyncImagePainter.State.Success },
             modifier = Modifier.fillMaxSize().zoomed(zoom)
         )
         if (state == null || state is AsyncImagePainter.State.Loading) CircularProgressIndicator(color = Color.White.copy(alpha = 0.8f), strokeWidth = 3.dp)

@@ -21,6 +21,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +75,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -338,11 +341,13 @@ fun MediaScreen(onBack: () -> Unit) {
     ) { padding ->
         val density = LocalDensity.current
         val screenWidth = LocalConfiguration.current.screenWidthDp
-        // Thumbnails as sharp as the tile (about half the screen on phones), from the server's fixed sizes
-        val thumb = with(density) { thumbSize(((if (screenWidth < 600) screenWidth / 2 else 200).dp).roundToPx()) }
+        val phone = screenWidth < 600
+        // Thumbnails as sharp as the tile (about a third of the screen on phones), from the server's fixed sizes
+        val thumb = with(density) { thumbSize(((if (phone) screenWidth / 3 else 200).dp).roundToPx()) }
         Box(Modifier.fillMaxSize()) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp),
+                // Three pictures side by side on phones
+                columns = if (phone) GridCells.Fixed(3) else GridCells.Adaptive(150.dp),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = pagePadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 112.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -380,7 +385,8 @@ fun MediaScreen(onBack: () -> Unit) {
                                     onOpen = { openEntry(folder.name) },
                                     onSelect = { vm.toggle(folder.name) },
                                     onRights = { rightsFor = folder.path },
-                                    modifier = Modifier.animateItem()
+                                    // Only moving, no fading: the fade's layer is cut to the card and would swallow its shadow
+                                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
                                 )
                             }
                         }
@@ -394,7 +400,7 @@ fun MediaScreen(onBack: () -> Unit) {
                                     selecting = selecting,
                                     onOpen = { openEntry(file.name) },
                                     onSelect = { vm.toggle(file.name) },
-                                    modifier = Modifier.animateItem()
+                                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
                                 )
                             }
                         }
@@ -633,47 +639,56 @@ private fun FileTile(
     val surface = MaterialTheme.colorScheme.surface
     val primary = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier.clip(RoundedCornerShape(18.dp))
-            .combinedClickable(onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() })
-            .padding(bottom = 4.dp)
-    ) {
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(1f)
-                .softShadow(Agora.colors.shadow.copy(alpha = 0.07f), blur = 6.dp, shape = shape, offsetY = 1.dp)
-                .clip(shape)
-                .background(color.copy(alpha = 0.10f).compositeOver(surface))
-                .border(if (selected) 2.dp else 1.dp, if (selected) primary else Agora.colors.hairline, shape),
-            contentAlignment = Alignment.Center
+    val interaction = remember { MutableInteractionSource() }
+    Box(modifier) {
+        Column(
+            Modifier
+                .combinedClickable(
+                    interactionSource = interaction, indication = null,
+                    onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() }
+                )
+                .padding(bottom = 4.dp)
         ) {
-            Icon(kindIcon(file.kind), null, Modifier.size(34.dp), tint = color.copy(alpha = 0.85f))
-            if (previewUrl != null) AsyncImage(
-                model = remember(previewUrl) { ImageRequest.Builder(context).data(previewUrl).crossfade(true).build() },
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            if (file.kind == "video" && previewUrl != null) Box(
-                Modifier.size(38.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(1f)
+                    .softShadow(Agora.colors.shadow.copy(alpha = 0.07f), blur = 6.dp, shape = shape, offsetY = 1.dp)
+                    .clip(shape)
+                    .background(color.copy(alpha = 0.10f).compositeOver(surface))
+                    .border(if (selected) 2.dp else 1.dp, if (selected) primary else Agora.colors.hairline, shape),
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(22.dp), tint = Color.White) }
-            val label = typeLabel(file.name)
-            if (label.isNotEmpty()) Text(
-                label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, color = Color.White,
-                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(RoundedCornerShape(6.dp))
-                    .background(color.copy(alpha = 0.92f)).padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Icon(kindIcon(file.kind), null, Modifier.size(34.dp), tint = color.copy(alpha = 0.85f))
+                if (previewUrl != null) AsyncImage(
+                    model = remember(previewUrl) { ImageRequest.Builder(context).data(previewUrl).crossfade(true).build() },
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                if (file.kind == "video" && previewUrl != null) Box(
+                    Modifier.size(38.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(22.dp), tint = Color.White) }
+                // Photos and videos show what they are (the picture, the play button): the type only for the rest
+                val label = if (file.kind == "image" || file.kind == "video") "" else typeLabel(file.name)
+                if (label.isNotEmpty()) Text(
+                    label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, color = Color.White,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(RoundedCornerShape(6.dp))
+                        .background(color.copy(alpha = 0.92f)).padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                if (selecting || selected) SelectMark(selected, Modifier.align(Alignment.TopEnd).padding(8.dp), onImage = true)
+            }
+            Text(
+                file.name, style = MaterialTheme.typography.labelLarge, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp)
             )
-            if (selecting || selected) SelectMark(selected, Modifier.align(Alignment.TopEnd).padding(8.dp), onImage = true)
+            val meta = entryMeta(file.size, file.modified)
+            if (meta.isNotBlank()) Text(
+                meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp)
+            )
         }
-        Text(
-            file.name, style = MaterialTheme.typography.labelLarge, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp)
-        )
-        val meta = entryMeta(file.size, file.modified)
-        if (meta.isNotBlank()) Text(
-            meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+        // The ripple in the tile's rounded shape, on its own: clipping the whole tile cut off the picture's shadow
+        Box(Modifier.matchParentSize().clip(RoundedCornerShape(18.dp)).indication(interaction, ripple()))
     }
 }
 
@@ -758,7 +773,8 @@ private fun TransferBanner(transfer: MediaTransfer?, opening: Boolean, onCancel:
             shape = shape,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, Agora.colors.hairline),
-            modifier = Modifier.padding(start = 16.dp, end = 88.dp, bottom = 16.dp).widthIn(max = 420.dp)
+            // Room for the shadow above too: the fade's layer is cut to the banner's bounds
+            modifier = Modifier.padding(start = 16.dp, end = 88.dp, top = 16.dp, bottom = 16.dp).widthIn(max = 420.dp)
                 .softShadow(Agora.colors.shadow.copy(alpha = 0.12f), blur = 12.dp, shape = shape, offsetY = 3.dp)
         ) {
             Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
