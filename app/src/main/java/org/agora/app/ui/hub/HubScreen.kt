@@ -131,13 +131,18 @@ private fun HubTile(app: HubApp, index: Int, modifier: Modifier = Modifier, onCl
         modifier
             .fillMaxWidth()
             .graphicsLayer {
-                alpha = appear.value
                 translationY = (1f - appear.value) * 10.dp.toPx()
                 val scale = 0.985f + 0.015f * appear.value
                 scaleX = scale
                 scaleY = scale
             }
-            .softShadow(if (dark) Color.Black.copy(alpha = 0.45f) else Color(0xFF1C1917).copy(alpha = 0.10f), blur = 14.dp, shape = shape, offsetY = 6.dp)
+            // The shadow fades in on its own, outside of the alpha layer: that one is drawn offscreen and cut to the
+            // tile's bounds, so the shadow would only pop up once the tile has fully appeared
+            .softShadow(
+                if (dark) Color.Black.copy(alpha = 0.45f) else Color(0xFF1C1917).copy(alpha = 0.10f),
+                blur = 14.dp, shape = shape, offsetY = 6.dp, alpha = { appear.value }
+            )
+            .graphicsLayer { alpha = appear.value }
             .clip(shape)
             .background(surface)
             // Only a breath of the app's colour from the upper right corner, fading out by the middle of the tile
