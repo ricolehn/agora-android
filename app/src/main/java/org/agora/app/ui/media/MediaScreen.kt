@@ -38,8 +38,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,6 +86,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -104,11 +107,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.agora.app.R
 import org.agora.app.data.MediaFile
@@ -344,10 +351,13 @@ fun MediaScreen(onBack: () -> Unit) {
         val phone = screenWidth < 600
         // Thumbnails as sharp as the tile (about a third of the screen on phones), from the server's fixed sizes
         val thumb = with(density) { thumbSize(((if (phone) screenWidth / 3 else 200).dp).roundToPx()) }
+        val grid = rememberLazyGridState()
+        PrefetchPreviews(files, grid) { container.repo.mediaPreviewUrl(it, thumb, crop = true) }
         Box(Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 // Three pictures side by side on phones
                 columns = if (phone) GridCells.Fixed(3) else GridCells.Adaptive(150.dp),
+                state = grid,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = pagePadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 112.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -691,6 +701,41 @@ private fun FileTile(
         Box(Modifier.matchParentSize().clip(RoundedCornerShape(18.dp)).indication(interaction, ripple()))
     }
 }
+
+/**
+ * The previews of the files further down load in the background, so they are there when scrolled to: from the first
+ * one below the screen on (those on it load themselves), two at a time, leaving the connection free for what is on
+ * the screen. Only into the disk cache (the tiles take them from there), not into memory.
+ */
+@Composable
+private fun PrefetchPreviews(files: List<MediaFile>, grid: LazyGridState, previewUrl: (MediaFile) -> String) {
+    val context = LocalContext.current
+    LaunchedEffect(files) {
+        // One frame later the grid shows these files
+        withFrameNanos { }
+        val shown = grid.layoutInfo.visibleItemsInfo.mapTo(HashSet()) { it.key }
+        val loader = SingletonImageLoader.get(context)
+        val lanes = Semaphore(2)
+        coroutineScope {
+            files.filter { it.hasPreview && "f:" + it.name !in shown }.forEach { file ->
+                lanes.acquire()
+                launch {
+                    try {
+                        loader.execute(
+                            ImageRequest.Builder(context).data(previewUrl(file))
+                                .memoryCachePolicy(CachePolicy.DISABLED).size(PREFETCH_DECODE_SIZE).build()
+                        )
+                    } finally {
+                        lanes.release()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Prefetched previews are only decoded this small: what counts is that they are on the device. */
+private const val PREFETCH_DECODE_SIZE = 32
 
 /** The round mark of a selected entry (an empty ring while selecting). */
 @Composable

@@ -60,6 +60,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.isFinite
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -135,6 +137,8 @@ class ZoomState {
 
     /** Scaled to [target] with the spot under [point] (measured in the box) staying where it is. */
     fun zoomTo(target: Float, point: Offset, pan: Offset = Offset.Zero) {
+        // Without a spot (NaN) the offset would become NaN and the picture would be gone for good: the screen went black
+        if (!target.isFinite() || !point.isFinite || !pan.isFinite) return
         val next = target.coerceIn(1f, MAX_ZOOM)
         val middle = Offset(box.width / 2f, box.height / 2f)
         // A point p of the picture shows at middle + (p - middle) * scale + offset
@@ -169,10 +173,12 @@ private fun Modifier.zoomable(state: ZoomState, onTap: () -> Unit): Modifier = t
             do {
                 val event = awaitPointerEvent()
                 val fingers = event.changes.count { it.pressed }
-                if (fingers >= 2 || state.zoomed) {
+                // The event that lifts the last finger has no centroid (only fingers down before and after count)
+                val centroid = event.calculateCentroid(useCurrent = false)
+                if ((fingers >= 2 || state.zoomed) && centroid.isSpecified) {
                     val zoom = event.calculateZoom()
                     val pan = event.calculatePan()
-                    state.zoomTo(state.scale * zoom, event.calculateCentroid(useCurrent = false), pan)
+                    state.zoomTo(state.scale * zoom, centroid, pan)
                     event.changes.forEach { if (it.positionChanged()) it.consume() }
                 }
             } while (event.changes.any { it.pressed })
