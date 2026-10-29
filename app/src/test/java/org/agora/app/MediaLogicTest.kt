@@ -26,7 +26,6 @@ import org.agora.app.ui.media.sortFiles
 import org.agora.app.ui.media.sortFolders
 import org.agora.app.ui.media.thumbSize
 import org.agora.app.ui.media.typeLabel
-import org.agora.app.ui.media.viewerSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -49,8 +48,6 @@ class MediaLogicTest {
     fun `previews come in the server's sizes`() {
         assertEquals(256, thumbSize(180))
         assertEquals(512, thumbSize(2000))
-        assertEquals(2048, viewerSize(1440, 3120))
-        assertEquals(1024, viewerSize(720, 1000))
     }
 
     @Test

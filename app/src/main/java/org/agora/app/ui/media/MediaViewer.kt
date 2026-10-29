@@ -50,7 +50,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -237,9 +236,8 @@ private fun LightButton(text: String, onClick: () -> Unit) =
     OutlinedButton(onClick = onClick) { Text(text, color = Color.White) }
 
 /**
- * The pictures of the folder, full screen: a preview as large as the screen; zoomed in, Nextcloud's largest
- * preview takes over (never the original, which may be DNG, RAW or HEIC); swipe for the next one, tap to hide
- * the bar.
+ * The pictures of the folder, full screen: Nextcloud's largest preview (never the original, which may be DNG, RAW
+ * or HEIC); swipe for the next one, tap to hide the bar.
  */
 @Composable
 fun PictureViewer(pictures: List<MediaFile>, start: Int, onClose: () -> Unit, onDownload: (MediaFile) -> Unit, onShare: (MediaFile) -> Unit) {
@@ -279,18 +277,12 @@ private val SHOWN_AS_IS = Regex("^image/(jpeg|png|gif|webp|bmp)$", RegexOption.I
 private fun Picture(file: MediaFile, zoom: ZoomState, onTap: () -> Unit) {
     val context = LocalContext.current
     val repo = LocalContainer.current.repo
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    val screen = with(density) { viewerSize(configuration.screenWidthDp.dp.roundToPx(), configuration.screenHeightDp.dp.roundToPx()) }
+    // Nextcloud's largest preview, like its own viewer (asked for more, the server hands out its largest)
     val url = when {
-        file.hasPreview -> repo.mediaPreviewUrl(file, screen)
+        file.hasPreview -> repo.mediaPreviewUrl(file, LARGEST_PREVIEW_SIZE)
         SHOWN_AS_IS.matches(file.contentType) -> repo.mediaFileUrl(file).toString()
         else -> null
     }
-    // Zoomed in once, the largest preview is fetched (it is sharp at every zoom)
-    var wantsLarge by remember(file.path) { mutableStateOf(false) }
-    val zoomedIn by remember(zoom) { derivedStateOf { zoom.scale > 1.4f } }
-    LaunchedEffect(zoomedIn) { if (zoomedIn && file.hasPreview) wantsLarge = true }
     var state by remember(url) { mutableStateOf<AsyncImagePainter.State?>(null) }
     Box(Modifier.fillMaxSize().zoomable(zoom, onTap), contentAlignment = Alignment.Center) {
         if (url == null || state is AsyncImagePainter.State.Error) {
@@ -304,13 +296,11 @@ private fun Picture(file: MediaFile, zoom: ZoomState, onTap: () -> Unit) {
             onState = { state = it },
             modifier = Modifier.fillMaxSize().zoomed(zoom)
         )
-        // Laid over the screen-size picture, never in its place: whatever becomes of the large one, the picture stays
-        // and the screen never goes black. Decoded at its own size (Coil would scale it down to the screen, no sharper
-        // than the one below), and only while zoomed in, as it is large.
-        if (wantsLarge && zoom.zoomed) AsyncImage(
-            model = remember(file.path) {
-                ImageRequest.Builder(context).data(repo.mediaPreviewUrl(file, ZOOM_PREVIEW_SIZE)).size(ZOOM_PREVIEW_SIZE).build()
-            },
+        // Coil decodes the picture above only as large as the screen (light on memory while swiping), which would be
+        // soft zoomed in. So while zoomed in the same picture lies over it once more at its own size, from the cache
+        // without a second download; over it and never in its place, so the picture stays whatever becomes of this one.
+        if (zoom.zoomed && state is AsyncImagePainter.State.Success) AsyncImage(
+            model = remember(url) { ImageRequest.Builder(context).data(url).size(LARGEST_PREVIEW_SIZE).build() },
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize().zoomed(zoom)

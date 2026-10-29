@@ -25,15 +25,13 @@ fun folderName(path: String): String = path.substringAfterLast('/')
 
 /** The server's preview sizes: asking for exactly these lets Nextcloud and the caches reuse what they made. */
 val PREVIEW_SIZES = listOf(64, 128, 256, 512, 1024, 2048, 4096)
-const val ZOOM_PREVIEW_SIZE = 4096
+/** The viewer asks for this and gets the server's largest preview (Nextcloud's preview_max_x/y caps it). */
+const val LARGEST_PREVIEW_SIZE = 4096
 
 fun previewBucket(pixels: Int): Int = PREVIEW_SIZES.firstOrNull { it >= pixels } ?: PREVIEW_SIZES.last()
 
 /** A tile of [pixels] device pixels: sharp, never more than 512. */
 fun thumbSize(pixels: Int): Int = minOf(512, previewBucket(pixels))
-
-/** The viewer: the longer side of the screen in device pixels, at most 2048 (more only when zoomed in). */
-fun viewerSize(width: Int, height: Int): Int = minOf(2048, previewBucket(maxOf(width, height)))
 
 enum class MediaSort { NAME, NEWEST }
 
