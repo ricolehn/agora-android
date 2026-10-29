@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.agora.app.AppContainer
 import org.agora.app.R
+import org.agora.app.ui.components.LocalContainer
 import org.agora.app.data.Song
 import org.agora.app.data.remote.ApiException
 import org.agora.app.data.songbook
@@ -139,6 +140,9 @@ fun SongbookScreen(onBack: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val loadFailed = stringResource(R.string.songbook_load_failed)
     LaunchedEffect(Unit) { if (!state.loaded) vm.load(loadFailed) }
+    // Songs changed on another device (live update "songs"): the list follows
+    val store = LocalContainer.current.store
+    LaunchedEffect(Unit) { store.serverChanges.collect { areas -> if ("songs" in areas || "all" in areas) vm.load(loadFailed) } }
 
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     var editId by rememberSaveable { mutableStateOf<String?>(null) }

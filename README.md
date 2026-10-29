@@ -19,10 +19,16 @@ It talks to the same backend as the web app (PWA) and mirrors its screens and ru
 | **Events** | *Appointments* and *Events* tabs with the PWA's filter rules, search, highlight/cover cards, detail page with registration / waiting list, attendee list (guests without an account marked, their contact for the event's editors), duty roster (answer requests, managers add tasks, assign people or groups, remove entries), create / edit / delete events incl. cover image, target groups and recurring appointments |
 | **Sharing** | Share icon right of every event's title and organiser: a sheet with the event's link to copy or to hand to Android's share sheet, and, for those who may edit the event, the switch *Visible without an account* (server 3.2 or newer) that lets people without an account open the link and sign up as guests in the browser |
 | **Mentoring** | Conversations with unread badges, chat (live polling while open), end / reopen, find mentors and contact anonymously, mentor application / profile, review of applications for mentoring managers |
-| **AI support** | Streaming answers rendered as Markdown, collapsible reasoning ("Denkprozess"), only visible with permission and when AI is enabled on the server |
+| **Extras** | One tab for the further offers in the web's order: the AI chat across the full width on top, then *Media*, *Songbook* and *Prayer requests* as tiles with flat tinted icons (each only for those who may use it) |
+| **Media** *(server 3.3 BA SING SE)* | The community's Nextcloud folder as a library: folders and thumbnails (Nextcloud's previews in the server's fixed sizes, cached until the file changes), path above the list, sort by name or newest, back goes up a folder. Pictures open full screen (swipe, pinch or double tap to zoom; zoomed in, the largest preview takes over – never the original, so DNG, RAW or HEIC show too), PDFs page by page (Android's PdfRenderer), videos and music in the app's player (Media3, seekable), anything else in another app. Holding an entry selects; the selection downloads as one ZIP (or the single file) to a place you pick and, with write access, is deleted. With write access: upload files (streamed, with progress) and create folders. Members with *Extended media rights* set the rights of every folder (all members, groups, single people: read, write, no access) and see all folder rights at a glance |
+| **AI support** | Streaming answers rendered as Markdown; the assistant's orb, a greeting by name with three suggestions, "Thinking · 4 s" / "Thought · 12 s" (tap to read the thoughts); says when a model only thought or the connection died (servers 3.3+ keep the stream alive while the model thinks); only visible with permission and when AI is enabled on the server |
 | **Settings** | Profile picture (256×256 JPEG like the PWA), notification preferences, push setup, theme (system/light/dark), language (system/German/English), monthly fees (admins), password change, calendar subscription (iCal / Google Calendar), registration code |
 
-Live updates: while the app is visible it listens to the server's `/api/stream` (SSE) and refreshes all data after every change, just like the PWA.
+Live updates: while the app is visible it listens to the server's `/api/stream` (SSE) and refreshes what changed, just like
+the PWA: events, mentoring and the media library on their own, prayer requests, songs and the open folder only on their
+pages; anything else reloads everything. Profile pictures are only asked for members who have one, under an address with
+their version that stays cached until the picture changes (`GET /api/profile/pictures`, server 3.3+; older servers: as
+before).
 
 ## Push notifications
 
@@ -63,11 +69,12 @@ app/src/main/java/org/agora/app
 ├── data/
 │   ├── remote/AgoraApi.kt   OkHttp + kotlinx.serialization, Bearer token, error parsing, uploads, SSE & AI streams
 │   ├── AgoraRepository.kt   every endpoint the app uses; treasurer write flows ported from the PWA
+│   ├── MediaApi.kt          media library (Nextcloud through the server): listing, previews, streamed up/downloads, rights
 │   ├── AppStore.kt          single source of truth (auth state + member data), live updates
 │   ├── local/SessionStore.kt DataStore: server, token, cached user, theme, push state
 │   └── model/               API models with lenient serializers for legacy data (numbers as strings etc.)
 ├── push/                    FCM service, PushManager, notification channels, polling fallback
-├── ui/                      Compose screens per feature (auth, home, finance, events, mentoring, ai, settings)
+├── ui/                      Compose screens per feature (auth, home, finance, events, mentoring, hub, ai, media, songbook, prayers, settings)
 └── util/                    date/money formatting (de-DE like the PWA), image cropping
 ```
 

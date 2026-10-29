@@ -142,13 +142,27 @@ class AgoraRepository(val api: AgoraApi) {
 
     // ---------- profile & settings ----------
 
-    suspend fun uploadProfilePicture(jpeg: ByteArray) {
-        api.upload("/api/profile/picture", JsonObject.serializer()) {
+    /** Uploads the own picture; returns its new version (servers 3.3+), or null. */
+    suspend fun uploadProfilePicture(jpeg: ByteArray): Long? {
+        val answer = api.upload("/api/profile/picture", JsonObject.serializer()) {
             addFormDataPart("picture", "profile.jpg", AgoraApi.fileBody(jpeg, "image/jpeg"))
         }
+        return (answer["version"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong()
     }
 
-    fun profilePictureUrl(uid: String): String = api.absolute("/api/profile/picture/$uid")
+    /**
+     * Who has a profile picture, with its version (server 3.3 BA SING SE): lists only ask for those, under an
+     * address with the version that stays cached until the picture changes. Null on older servers.
+     */
+    suspend fun pictureVersions(): Map<String, Long>? = try {
+        api.get<Map<String, Long>>("/api/profile/pictures")
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
+    }
+
+    /** [version] from [pictureVersions]: the same address always shows the same picture (cached for good). */
+    fun profilePictureUrl(uid: String, version: Long? = null): String =
+        api.absolute("/api/profile/picture/$uid" + if (version != null) "?v=$version" else "")
 
     /** Saves channels and kinds like the web (flat keys = push choice, for older servers). */
     suspend fun saveNotificationSettings(uid: String, prefs: NotificationPrefs) {

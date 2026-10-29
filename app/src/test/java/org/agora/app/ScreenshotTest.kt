@@ -14,6 +14,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import coil3.request.allowHardware
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import kotlinx.coroutines.runBlocking
@@ -52,10 +53,20 @@ class ScreenshotTest {
         tap: List<String> = emptyList(), scroll: Boolean = false, sheet: Boolean = false,
         scrollTo: String? = null, prepare: (suspend (AppContainer) -> Unit)? = null,
         longDescription: Boolean = false,
+        // Extra time before the capture (an AI reply streaming in)
+        settleMs: Long = 0,
         pick: ((List<org.agora.app.data.model.AgoraEvent>) -> org.agora.app.data.model.AgoraEvent?)? = null
     ) {
         assumeTrue("set -Pscreenshots=<server url>", server.isNotBlank())
         val container = AppContainer(ApplicationProvider.getApplicationContext())
+        // Like AgoraApplication: pictures load with the member's token (profile pictures, media previews); decoded with
+        // BitmapFactory into software bitmaps, as Robolectric has no ImageDecoder and draws no hardware bitmaps
+        coil3.SingletonImageLoader.setUnsafe { context ->
+            coil3.ImageLoader.Builder(context).components {
+                add(coil3.network.okhttp.OkHttpNetworkFetcherFactory(callFactory = { container.api.http }))
+                add(coil3.decode.BitmapFactoryDecoder.Factory())
+            }.allowHardware(false).build()
+        }
         var link: DeepLink? = null
         runBlocking {
             container.sessionStore.clearSession()
@@ -114,6 +125,10 @@ class ScreenshotTest {
                 Thread.sleep(250)
                 compose.waitForIdle()
             }
+        }
+        if (settleMs > 0) repeat((settleMs / 250).toInt()) {
+            Thread.sleep(250)
+            compose.waitForIdle()
         }
         // Sheets live in their own window, so capture the whole screen for them
         if (sheet) captureScreenRoboImage(File(outDir, "$name.png").path)
@@ -318,6 +333,19 @@ class ScreenshotTest {
     @Test fun ownerPrayers() = shoot("owner-prayers", "owner", "extras", tap = listOf("Prayer requests"))
     @Test fun maxPrayers() = shoot("max-prayers", "max", "extras", tap = listOf("Prayer requests"))
     @Test fun ownerAiFromExtras() = shoot("owner-ai-extras", "owner", "extras", tap = listOf("AI Support"))
+
+    // Media library and the second pass of the AI chat (server 3.3 BA SING SE; the server needs Media set up with rules)
+    @Test fun maxMedia() = shoot("max-media", "max", "media")
+    @Test fun maxMediaFolder() = shoot("max-media-folder", "max", "media", tap = listOf("Fotos"), settleMs = 3_000)
+    @Test fun maxMediaFolderDark() = shoot("max-media-folder-dark", "max", "media", dark = true, tap = listOf("Fotos"))
+    @Test fun maxMediaViewer() = shoot("max-media-viewer", "max", "media", tap = listOf("Fotos", "Bild 2.jpg"), sheet = true, settleMs = 3_000)
+    @Test fun ownerMedia() = shoot("owner-media", "owner", "media")
+    @Test fun ownerMediaFab() = shoot("owner-media-fab", "owner", "media", tap = listOf("@Upload files"))
+    @Test fun ownerMediaRights() = shoot("sheet-media-rights", "owner", "media", tap = listOf("Technik", "@Folder rights"), sheet = true)
+    @Test fun ownerMediaRulesOverview() = shoot("sheet-media-rules", "owner", "media", tap = listOf("@All folder rights"), sheet = true)
+    @Test fun ownerAiThinking() = shoot("owner-ai-thinking", "owner", "ai", tap = listOf("What is coming up this week?"))
+    @Test fun ownerAiAnswered() = shoot("owner-ai-answered", "owner", "ai", tap = listOf("What is coming up this week?"), settleMs = 4_000)
+    @Test fun maxAiDark() = shoot("max-ai-dark", "owner", "ai", dark = true)
 
     // Frosted glass: content scrolled up under the header, status bar and bottom bar (Frost.kt)
     @Test fun ownerTermineScrolled() = shoot("owner-termine-scrolled", "owner", "events", scroll = true)

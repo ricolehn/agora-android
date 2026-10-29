@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_chat_hi_name">Hallo %1$s,</string>
+    <string name="ai_thinking">Denkt nach</string>
+    <string name="ai_thought">Nachgedacht</string>
+    <string name="ai_thinking_seconds">%1$d s</string>
+    <string name="ai_only_thought">Die KI hat nachgedacht, aber keine Antwort geschickt. Bitte versuch es noch einmal.</string>
+    <string name="ai_no_answer">Es kam keine Antwort zurück. Bitte versuch es noch einmal.</string>
+    <string name="ai_timeout">Die KI antwortet nicht mehr. Bitte versuch es noch einmal.</string>
+</resources>

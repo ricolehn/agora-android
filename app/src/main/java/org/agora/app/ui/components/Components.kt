@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +73,8 @@ import org.agora.app.ui.theme.Agora
 
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer not provided") }
 val LocalSnackbar = staticCompositionLocalOf { SnackbarHostState() }
+/** Who has a profile picture, with its version ([org.agora.app.data.AppData.pictureVersions]); null: unknown. */
+val LocalPictureVersions = compositionLocalOf<Map<String, Long>?> { null }
 
 @Composable
 fun ProvideAppLocals(container: AppContainer, snackbar: SnackbarHostState, content: @Composable () -> Unit) =
@@ -280,11 +283,15 @@ fun UserAvatar(uid: String?, name: String, size: Dp = 40.dp, ring: AvatarRing? =
         }
     }
     // Initials underneath, the picture on top once it is there. (No SubcomposeAsyncImage: it subcomposes per
-    // avatar, which is slow in lists; members without a picture simply keep their initials.)
+    // avatar, which is slow in lists; members without a picture simply keep their initials.) When the server lists
+    // who has a picture, only those are asked for, under the address with the version (cached until it changes)
+    val versions = LocalPictureVersions.current
+    val version = if (uid.isNullOrBlank()) null else versions?.get(uid)
+    val hasPicture = !uid.isNullOrBlank() && (versions == null || version != null)
     Box(outer) {
         fallback()
-        if (!uid.isNullOrBlank()) AsyncImage(
-            model = remember(uid) { ImageRequest.Builder(context).data(container.repo.profilePictureUrl(uid)).crossfade(true).build() },
+        if (hasPicture) AsyncImage(
+            model = remember(uid, version) { ImageRequest.Builder(context).data(container.repo.profilePictureUrl(uid!!, version)).crossfade(true).build() },
             contentDescription = name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()

@@ -241,12 +241,14 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
             cropUri = null
             runner.run(pictureSaved) {
                 val jpeg = Images.profilePicture(context, uri, region) ?: throw org.agora.app.data.remote.ApiException(0, uploadFailed)
-                container.repo.uploadProfilePicture(jpeg)
+                val version = container.repo.uploadProfilePicture(jpeg)
                 // The old picture may still sit in the HTTP cache (the server lets clients keep pictures for a few minutes)
                 container.api.clearHttpCache()
                 val url = container.repo.profilePictureUrl(user.userId)
                 SingletonImageLoader.get(context).memoryCache?.remove(MemoryCache.Key(url))
                 SingletonImageLoader.get(context).diskCache?.remove(url)
+                // Servers that list the versions: the new version is a new address everywhere
+                container.store.pictureChanged(user.userId, version)
                 avatarVersion++
             }
         })

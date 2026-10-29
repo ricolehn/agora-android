@@ -6,6 +6,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -36,12 +38,17 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** Error returned by the Agora backend (message is usually German and user-presentable). */
 class ApiException(val status: Int, message: String) : IOException(message)
+
+/** The AI stream went quiet although the server keeps it alive while the model thinks: the connection is gone. */
+class AiTimeoutException : IOException("AI stream timed out")
 
 sealed interface AiChunk {
     data class Content(val text: String) : AiChunk
@@ -82,6 +89,13 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
 
     /** No read timeout: live-update stream and AI answers stay open for a long time. */
     private val streamHttp: OkHttpClient = http.newBuilder().cache(null).readTimeout(0, TimeUnit.MILLISECONDS).build()
+
+    /**
+     * Files of the media library: an upload is answered only once the server has stored it in the cloud, a ZIP
+     * download starts once the server has fetched its first file. Not kept in the HTTP cache (could be 1 GB).
+     */
+    val transferHttp: OkHttpClient = http.newBuilder().cache(null)
+        .readTimeout(10, TimeUnit.MINUTES).writeTimeout(10, TimeUnit.MINUTES).build()
 
     /** Drops cached answers, e.g. when another user signs in on this device. */
     fun clearHttpCache() {
@@ -139,6 +153,50 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
         return decode(deserializer, execute(request, reportUnauthorized = true))
     }
 
+    /** A large upload ([body] streams its files) with the long timeouts of [transferHttp]. */
+    suspend fun <T> transfer(url: HttpUrl, body: RequestBody, deserializer: DeserializationStrategy<T>): T {
+        val request = Request.Builder().url(url).post(body).build()
+        return withContext(Dispatchers.IO) { decode(deserializer, execute(request, reportUnauthorized = true, client = transferHttp)) }
+    }
+
+    /**
+     * Streams the answer of a GET to [url] into [sink] (a file, a document the person picked), reporting the bytes
+     * so far and the length when known. Cancelling the coroutine stops the download.
+     */
+    suspend fun download(url: HttpUrl, sink: java.io.OutputStream, progress: (done: Long, total: Long) -> Unit = { _, _ -> }) = withContext(Dispatchers.IO) {
+        val call = transferHttp.newCall(Request.Builder().url(url).get().build())
+        val cancelHandle = currentCoroutineContext().job.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { call.cancel() }
+        try {
+            val response = try { call.awaitResponse() } catch (e: IOException) { throw ApiException(0, e.message ?: "Netzwerkfehler") }
+            response.use {
+                if (!it.isSuccessful) {
+                    if (it.code == 401) unauthorizedEvents.tryEmit(Unit)
+                    throw errorFrom(it.code, it.body?.string().orEmpty())
+                }
+                val body = it.body ?: return@use
+                val total = body.contentLength()
+                val buffer = ByteArray(64 * 1024)
+                var done = 0L
+                try {
+                    body.byteStream().use { input ->
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            sink.write(buffer, 0, read)
+                            done += read
+                            progress(done, total)
+                        }
+                    }
+                } catch (e: IOException) {
+                    if (!currentCoroutineContext().isActive) throw CancellationException()
+                    throw ApiException(0, e.message ?: "Netzwerkfehler")
+                }
+            }
+        } finally {
+            cancelHandle.dispose()
+        }
+    }
+
     // ---------- streams ----------
 
     /**
@@ -185,7 +243,12 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
         }
     }.flowOn(Dispatchers.IO)
 
-    /** Streams an AI answer (`data: {"content"|"reasoning"}` lines ending with `data: [DONE]`). */
+    /**
+     * Streams an AI answer (`data: {"content"|"reasoning"|"error"}` lines ending with `data: [DONE]`). Servers 3.3+
+     * send a `: ping` line every 15 s while the model thinks; once one came, a stream that stays quiet for
+     * [AI_IDLE_TIMEOUT_MS] has lost its connection and ends with [AiTimeoutException] (older servers send none and
+     * may be silent for minutes while a model thinks, so they are waited for).
+     */
     fun aiChat(body: JsonElement): Flow<AiChunk> = flow {
         val request = Request.Builder().url(url("/api/ai/chat"))
             .post(body.toString().toRequestBody(JSON_MEDIA))
@@ -193,21 +256,41 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
             .build()
         val call = streamHttp.newCall(request)
         val cancelHandle = currentCoroutineContext().job.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { call.cancel() }
-        try { call.awaitResponse().use { response ->
-            if (!response.isSuccessful) throw errorFrom(response.code, response.body?.string().orEmpty())
-            val source = response.body?.source() ?: return@use
-            while (true) {
-                val line = source.readUtf8Line() ?: break
-                if (!line.startsWith("data:")) continue
-                val payload = line.removePrefix("data:").trim()
-                if (payload == "[DONE]") break
-                val obj = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: continue
-                (obj["content"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Content(it)) }
-                (obj["reasoning"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Reasoning(it)) }
-                (obj["error"] as? JsonPrimitive)?.contentOrNull?.let { throw ApiException(response.code, it) }
+        val lastLine = AtomicLong(System.currentTimeMillis())
+        val keptAlive = AtomicBoolean(false)
+        val timedOut = AtomicBoolean(false)
+        coroutineScope {
+            val watchdog = launch {
+                while (isActive) {
+                    delay(5_000)
+                    if (keptAlive.get() && System.currentTimeMillis() - lastLine.get() > AI_IDLE_TIMEOUT_MS) {
+                        timedOut.set(true)
+                        call.cancel()
+                    }
+                }
             }
-        } } finally {
-            cancelHandle.dispose()
+            try { call.awaitResponse().use { response ->
+                if (!response.isSuccessful) throw errorFrom(response.code, response.body?.string().orEmpty())
+                val source = response.body?.source() ?: return@use
+                while (true) {
+                    val line = source.readUtf8Line() ?: break
+                    lastLine.set(System.currentTimeMillis())
+                    if (line.startsWith(":")) keptAlive.set(true)
+                    if (!line.startsWith("data:")) continue
+                    val payload = line.removePrefix("data:").trim()
+                    if (payload == "[DONE]") break
+                    val obj = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: continue
+                    (obj["content"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Content(it)) }
+                    (obj["reasoning"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Reasoning(it)) }
+                    (obj["error"] as? JsonPrimitive)?.contentOrNull?.let { throw ApiException(response.code, it) }
+                }
+            } } catch (e: IOException) {
+                if (timedOut.get()) throw AiTimeoutException()
+                throw e
+            } finally {
+                watchdog.cancel()
+                cancelHandle.dispose()
+            }
         }
     }.flowOn(Dispatchers.IO)
 
@@ -217,9 +300,9 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
         ((json.parseToJsonElement(payload.trim()) as? JsonObject)?.get("scope") as? JsonPrimitive)?.contentOrNull
     }.getOrNull()?.takeIf { it.isNotBlank() } ?: "all"
 
-    private suspend fun execute(request: Request, reportUnauthorized: Boolean): String = withContext(Dispatchers.IO) {
+    private suspend fun execute(request: Request, reportUnauthorized: Boolean, client: OkHttpClient = http): String = withContext(Dispatchers.IO) {
         val response = try {
-            http.newCall(request).awaitResponse()
+            client.newCall(request).awaitResponse()
         } catch (e: IOException) {
             throw ApiException(0, e.message ?: "Netzwerkfehler")
         }
@@ -251,6 +334,8 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
     companion object {
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
         private const val HTTP_CACHE_BYTES = 20L * 1024 * 1024
+        /** Like the web app: three missed keep-alive pings and then some. */
+        const val AI_IDLE_TIMEOUT_MS = 75_000L
 
         fun fileBody(bytes: ByteArray, mime: String): RequestBody = bytes.toRequestBody(mime.toMediaType())
     }

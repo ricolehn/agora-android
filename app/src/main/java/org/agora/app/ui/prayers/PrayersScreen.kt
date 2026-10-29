@@ -76,6 +76,7 @@ import org.agora.app.ui.components.ConfirmSheet
 import org.agora.app.ui.components.EmptyState
 import org.agora.app.ui.components.FabAction
 import org.agora.app.ui.components.LoadingBox
+import org.agora.app.ui.components.LocalContainer
 import org.agora.app.ui.components.LocalSnackbar
 import org.agora.app.ui.components.PillTabs
 import org.agora.app.ui.components.PrimaryButton
@@ -153,6 +154,9 @@ fun PrayersScreen(user: User, onBack: () -> Unit) {
     var sharing by rememberSaveable { mutableStateOf(false) }
     var optionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { vm.load() }
+    // Shared, extended or removed on another device (live update "prayers"): the list follows
+    val store = LocalContainer.current.store
+    LaunchedEffect(Unit) { store.serverChanges.collect { areas -> if ("prayers" in areas || "all" in areas) vm.load() } }
 
     val list = prayers.filter { if (mineOnly) it.isMine else !it.expired }
 

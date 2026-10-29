@@ -126,6 +126,9 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.markdown.m3)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.datasource.okhttp)
     implementation(libs.haze)
     implementation(libs.haze.blur)
 

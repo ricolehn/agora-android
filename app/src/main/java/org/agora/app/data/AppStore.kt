@@ -57,6 +57,10 @@ data class AppData(
     val eventSettings: EventSettings = EventSettings(),
     val groups: List<Group> = emptyList(),
     val aiEnabled: Boolean = false,
+    /** Who has a profile picture, with its version; null: the server does not say (before 3.3), ask for everyone. */
+    val pictureVersions: Map<String, Long>? = null,
+    /** Media library (Extras) of the server, 3.3 BA SING SE; off on older servers. */
+    val media: MediaStatus = MediaStatus(),
     val error: String? = null
 ) {
     val unreadThreads: List<MentoringThread> get() = threads.filter { it.unreadCount > 0 }
@@ -230,6 +234,8 @@ class AppStore(
                 val eventSettings = async { repo.eventSettings() }
                 val groups = async { repo.groups() }
                 val ai = async { if (user.accessesAi) repo.aiEnabled() else false }
+                val pictures = async { runCatching { repo.pictureVersions() }.getOrElse { old.pictureVersions } }
+                val media = async { runCatching { repo.mediaStatus() }.getOrElse { old.media } }
                 val ownPerson = person.await()
                 val allRequests = requests.await()
                 val ownRequests = allRequests?.filter { it.userId == user.userId || (ownPerson != null && it.personId == ownPerson.id) } ?: old.ownRequests
@@ -247,6 +253,8 @@ class AppStore(
                     eventSettings = eventSettings.await(),
                     groups = groups.await(),
                     aiEnabled = ai.await(),
+                    pictureVersions = pictures.await(),
+                    media = media.await(),
                     error = lastError.also { lastError = null }
                 )
             }
@@ -257,20 +265,34 @@ class AppStore(
 
     @Volatile private var lastError: String? = null
 
-    /** Only the areas a live update named: event data and / or the mentoring threads. */
-    private suspend fun refreshAreas(events: Boolean, mentoring: Boolean) = refreshMutex.withLock {
+    /**
+     * Only the areas a live update named: event data, the mentoring threads and / or whether the media library is
+     * there. Prayers, songs and polls live on their own pages, which reload themselves ([serverChanges]).
+     */
+    private suspend fun refreshAreas(events: Boolean, mentoring: Boolean, media: Boolean) = refreshMutex.withLock {
         if (user == null) return@withLock
         coroutineScope {
             val newEvents = if (events) async { runCatching { repo.events() }.getOrNull() } else null
             val newDuties = if (events) async { runCatching { repo.myDutyRequests() }.getOrNull() } else null
             val newThreads = if (mentoring) async { runCatching { repo.threads() }.getOrNull() } else null
+            val newMedia = if (media) async { runCatching { repo.mediaStatus() }.getOrNull() } else null
             val loadedEvents = newEvents?.await()
             val loadedDuties = newDuties?.await()
             val loadedThreads = newThreads?.await()
+            val loadedMedia = newMedia?.await()
             _data.update {
-                it.copy(events = loadedEvents ?: it.events, dutyRequests = loadedDuties ?: it.dutyRequests, threads = loadedThreads ?: it.threads)
+                it.copy(
+                    events = loadedEvents ?: it.events, dutyRequests = loadedDuties ?: it.dutyRequests,
+                    threads = loadedThreads ?: it.threads, media = loadedMedia ?: it.media
+                )
             }
         }
+    }
+
+    /** After the own picture changed: lists show the new one under its new address. */
+    fun pictureChanged(uid: String, version: Long?) = _data.update { data ->
+        val versions = data.pictureVersions ?: return@update data
+        data.copy(pictureVersions = versions + (uid to (version ?: System.currentTimeMillis())))
     }
 
     private val backgroundRefreshQueued = AtomicBoolean(false)
@@ -306,7 +328,7 @@ class AppStore(
                 if (areas.isEmpty()) return@collect
                 _serverChanges.tryEmit(areas)
                 if (areas.any { it !in PARTIAL_AREAS }) refreshAll()
-                else refreshAreas(events = "events" in areas, mentoring = "mentoring" in areas)
+                else if (areas.any { it in DATA_AREAS }) refreshAreas(events = "events" in areas, mentoring = "mentoring" in areas, media = "media" in areas)
             }
         }
     }
@@ -319,7 +341,9 @@ class AppStore(
     companion object {
         private const val LIVE_UPDATE_WINDOW_MS = 600L
         /** Live-update areas that can be refreshed on their own; anything else reloads everything. */
-        private val PARTIAL_AREAS = setOf("events", "mentoring")
+        private val PARTIAL_AREAS = setOf("events", "mentoring", "media", "prayers", "songs", "polls")
+        /** The partial areas with data in [AppData]; the others only tell their open pages ([serverChanges]). */
+        private val DATA_AREAS = setOf("events", "mentoring", "media")
 
         fun normalizeUrl(input: String): String {
             val trimmed = input.trim().trimEnd('/')

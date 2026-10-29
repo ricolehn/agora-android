@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Created reports are written to cache/reports before they are shared -->
+<!-- Created reports are written to cache/reports before they are shared; files of the media library opened in
+     another app (or shared) to cache/media -->
 <paths>
     <cache-path name="reports" path="reports/" />
+    <cache-path name="media" path="media/" />
 </paths>

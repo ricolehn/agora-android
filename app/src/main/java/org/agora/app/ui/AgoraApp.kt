@@ -6,6 +6,7 @@ import org.agora.app.ui.components.ClearStatusBar
 import org.agora.app.ui.components.SoftIcons
 import org.agora.app.ui.songbook.SongbookScreen
 import org.agora.app.ui.prayers.PrayersScreen
+import org.agora.app.ui.media.MediaScreen
 import androidx.compose.material.icons.outlined.GridView
 import org.agora.app.ui.hub.hubApps
 import org.agora.app.ui.hub.HubScreen
@@ -121,6 +122,7 @@ import org.agora.app.ui.components.AgoraHeader
 import org.agora.app.ui.components.AgoraSnackbar
 import org.agora.app.ui.components.BottomNavItem
 import org.agora.app.ui.components.LocalContainer
+import org.agora.app.ui.components.LocalPictureVersions
 import org.agora.app.ui.components.MorphMenu
 import org.agora.app.ui.components.MorphMenuButton
 import org.agora.app.ui.components.MorphMenuItem
@@ -155,7 +157,7 @@ private enum class Tab(val route: String, val label: Int, val icon: ImageVector,
 }
 
 /** Apps inside "Extras": they keep its nav entry highlighted (web: HUB_TABS). */
-private val HUB_ROUTES = setOf("ai", "songbook", "prayers")
+private val HUB_ROUTES = setOf("ai", "media", "songbook", "prayers")
 private fun tabOf(route: String?): String? = if (route in HUB_ROUTES) "extras" else route
 
 @Composable
@@ -286,7 +288,7 @@ private fun MainShell(user: User, appName: String, deepLink: DeepLink?, snackbar
     }
 
     SharedTransitionLayout {
-    CompositionLocalProvider(LocalSharedTransition provides this) {
+    CompositionLocalProvider(LocalSharedTransition provides this, LocalPictureVersions provides data.pictureVersions) {
     Scaffold(
         // Above the bottom bar on tabs, like before
         snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = if (isTopLevel) 80.dp else 0.dp)) { AgoraSnackbar(it) } },
@@ -450,10 +452,11 @@ private fun AgoraNavHost(
         composable("mentoring") { Shared { chrome { padding -> MentoringScreen(user, padding, onOpenThread = openThread) } } }
         composable("extras") { Shared { chrome { padding ->
             val data by LocalContainer.current.store.data.collectAsStateWithLifecycle()
-            HubScreen(hubApps(user.accessesAi && data.aiEnabled), padding, onOpen = { nav.navigate(it) })
+            HubScreen(hubApps(user.accessesAi && data.aiEnabled, data.media.hasAccess), padding, onOpen = { nav.navigate(it) })
         } } }
         // A page of its own like the songbook and the prayers: it slides in and out like every other page
         composable("ai") { Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding -> AiChatScreen(user, padding, onBack = { nav.popBackStack() }) } }
+        composable("media") { MediaScreen(onBack = { nav.popBackStack() }) }
         composable("songbook") { SongbookScreen(onBack = { nav.popBackStack() }) }
         composable("prayers") { PrayersScreen(user, onBack = { nav.popBackStack() }) }
         composable("settings") { SettingsScreen(user, onBack = { nav.popBackStack() }) }
