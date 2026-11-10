@@ -129,6 +129,10 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.datasource.okhttp)
+    constraints {
+        // Transitive (media3): at least the version without CVE-2026-102554
+        implementation(libs.guava) { because("CVE-2026-102554 (GHSA-xxph-c9ww-hj94)") }
+    }
     implementation(libs.haze)
     implementation(libs.haze.blur)
 

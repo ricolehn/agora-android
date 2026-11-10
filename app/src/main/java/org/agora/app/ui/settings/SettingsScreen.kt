@@ -395,7 +395,12 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
                                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     SecondaryButton(onClick = {
-                                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(f.webcalUrl))) }
+                                        runCatching {
+                                            // Only a calendar subscription (webcal / https) goes to the calendar app, never another scheme
+                                            val uri = Uri.parse(f.webcalUrl)
+                                            require(uri.scheme?.lowercase() in setOf("webcal", "webcals", "https"))
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                        }
                                             .onFailure { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) }
                                     }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.calendar_sub_btn_device)) }
                                     SecondaryButton(onClick = { openInBrowser(context, "https://calendar.google.com/calendar/r?cid=" + Uri.encode(f.webcalUrl)) },

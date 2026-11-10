@@ -65,12 +65,14 @@ class AgoraApplication : Application(), SingletonImageLoader.Factory {
             PushManager.setSignedIn(this, false)
             PollWorker.cancel(this)
             container.push.disable(remote)
-            // Pictures and receipts of this account must not stay on the device, nor files of its media library
+            // Pictures and receipts of this account must not stay on the device, nor files of its media library or reports
             SingletonImageLoader.get(this).let { loader ->
                 loader.memoryCache?.clear()
                 loader.diskCache?.clear()
             }
             java.io.File(cacheDir, "media").deleteRecursively()
+            // Exported financial reports (PDF) of the treasurer
+            java.io.File(cacheDir, "reports").deleteRecursively()
         }
     }
 

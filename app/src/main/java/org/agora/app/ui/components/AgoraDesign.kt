@@ -1,5 +1,8 @@
 package org.agora.app.ui.components
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.graphics.RectangleShape
@@ -67,6 +70,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import androidx.compose.ui.res.stringResource
@@ -79,6 +85,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.agora.app.R
+import org.agora.app.ui.settings.openInBrowser
 import org.agora.app.ui.theme.Agora
 
 // Building blocks that reproduce the PWA's look (assets/style.css) on top of Material 3.
@@ -273,20 +280,38 @@ fun GlassChip(text: String, modifier: Modifier = Modifier, icon: ImageVector? = 
 fun AgoraMarkdown(content: String, modifier: Modifier = Modifier) {
     val t = MaterialTheme.typography
     val heading = Agora.colors.heading
-    Markdown(
-        content,
-        modifier = modifier,
-        typography = markdownTypography(
-            h1 = t.titleLarge.copy(color = heading),
-            h2 = t.titleMedium.copy(fontSize = 17.sp, color = heading),
-            h3 = t.titleMedium.copy(color = heading),
-            h4 = t.titleSmall.copy(color = heading),
-            h5 = t.titleSmall.copy(color = heading),
-            h6 = t.titleSmall.copy(color = heading),
-            text = t.bodyLarge,
-            paragraph = t.bodyLarge
+    val context = LocalContext.current
+    val uriHandler = remember(context) { MarkdownUriHandler(context) }
+    CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+        Markdown(
+            content,
+            modifier = modifier,
+            typography = markdownTypography(
+                h1 = t.titleLarge.copy(color = heading),
+                h2 = t.titleMedium.copy(fontSize = 17.sp, color = heading),
+                h3 = t.titleMedium.copy(color = heading),
+                h4 = t.titleSmall.copy(color = heading),
+                h5 = t.titleSmall.copy(color = heading),
+                h6 = t.titleSmall.copy(color = heading),
+                text = t.bodyLarge,
+                paragraph = t.bodyLarge
+            )
         )
-    )
+    }
+}
+
+/**
+ * Links in markdown come from other members (event descriptions) or the AI: only web, mail and phone links open.
+ * Other schemes (file:, content:, intent:, other apps' schemes) are ignored instead of being handed to other apps.
+ */
+private class MarkdownUriHandler(private val context: Context) : UriHandler {
+    override fun openUri(uri: String) {
+        val parsed = Uri.parse(uri.trim())
+        when (parsed.scheme?.lowercase()) {
+            "https", "http" -> runCatching { openInBrowser(context, parsed.toString()) }
+            "mailto", "tel" -> runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, parsed)) }
+        }
+    }
 }
 
 /** Stretches a list item over the list's horizontal content padding (full-bleed cover image). */
