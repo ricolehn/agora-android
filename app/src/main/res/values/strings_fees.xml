@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The monthly fees over time and the fresh start of the fee accounts (server CALDERA; web: #card-rates,
+     #card-fee-reset, #fee-change-modal, #fee-reset-modal) -->
+<resources>
+    <!-- Fees over time -->
+    <string name="fees_desc">What a month costs, by status.</string>
+    <string name="fees_now">This month</string>
+    <string name="fees_since">Since %1$s</string>
+    <string name="fees_next">From %1$s: %2$s</string>
+    <string name="fees_change_btn">Change fees…</string>
+    <string name="fees_change_hint">You choose the month a change counts from – the months before keep the old fees.</string>
+    <string name="fees_history_title">Fees over time</string>
+    <string name="fees_from_start">From the beginning</string>
+    <string name="fees_log_set">%1$s set the fees from %2$s: %3$s</string>
+    <string name="fees_log_set_start">%1$s set the fees from the beginning: %2$s</string>
+    <string name="fees_log_removed">%1$s took back the fees from %2$s</string>
+    <string name="fees_form_amounts">Fee per month</string>
+    <string name="fees_form_from">Counts from</string>
+    <string name="fees_form_month">Month</string>
+    <string name="fees_form_year">Year</string>
+    <string name="fees_hint_start_until">Counts for every month before %1$s.</string>
+    <string name="fees_hint_start">Counts for every month.</string>
+    <string name="fees_hint_taken">There are fees from %1$s already: these replace them.</string>
+    <string name="fees_hint_later">Nothing changes before %1$s.</string>
+    <string name="fees_hint_now">Counts from this month on.</string>
+    <string name="fees_hint_back">Reaches back: the months since %1$s cost these fees too.</string>
+    <string name="fees_change_title">Change the fees</string>
+    <string name="fees_edit_title">Edit the fees</string>
+    <string name="fees_remove_title">Take back this change?</string>
+    <string name="fees_review_btn">Review…</string>
+    <string name="fees_stretch_all">Every month</string>
+    <string name="fees_stretch_until">Until %1$s</string>
+    <string name="fees_stretch_from">From %1$s</string>
+    <string name="fees_stretch_range">%1$s to %2$s</string>
+    <string name="fees_fact_now">Shows in the accounts right away.</string>
+    <string name="fees_fact_now_none">No account changes today.</string>
+    <string name="fees_fact_fresh_start">Reaches back before the fresh start of %1$s: what was dropped or carried over then is worked out again.</string>
+    <string name="fees_saved">Fees saved</string>
+    <string name="fees_removed">Change taken back</string>
+    <string name="fees_effects">What happens</string>
+
+    <!-- What a fresh start or a change of the fees is today -->
+    <string name="fee_state_active">In effect</string>
+    <string name="fee_state_planned">Planned</string>
+    <string name="fee_state_replaced">Replaced</string>
+    <string name="fee_set_by">Set by %1$s</string>
+    <string name="fee_log_title">Changes</string>
+    <string name="fee_retry">Try again</string>
+    <string name="fee_unknown_person">Unknown</string>
+    <string name="fee_readonly">Only system admins can change this.</string>
+
+    <!-- Fresh start -->
+    <string name="fee_reset_title">Fresh start for the fees</string>
+    <string name="fee_reset_desc">On the chosen day, open fees are dropped and credit is carried over.</string>
+    <string name="fee_reset_date_label">Day of the fresh start</string>
+    <string name="fee_reset_review_btn">Review…</string>
+    <string name="fee_reset_form_hint">Past or future – you\'ll see what changes before anything happens.</string>
+    <string name="fee_reset_none">No fresh start yet.</string>
+    <string name="fee_reset_log_set">%1$s set a fresh start for %2$s</string>
+    <string name="fee_reset_log_removed">%1$s took back the fresh start of %2$s</string>
+    <string name="fee_reset_set_title">Start the fees afresh?</string>
+    <string name="fee_reset_remove_title">Take back the fresh start?</string>
+    <string name="fee_reset_confirm_section">Confirm</string>
+    <string name="fee_reset_password_label">Your password</string>
+    <string name="fee_reset_type_label">Type %1$s to confirm</string>
+    <string name="fee_reset_set_btn">Start afresh</string>
+    <string name="fee_take_back">Take back</string>
+    <string name="fee_reset_fact_now">Takes effect right away.</string>
+    <string name="fee_reset_fact_later">Takes effect on %1$s – the numbers can still change until then.</string>
+    <string name="fee_reset_fact_fees">Fees count anew from %1$s.</string>
+    <string name="fee_reset_fact_untouched">Payments, history and cash balance stay as they are.</string>
+    <string name="fee_reset_undo_fact_all">Accounts are calculated as if it never happened.</string>
+    <string name="fee_reset_undo_fact_planned">Its day hasn\'t come yet – nothing was dropped or carried over.</string>
+    <string name="fee_reset_undo_fact_ahead">The credit carried over (%1$s) stays.</string>
+    <string name="fee_reset_type_day">Please type the day exactly as shown.</string>
+    <string name="fee_reset_saved">Fresh start saved</string>
+    <string name="fee_reset_removed">Fresh start taken back</string>
+
+    <!-- A member's fee account after a fresh start -->
+    <string name="fee_reset_chip">Fresh start on %1$s</string>
+    <string name="fee_reset_timeline_title">Fresh start</string>
+    <string name="fee_reset_carried">Credit carried over: %1$s</string>
+    <string name="fee_reset_dropped">Open fees dropped: %1$s</string>
+    <string name="fee_reset_even">All paid up</string>
+    <string name="fee_reset_payment_hint">Before the fresh start (%1$s): this first pays off the old arrears of %2$s.</string>
+
+    <!-- The numbers of a dialog as tiles -->
+    <string name="fee_tile_dropped">open fees dropped</string>
+    <string name="fee_tile_carried">credit carried over</string>
+    <string name="fee_tile_more">more to pay</string>
+    <string name="fee_tile_less">less to pay</string>
+    <string name="fee_members_none">Nobody</string>
+    <plurals name="fee_members">
+        <item quantity="one">%d member</item>
+        <item quantity="other">%d members</item>
+    </plurals>
+</resources>

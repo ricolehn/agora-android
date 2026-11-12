@@ -263,7 +263,8 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
     // The settings live in sub-pages; the main page lists them, the registration code always sits on top
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     BackHandler(page != null) { page = null }
-    val pages = SettingsPage.entries.filter { it != SettingsPage.Fees || user.isAdmin }
+    // The fees page: system admins change the fees, treasurers read them (and the days of a fresh start) like on the web
+    val pages = SettingsPage.entries.filter { it != SettingsPage.Fees || user.isAdmin || user.canViewFinances || user.canManageFinances }
 
     FrostScaffold(
         topBar = {
@@ -411,7 +412,11 @@ fun SettingsScreen(user: User, onBack: () -> Unit) {
                         }
                     }
                     SettingsPage.Fees -> item(key = "fees") {
-                        FeeEditor(data.fees.rates) { rates -> runner.run(savedMsg) { container.repo.saveFeeSettings(rates); container.store.refreshAll() } }
+                        // Servers from before the fees over time (CALDERA) keep the fee settings as before
+                        FeesPage(user) {
+                            if (user.isAdmin) FeeEditor(data.fees.rates) { rates -> runner.run(savedMsg) { container.repo.saveFeeSettings(rates); container.store.refreshAll() } }
+                            else LegacyFeeTiles(data.fees.rates)
+                        }
                     }
                     SettingsPage.Account -> {
                         item(key = "links") {

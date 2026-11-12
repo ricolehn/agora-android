@@ -9,7 +9,6 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.background
-import org.agora.app.data.model.Payment
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
@@ -33,12 +32,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
+import java.time.LocalDate
 import org.agora.app.ui.components.CapsLabel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -191,7 +193,7 @@ fun PersonStatusHero(
                 FeeChip(Modifier.weight(1f)) {
                     Text(
                         buildAnnotatedString {
-                            val amount = Money.format(fees.rateFor(person.effectiveStatus))
+                            val amount = Money.format(person.monthlyFee(fees))
                             val text = stringResource(R.string.fee_per_month, amount)
                             val at = text.indexOf(amount)
                             append(text)
@@ -207,8 +209,58 @@ fun PersonStatusHero(
                     if (onStatusClick != null) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            // A fresh start of the fee account is news for about two months; the history keeps the day for good
+            val reset = person.feeReset
+            if (reset != null && FeeLogic.isNews(reset, LocalDate.now())) {
+                FeeChip(Modifier.padding(top = 8.dp).fillMaxWidth()) {
+                    Icon(FeeResetIcon, null, Modifier.size(15.dp), tint = Agora.colors.warning)
+                    Text(
+                        buildAnnotatedString {
+                            val day = Dates.short(reset, Dates.locale(LocalContext.current))
+                            val text = stringResource(R.string.fee_reset_chip, day)
+                            val at = text.indexOf(day)
+                            append(text)
+                            if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Agora.colors.heading), at, at + day.length)
+                        },
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
+            }
         }
     }
+}
+
+/** The symbol of a fresh start of the fee accounts, wherever one shows (web: the amber ↻). */
+val FeeResetIcon: ImageVector get() = Icons.Outlined.RestartAlt
+
+/**
+ * A short note about a fresh start with its symbol, e.g. under the day of a payment dated before it (web:
+ * .fee-reset-note). Nothing without [text].
+ */
+@Composable
+fun FeeResetNote(text: String?, modifier: Modifier = Modifier) {
+    if (text.isNullOrBlank()) return
+    val color = Agora.colors.warning
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.1f))
+            .border(1.dp, color.copy(alpha = 0.28f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(FeeResetIcon, null, Modifier.padding(top = 1.dp).size(16.dp), tint = color)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = Agora.colors.heading, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+/**
+ * What a payment dated [day] does for [person] when it lies before their fresh start: it first pays off the open fees
+ * dropped then (FeeLogic.droppedFeesBefore). Null when there is nothing to say.
+ */
+@Composable
+fun feeResetPaymentHint(person: Person?, day: String?): String? {
+    val dropped = FeeLogic.droppedFeesBefore(person, day)
+    if (dropped <= 0 || person?.feeReset == null) return null
+    return stringResource(R.string.fee_reset_payment_hint, Dates.short(person.feeReset, Dates.locale(LocalContext.current)), Money.format(dropped))
 }
 
 /** A chip of the status card: fee per month or the status (tap to request a change). */
@@ -238,41 +290,62 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, onClic
     }
 }
 
-private data class TimelineEntry(val date: String, val payment: Payment? = null, val status: String? = null)
-
 /**
  * "Verlauf" like the PWA's generateTimelineHTML: payments and status changes in one list, newest first.
- * Status entries come from the history plus the current status since the last change (or since joining).
+ * Status entries come from the history plus the current status since the last change (or since joining). A fresh
+ * start of the fee account (CALDERA) is a marked point on the line with what happened then; the entries below it,
+ * the settled time before, stay but are quieter.
  */
 @Composable
 fun FinanceTimeline(person: Person, modifier: Modifier = Modifier, plainStatus: Boolean = false) {
     val locale = Dates.locale(LocalContext.current)
-    val entries = buildList {
-        person.statusHistory.forEach { add(TimelineEntry(it.startDate, status = it.status)) }
-        val currentStart = if (person.statusHistory.isNotEmpty()) person.statusHistory.last().endDate else person.originalMemberSince.ifBlank { person.memberSince }
-        if (!currentStart.isNullOrBlank() && person.status.isNotBlank()) add(TimelineEntry(currentStart, status = person.status))
-        person.payments.forEach { add(TimelineEntry(it.date, payment = it)) }
-    }.filter { it.date.isNotBlank() }.sortedByDescending { it.date }
+    val entries = FeeLogic.timeline(person)
     Column(modifier) {
         if (entries.isEmpty()) Text(stringResource(R.string.timeline_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         entries.forEachIndexed { index, entry ->
+            val quiet = if (entry.settled) 0.55f else 1f
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                 // Dot with a connecting line to the next entry
                 Column(Modifier.width(20.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape).background(if (entry.payment != null) MaterialTheme.colorScheme.primary else Agora.colors.duty))
+                    if (entry.reset) Box(Modifier.padding(top = 1.dp).size(20.dp).clip(CircleShape).background(Agora.colors.warning), contentAlignment = Alignment.Center) {
+                        Icon(FeeResetIcon, null, Modifier.size(13.dp), tint = Color.White)
+                    }
+                    else Box(Modifier.padding(top = 6.dp).size(10.dp).clip(CircleShape)
+                        .background((if (entry.payment != null) MaterialTheme.colorScheme.primary else Agora.colors.duty).copy(alpha = quiet)))
                     if (index < entries.lastIndex) Box(Modifier.padding(top = 4.dp).width(2.dp).weight(1f).background(Agora.colors.hairline))
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp, bottom = if (index < entries.lastIndex) 14.dp else 0.dp)) {
                     val date = Dates.short(entry.date, locale)
-                    if (entry.payment != null) {
-                        Text(stringResource(R.string.timeline_payment, Money.format(entry.payment.amount)), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
-                        Text(
-                            "${entry.payment.description.ifBlank { stringResource(R.string.timeline_no_note) }} · $date",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text(stringResource(R.string.timeline_status, if (plainStatus) statusName(entry.status) else statusLabel(entry.status)), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading)
-                        Text(stringResource(R.string.timeline_valid_from, date), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    when {
+                        entry.reset -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.fee_reset_timeline_title), style = MaterialTheme.typography.titleSmall, color = Agora.colors.warning,
+                                    modifier = Modifier.padding(top = 1.dp))
+                                Text(date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                            }
+                            Text(
+                                when (FeeLogic.resetOutcome(person)) {
+                                    FeeLogic.ResetOutcome.CARRIED_OVER -> stringResource(R.string.fee_reset_carried, Money.format(person.feeCarriedOver))
+                                    FeeLogic.ResetOutcome.DROPPED -> stringResource(R.string.fee_reset_dropped, Money.format(person.feeWrittenOff))
+                                    FeeLogic.ResetOutcome.EVEN -> stringResource(R.string.fee_reset_even)
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = Agora.colors.heading
+                            )
+                        }
+                        entry.payment != null -> {
+                            Text(stringResource(R.string.timeline_payment, Money.format(entry.payment.amount)), style = MaterialTheme.typography.titleSmall,
+                                color = Agora.colors.heading.copy(alpha = quiet))
+                            Text(
+                                "${entry.payment.description.ifBlank { stringResource(R.string.timeline_no_note) }} · $date",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = quiet)
+                            )
+                        }
+                        else -> {
+                            Text(stringResource(R.string.timeline_status, if (plainStatus) statusName(entry.status) else statusLabel(entry.status)),
+                                style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading.copy(alpha = quiet))
+                            Text(stringResource(R.string.timeline_valid_from, date), style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = quiet))
+                        }
                     }
                 }
             }

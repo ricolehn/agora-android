@@ -31,6 +31,11 @@ import org.agora.app.data.model.CreateThreadResponse
 import org.agora.app.data.model.DutyRequest
 import org.agora.app.data.model.EventSettings
 import org.agora.app.data.model.FcmStatus
+import org.agora.app.data.model.FeeChange
+import org.agora.app.data.model.FeeChangeImpact
+import org.agora.app.data.model.FeePlan
+import org.agora.app.data.model.FeeResetImpact
+import org.agora.app.data.model.FeeResets
 import org.agora.app.data.model.FeeSettings
 import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.FinanceStats
@@ -215,6 +220,51 @@ class AgoraRepository(val api: AgoraApi) {
             put("path", "settings")
             put("value", merged)
         })
+    }
+
+    // ---------- monthly fees over time and the fresh start (server CALDERA) ----------
+
+    /** The fees over time; null on a server from before them (it only knows the fee settings above). */
+    suspend fun feePlan(): FeePlan? = untilCaldera { api.get<FeePlan>("/api/fees") }?.takeIf { it.entries.isNotEmpty() }
+
+    /** The days the fee accounts were started afresh; null on a server from before them. */
+    suspend fun feeResets(): FeeResets? = untilCaldera { api.get<FeeResets>("/api/fee-reset") }
+
+    /** What [change] does, in numbers worked out by the server; nothing is saved (system admins). */
+    suspend fun previewFeeChange(change: FeeChange): FeeChangeImpact = api.post("/api/admin/fees/preview", feeChangeBody(change))
+
+    /** Saves [change] as it was checked: [version] is that of the preview (409 when the fees changed in between). */
+    suspend fun saveFeeChange(change: FeeChange, version: String): FeePlan =
+        api.post(if (change.remove) "/api/admin/fees/remove" else "/api/admin/fees", feeChangeBody(change, version))
+
+    /** What setting a fresh start on [date] (or with [remove] taking it back) changes (system admins). */
+    suspend fun previewFeeReset(date: String, remove: Boolean): FeeResetImpact =
+        api.get("/api/admin/fee-reset/preview", buildMap { put("date", date); if (remove) put("remove", "1") })
+
+    /** Sets (or takes back) the fresh start on [date]: the day a second time and the admin's own password. */
+    suspend fun saveFeeReset(date: String, remove: Boolean, password: String): FeeResets =
+        api.post(if (remove) "/api/admin/fee-reset/remove" else "/api/admin/fee-reset", buildJsonObject {
+            put("date", date)
+            put("confirmDate", date)
+            put("password", password)
+        })
+
+    private fun feeChangeBody(change: FeeChange, version: String? = null) = buildJsonObject {
+        // from null means the fees from the beginning: it goes as null, not left out
+        put("from", change.from?.let(::JsonPrimitive) ?: JsonNull)
+        if (change.remove) put("remove", true)
+        else {
+            putJsonObject("fees") { change.fees.forEach { (status, amount) -> put(status, amount) } }
+            change.replaces?.let { put("replaces", it) }
+        }
+        version?.let { put("version", it) }
+    }
+
+    /** A call the server answers only from CALDERA on: older ones know no such route (404). */
+    private suspend fun <T> untilCaldera(block: suspend () -> T): T? = try {
+        block()
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
     }
 
     suspend fun groups(): List<Group> = runCatching { api.get<List<Group>>("/api/groups") }.getOrDefault(emptyList())

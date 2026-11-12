@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -95,8 +96,9 @@ class ScreenshotTest {
             // ">Label": bring the label on screen first (items further down a list)
             val text = entry.removePrefix(">")
             if (entry.startsWith(">")) scrollToText(text)
-            // "@Label": a node by its content description (icon buttons like the FAB)
-            if (text.startsWith("@")) compose.onAllNodesWithContentDescription(text.removePrefix("@")).onFirst().performClick()
+            // "@Label": a node by its content description (icon buttons like the FAB); "@@Label": the last of them
+            if (text.startsWith("@@")) compose.onAllNodesWithContentDescription(text.removePrefix("@@")).onLast().performClick()
+            else if (text.startsWith("@")) compose.onAllNodesWithContentDescription(text.removePrefix("@")).onFirst().performClick()
             else compose.onAllNodesWithText(text).onFirst().performClick()
             repeat(4) {
                 Thread.sleep(250)
@@ -215,6 +217,59 @@ class ScreenshotTest {
         "sheet-standing-order", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", ">@Manage"), sheet = true,
         prepare = { c -> c.repo.bookPayment(c.repo.allPeople().first { it.name == "Max Mitglied" }.id, 25.0, "2026-07-01", "Beitrag", standingOrder = true) }
     )
+
+    // Monthly fees (server CALDERA): the fees over time, the fresh start, and what they look like for a member
+    @Test fun ownerFees() = shoot("owner-fees", "owner", "settings", tap = listOf("Monthly fees"))
+    @Test fun ownerFeesFreshStart() = shoot("owner-fees-fresh-start", "owner", "settings", tap = listOf("Monthly fees", ">Fresh start for the fees"))
+    @Test fun ownerFeesDark() = shoot("owner-fees-dark", "owner", "settings", dark = true, tap = listOf("Monthly fees"))
+    @Test fun treasurerFees() = shoot("treasurer-fees", "treasurer", "settings", tap = listOf("Monthly fees"))
+    @Test fun ownerFeeChangeSheet() = shoot("sheet-fee-change", "owner", "settings", tap = listOf("Monthly fees", "Change fees…"), sheet = true)
+    @Test fun ownerFeeRemoveSheet() = shoot("sheet-fee-remove", "owner", "settings", tap = listOf("Monthly fees", "@Take back"), sheet = true)
+    @Test fun ownerFeeResetRemoveSheet() = shoot("sheet-fee-reset-remove", "owner", "settings", tap = listOf("Monthly fees", ">Fresh start for the fees", "@@Take back"), sheet = true)
+    @Test fun maxFinancesHistory() = shoot("max-finances-history", "max", "finances", scroll = true)
+    @Test fun ownerFeeRequestSheet() = shoot("sheet-request-before-fresh-start", "owner", "finances", tap = listOf("Oktober"), sheet = true)
+    @Test fun ownerHomeFeeRequestSheet() = shoot("sheet-home-request-before-fresh-start", "owner", tap = listOf(">Oktober"), sheet = true)
+
+    /**
+     * The fees over time and the fresh start against the real server (CALDERA), as the fees page calls them: checked
+     * first, saved as checked, refused when the fees changed in between, and taken back again - nothing stays.
+     */
+    @Test fun feesEndToEnd() {
+        assumeTrue("set -Pscreenshots=<server url>", server.isNotBlank())
+        val container = AppContainer(ApplicationProvider.getApplicationContext())
+        runBlocking {
+            container.sessionStore.clearSession()
+            container.store.connect(server)
+            container.store.login("owner@test.de", "test1234")
+            val repo = container.repo
+            val before = checkNotNull(repo.feePlan()) { "The server knows no fees over time" }
+            val month = java.time.YearMonth.parse(before.month).plusMonths(5).toString()
+            val dearer = org.agora.app.data.model.FeeChange(month, mapOf("vollverdiener" to 99.5, "geringverdiener" to 40.0, "keinverdiener" to 12.0))
+
+            val check = repo.previewFeeChange(dearer)
+            org.junit.Assert.assertFalse("a month still to come moves no account today", check.inEffect)
+            org.junit.Assert.assertEquals(month, check.stretches.first().first)
+            val saved = repo.saveFeeChange(dearer, check.version)
+            org.junit.Assert.assertTrue(saved.entries.any { it.from == month && it.fees["vollverdiener"] == 99.5 && it.state == "planned" })
+            // saved on top of fees that changed since: refused, nothing saved
+            val stale = runCatching { repo.saveFeeChange(dearer.copy(fees = dearer.fees + ("keinverdiener" to 13.0)), check.version) }.exceptionOrNull()
+            org.junit.Assert.assertEquals(409, (stale as? org.agora.app.data.remote.ApiException)?.status)
+
+            val undo = org.agora.app.data.model.FeeChange(month, remove = true)
+            repo.saveFeeChange(undo, repo.previewFeeChange(undo).version)
+            org.junit.Assert.assertEquals(before.entries.map { it.from to it.fees }, repo.feePlan()!!.entries.map { it.from to it.fees })
+
+            // A fresh start planned ahead, confirmed with the day and the password, then taken back
+            val day = java.time.LocalDate.now().plusYears(1).withDayOfMonth(1).toString()
+            val impact = repo.previewFeeReset(day, remove = false)
+            org.junit.Assert.assertFalse(impact.inEffect)
+            org.junit.Assert.assertEquals(403, (runCatching { repo.saveFeeReset(day, false, "falsch") }.exceptionOrNull() as? org.agora.app.data.remote.ApiException)?.status)
+            org.junit.Assert.assertTrue(repo.saveFeeReset(day, false, "test1234").resets.any { it.date == day && it.state == "scheduled" })
+            repo.previewFeeReset(day, remove = true)
+            org.junit.Assert.assertTrue(repo.saveFeeReset(day, true, "test1234").resets.none { it.date == day })
+            runCatching { container.store.logout() }
+        }
+    }
 
     /** Standing orders against the real server: end in the future, end retroactively, delete. */
     @Test fun standingOrderEndToEnd() {

@@ -194,9 +194,19 @@ data class Person(
     @SerialName("_statusMeta") val statusMeta: StatusMeta = StatusMeta(),
     @SerialName("_overdueAmount") @Serializable(FlexDoubleSerializer::class) val overdueAmount: Double = 0.0,
     @SerialName("_currentStatus") val currentStatus: String? = null,
-    @SerialName("_currentBalance") @Serializable(FlexDoubleSerializer::class) val currentBalance: Double = 0.0
+    @SerialName("_currentBalance") @Serializable(FlexDoubleSerializer::class) val currentBalance: Double = 0.0,
+    // CALDERA: the fresh start the fee account counts from ('YYYY-MM-DD', else null) and what happened on that day -
+    // the credit taken along or the open fees dropped; "paid until" and the open amount look at the time since then
+    @SerialName("_feeReset") val feeReset: String? = null,
+    @SerialName("_feeCarriedOver") @Serializable(FlexDoubleSerializer::class) val feeCarriedOver: Double = 0.0,
+    @SerialName("_feeWrittenOff") @Serializable(FlexDoubleSerializer::class) val feeWrittenOff: Double = 0.0,
+    /** What this month costs at the member's status (CALDERA); null on older servers: the fee settings say it. */
+    @SerialName("_monthlyFee") val monthlyFee: Double? = null
 ) {
     val effectiveStatus: String get() = currentStatus ?: status
+
+    /** The fee of this month: the server's, else the one of the fee settings (servers before CALDERA). */
+    fun monthlyFee(fees: FeeSettings): Double = monthlyFee ?: fees.rateFor(effectiveStatus)
 }
 
 @Serializable

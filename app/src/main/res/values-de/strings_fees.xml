@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Beiträge im Zeitverlauf und Neustart der Beitragskonten (Server CALDERA) -->
+<resources>
+    <!-- Beiträge im Zeitverlauf -->
+    <string name="fees_desc">Was ein Monat kostet, je Status.</string>
+    <string name="fees_now">Diesen Monat</string>
+    <string name="fees_since">Seit %1$s</string>
+    <string name="fees_next">Ab %1$s: %2$s</string>
+    <string name="fees_change_btn">Beiträge ändern…</string>
+    <string name="fees_change_hint">Du wählst den Monat, ab dem eine Änderung gilt – die Monate davor behalten die alten Beiträge.</string>
+    <string name="fees_history_title">Beiträge im Zeitverlauf</string>
+    <string name="fees_from_start">Von Anfang an</string>
+    <string name="fees_log_set">%1$s hat die Beiträge ab %2$s festgelegt: %3$s</string>
+    <string name="fees_log_set_start">%1$s hat die Beiträge von Anfang an festgelegt: %2$s</string>
+    <string name="fees_log_removed">%1$s hat die Beiträge ab %2$s zurückgenommen</string>
+    <string name="fees_form_amounts">Beitrag im Monat</string>
+    <string name="fees_form_from">Gilt ab</string>
+    <string name="fees_form_month">Monat</string>
+    <string name="fees_form_year">Jahr</string>
+    <string name="fees_hint_start_until">Gilt für jeden Monat vor %1$s.</string>
+    <string name="fees_hint_start">Gilt für jeden Monat.</string>
+    <string name="fees_hint_taken">Ab %1$s gibt es schon Beiträge: Diese ersetzen sie.</string>
+    <string name="fees_hint_later">Vor %1$s ändert sich nichts.</string>
+    <string name="fees_hint_now">Gilt ab diesem Monat.</string>
+    <string name="fees_hint_back">Wirkt zurück: Auch die Monate seit %1$s kosten diese Beiträge.</string>
+    <string name="fees_change_title">Beiträge ändern</string>
+    <string name="fees_edit_title">Beiträge bearbeiten</string>
+    <string name="fees_remove_title">Diese Änderung zurücknehmen?</string>
+    <string name="fees_review_btn">Prüfen…</string>
+    <string name="fees_stretch_all">Jeder Monat</string>
+    <string name="fees_stretch_until">Bis %1$s</string>
+    <string name="fees_stretch_from">Ab %1$s</string>
+    <string name="fees_stretch_range">%1$s bis %2$s</string>
+    <string name="fees_fact_now">Zeigt sich sofort in den Konten.</string>
+    <string name="fees_fact_now_none">Heute ändert sich kein Konto.</string>
+    <string name="fees_fact_fresh_start">Wirkt vor den Neustart vom %1$s zurück: Was damals gestrichen oder übernommen wurde, wird neu berechnet.</string>
+    <string name="fees_saved">Beiträge gespeichert</string>
+    <string name="fees_removed">Änderung zurückgenommen</string>
+    <string name="fees_effects">Was passiert</string>
+
+    <!-- Was ein Neustart oder eine Änderung heute ist -->
+    <string name="fee_state_active">Gilt</string>
+    <string name="fee_state_planned">Geplant</string>
+    <string name="fee_state_replaced">Abgelöst</string>
+    <string name="fee_set_by">Festgelegt von %1$s</string>
+    <string name="fee_log_title">Änderungen</string>
+    <string name="fee_retry">Erneut versuchen</string>
+    <string name="fee_unknown_person">Unbekannt</string>
+    <string name="fee_readonly">Nur System-Admins können das ändern.</string>
+
+    <!-- Neustart -->
+    <string name="fee_reset_title">Neustart der Beiträge</string>
+    <string name="fee_reset_desc">Am gewählten Tag werden Rückstände gestrichen und Guthaben übernommen.</string>
+    <string name="fee_reset_date_label">Tag des Neustarts</string>
+    <string name="fee_reset_review_btn">Prüfen…</string>
+    <string name="fee_reset_form_hint">Vergangen oder zukünftig – du siehst vorher, was sich ändert.</string>
+    <string name="fee_reset_none">Bisher kein Neustart.</string>
+    <string name="fee_reset_log_set">%1$s hat einen Neustart zum %2$s festgelegt</string>
+    <string name="fee_reset_log_removed">%1$s hat den Neustart zum %2$s zurückgenommen</string>
+    <string name="fee_reset_set_title">Beiträge neu starten?</string>
+    <string name="fee_reset_remove_title">Neustart zurücknehmen?</string>
+    <string name="fee_reset_confirm_section">Bestätigen</string>
+    <string name="fee_reset_password_label">Dein Passwort</string>
+    <string name="fee_reset_type_label">Zur Bestätigung %1$s eintippen</string>
+    <string name="fee_reset_set_btn">Neu starten</string>
+    <string name="fee_take_back">Zurücknehmen</string>
+    <string name="fee_reset_fact_now">Gilt sofort.</string>
+    <string name="fee_reset_fact_later">Gilt ab dem %1$s – bis dahin können sich die Zahlen noch ändern.</string>
+    <string name="fee_reset_fact_fees">Beiträge zählen ab %1$s neu.</string>
+    <string name="fee_reset_fact_untouched">Zahlungen, Verlauf und Kassenstand bleiben, wie sie sind.</string>
+    <string name="fee_reset_undo_fact_all">Die Konten werden berechnet, als hätte es ihn nie gegeben.</string>
+    <string name="fee_reset_undo_fact_planned">Sein Tag ist noch nicht gekommen – noch wurde nichts gestrichen oder übernommen.</string>
+    <string name="fee_reset_undo_fact_ahead">Das übernommene Guthaben (%1$s) bleibt.</string>
+    <string name="fee_reset_type_day">Bitte tippe den Tag genau so ein, wie er angezeigt wird.</string>
+    <string name="fee_reset_saved">Neustart gespeichert</string>
+    <string name="fee_reset_removed">Neustart zurückgenommen</string>
+
+    <!-- Das Beitragskonto eines Mitglieds nach einem Neustart -->
+    <string name="fee_reset_chip">Neustart am %1$s</string>
+    <string name="fee_reset_timeline_title">Neustart</string>
+    <string name="fee_reset_carried">Guthaben übernommen: %1$s</string>
+    <string name="fee_reset_dropped">Rückstand gestrichen: %1$s</string>
+    <string name="fee_reset_even">Alles bezahlt</string>
+    <string name="fee_reset_payment_hint">Vor dem Neustart (%1$s): Das gleicht zuerst den alten Rückstand von %2$s aus.</string>
+
+    <!-- Die Zahlen eines Dialogs als Kacheln -->
+    <string name="fee_tile_dropped">Rückstand gestrichen</string>
+    <string name="fee_tile_carried">Guthaben übernommen</string>
+    <string name="fee_tile_more">mehr zu zahlen</string>
+    <string name="fee_tile_less">weniger zu zahlen</string>
+    <string name="fee_members_none">Niemand</string>
+    <plurals name="fee_members">
+        <item quantity="one">%d Mitglied</item>
+        <item quantity="other">%d Mitglieder</item>
+    </plurals>
+</resources>

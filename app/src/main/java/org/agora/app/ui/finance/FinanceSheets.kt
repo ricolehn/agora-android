@@ -93,6 +93,8 @@ internal fun BookPaymentSheet(person: Person, onDismiss: () -> Unit, onSaved: ()
     ) {
         AmountField(stringResource(R.string.amount), amount, { amount = it })
         DateField(stringResource(if (standingOrder) R.string.start_date else R.string.date), date, { date = it })
+        // Dated before the member's fresh start: it first pays off the open fees dropped then (CALDERA)
+        FeeResetNote(if (standingOrder) null else feeResetPaymentHint(person, date))
         AgoraTextField(note, { note = it }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
         SheetToggleRow(stringResource(R.string.is_standing_order), standingOrder, { standingOrder = it }, icon = Icons.Outlined.Autorenew)
     }

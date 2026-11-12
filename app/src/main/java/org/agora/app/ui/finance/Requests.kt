@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -67,6 +68,7 @@ import kotlinx.serialization.json.jsonArray
 import org.agora.app.R
 import org.agora.app.data.RequestDecision
 import org.agora.app.data.model.FinanceRequest
+import org.agora.app.data.model.Person
 import org.agora.app.data.model.parseAmount
 import org.agora.app.ui.components.AgoraCard
 import org.agora.app.ui.components.AgoraSheet
@@ -314,10 +316,11 @@ fun MyRequestsCard(requests: List<FinanceRequest>, onOpen: (FinanceRequest) -> U
 
 /**
  * One request with all details: amount hero, sender, purpose / note, date of receipt, state, receipts. Treasurers
- * decide on pending requests here (approve, or reject with an optional reason the member sees).
+ * decide on pending requests here (approve, or reject with an optional reason the member sees). [person]: the member
+ * the request is about, for what an open payment dated before their fresh start does.
  */
 @Composable
-fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: () -> Unit, onDecided: () -> Unit) {
+fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: () -> Unit, onDecided: () -> Unit, person: Person? = null) {
     val container = LocalContainer.current
     val locale = Dates.locale(LocalContext.current)
     val sheet = rememberSheetController(onDismiss)
@@ -333,6 +336,12 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
     val unreadableAmountMsg = stringResource(R.string.request_amount_unreadable)
     val snackbar = LocalSnackbar.current
     val decide = canDecide && request.status == "pending"
+    // The member of an open payment request, for what it does next to their fresh start: given, or (treasurers on the
+    // start page) fetched - a member's own record comes along
+    val openPayment = request.type == "payment" && request.status == "pending"
+    val member by produceState(person, request.personId) {
+        if (person == null && openPayment && canDecide && request.personId.isNotBlank()) value = runCatching { container.repo.person(request.personId) }.getOrNull()
+    }
     val name = request.personName.ifBlank { "–" }
     // Also when it was decided meanwhile: the list is reloaded and says so
     fun submit(doneMsg: String, decision: suspend () -> RequestDecision) = runner.run {
@@ -416,6 +425,8 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
                 }
             }
         }
+        // An open payment request dated before the member's fresh start: what approving it does (and does not) for them
+        if (openPayment) FeeResetNote(feeResetPaymentHint(member, request.field("date")))
         val receipts = request.receipts()
         if (receipts.isNotEmpty()) CapsLabel(stringResource(R.string.receipts))
         receipts.forEach { file ->

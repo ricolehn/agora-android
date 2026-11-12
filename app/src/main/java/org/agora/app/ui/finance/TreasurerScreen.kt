@@ -322,7 +322,8 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
     selectedTx?.let { TransactionSheet(it) { selectedTx = null } }
     if (reportOpen) ReportSheet(state.people, onDismiss = { reportOpen = false })
     openRequest?.let { request ->
-        RequestDetailSheet(request, canDecide = canManage, onDismiss = { openRequest = null }, onDecided = { vm.reload(); store.refreshInBackground() })
+        RequestDetailSheet(request, canDecide = canManage, onDismiss = { openRequest = null }, onDecided = { vm.reload(); store.refreshInBackground() },
+            person = state.people.firstOrNull { it.id == request.personId })
     }
     entryKind?.let { kind -> FinanceEntrySheet(kind, onDismiss = { entryKind = null }, onSaved = vm::reload) }
 }

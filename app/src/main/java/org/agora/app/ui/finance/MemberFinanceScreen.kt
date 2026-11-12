@@ -186,7 +186,7 @@ fun MemberFinanceScreen(user: User, contentPadding: PaddingValues) {
         NewRequestSheet(user, person, type, onDismiss = { requestType = null })
     }
     openRequest?.let { request ->
-        RequestDetailSheet(request, canDecide = false, onDismiss = { openRequest = null }, onDecided = {})
+        RequestDetailSheet(request, canDecide = false, person = person, onDismiss = { openRequest = null }, onDecided = {})
     }
 }
 
@@ -288,6 +288,7 @@ private fun NewRequestSheet(user: User, person: Person?, initialType: String, on
         if (type == "status") DropdownField(stringResource(R.string.new_status), MEMBER_STATUSES, newStatus, { statusLabel(it) }, { newStatus = it })
         else AmountField(stringResource(R.string.amount), amount, { amount = it })
         DateField(stringResource(if (type == "payment" && standingOrder) R.string.start_date else R.string.date), date, { date = it })
+        if (type == "payment" && !standingOrder) FeeResetNote(feeResetPaymentHint(person, date))
         if (type == "payment") {
             AgoraTextField(note, { note = it }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
             SheetToggleRow(stringResource(R.string.is_standing_order), standingOrder, { standingOrder = it }, icon = Icons.Outlined.Autorenew)
