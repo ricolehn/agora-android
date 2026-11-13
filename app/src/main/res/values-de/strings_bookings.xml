@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gebuchte Einträge des Verlaufs bearbeiten und löschen (Kassenwarte), wie der Bearbeiten-Dialog der Web-App -->
+<resources>
+    <string name="booking_edit_payment">Zahlung bearbeiten</string>
+    <string name="booking_edit_donation">Spende bearbeiten</string>
+    <string name="booking_edit_expense">Ausgabe bearbeiten</string>
+    <string name="booking_delete">Eintrag löschen</string>
+    <string name="booking_delete_confirm">Soll dieser Eintrag wirklich gelöscht werden? Dies kann nicht rückgängig gemacht werden.</string>
+    <string name="booking_gone">Dieser Eintrag wurde inzwischen geändert oder gelöscht – der Verlauf zeigt jetzt den aktuellen Stand.</string>
+    <string name="toast_payment_updated">Zahlung aktualisiert</string>
+    <string name="toast_donation_updated">Spende aktualisiert</string>
+    <string name="toast_expense_updated">Ausgabe aktualisiert</string>
+    <string name="toast_payment_deleted">Zahlung gelöscht</string>
+    <string name="toast_donation_deleted">Spende gelöscht</string>
+    <string name="toast_expense_deleted">Ausgabe gelöscht</string>
+</resources>

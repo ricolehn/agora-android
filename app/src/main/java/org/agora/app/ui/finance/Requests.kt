@@ -78,7 +78,6 @@ import org.agora.app.ui.components.ButtonProgress
 import org.agora.app.ui.components.CapsLabel
 import org.agora.app.ui.components.IconTile
 import org.agora.app.ui.components.LocalContainer
-import org.agora.app.ui.components.LocalSnackbar
 import org.agora.app.ui.components.PrimaryButton
 import org.agora.app.ui.components.SecondaryButton
 import org.agora.app.ui.components.SecondaryStyle
@@ -334,7 +333,6 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
     val rejectedMsg = stringResource(R.string.toast_request_rejected)
     val alreadyDecidedMsg = stringResource(R.string.toast_request_already_decided)
     val unreadableAmountMsg = stringResource(R.string.request_amount_unreadable)
-    val snackbar = LocalSnackbar.current
     val decide = canDecide && request.status == "pending"
     // The member of an open payment request, for what it does next to their fresh start: given, or (treasurers on the
     // start page) fetched - a member's own record comes along
@@ -343,7 +341,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
         if (person == null && openPayment && canDecide && request.personId.isNotBlank()) value = runCatching { container.repo.person(request.personId) }.getOrNull()
     }
     val name = request.personName.ifBlank { "–" }
-    // Also when it was decided meanwhile: the list is reloaded and says so
+    // Also when it was decided meanwhile: the list is reloaded and says so (the message stays when the sheet closes)
     fun submit(doneMsg: String, decision: suspend () -> RequestDecision) = runner.run {
         val message = when (decision()) {
             RequestDecision.DONE -> doneMsg
@@ -352,7 +350,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
         }
         onDecided()
         sheet.dismiss()
-        snackbar.showSnackbar(message)
+        runner.show(message)
     }
 
     AgoraSheet(

@@ -2,6 +2,7 @@ package org.agora.app.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -235,7 +236,11 @@ data class Transaction(
     val personUid: String? = null,
     @Serializable(FlexStringSerializer::class) val personId: String = "",
     val receipt: String? = null,
-    val isAuto: Boolean = false
+    val isAuto: Boolean = false,
+    /** A payment's place in the member's list: finds old payments without an id again when one is edited. */
+    @Serializable(FlexIntSerializer::class) val paymentIndex: Int = -1,
+    /** The entry as it is stored (amounts and dates as written), to edit or delete exactly this one. */
+    val payment: JsonElement? = null
 ) {
     val isIncome: Boolean get() = type != "exp"
 }

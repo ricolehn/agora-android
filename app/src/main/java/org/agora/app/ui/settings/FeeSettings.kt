@@ -94,7 +94,6 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
-import java.util.Locale
 
 // Settings -> Monthly fees (server CALDERA): the fees over time and the fresh start of the fee accounts, like the web
 // app's fees page. Everyone who may open the page reads them; only system admins change them, always in two steps:
@@ -422,7 +421,7 @@ private fun FeeChangeSheet(plan: FeePlan, dialog: FeeDialog, onDismiss: () -> Un
     // New fees count from next month unless the admin says otherwise: nobody is behind for a month that has begun
     var month by rememberSaveable { mutableStateOf(dialog.entry?.from ?: FeeLogic.addMonths(plan.month, 1)) }
     val startFees = dialog.entry?.fees ?: FeeLogic.feesOfMonth(plan, month)
-    val amounts = FEE_STATUSES.map { status -> rememberSaveable(status) { mutableStateOf(amountText(startFees[status], locale)) } }
+    val amounts = FEE_STATUSES.map { status -> rememberSaveable(status) { mutableStateOf(Money.typed(startFees[status] ?: 0.0, locale)) } }
     // Amounts the admin typed stay when another month is chosen; the others take that month's fees along
     val touched = remember { mutableStateOf(setOf<String>()) }
     var impact by remember { mutableStateOf(dialog.impact) }
@@ -433,7 +432,7 @@ private fun FeeChangeSheet(plan: FeePlan, dialog: FeeDialog, onDismiss: () -> Un
         month = next
         if (dialog.adding) {
             val fees = FeeLogic.feesOfMonth(plan, next)
-            FEE_STATUSES.forEachIndexed { i, status -> if (status !in touched.value) amounts[i].value = amountText(fees[status], locale) }
+            FEE_STATUSES.forEachIndexed { i, status -> if (status !in touched.value) amounts[i].value = Money.typed(fees[status] ?: 0.0, locale) }
         }
     }
     val typed = FEE_STATUSES.indices.map { parseTypedAmount(amounts[it].value) }
@@ -530,13 +529,6 @@ private fun FeeChangeSheet(plan: FeePlan, dialog: FeeDialog, onDismiss: () -> Un
             )
         } else FeeChangeReview(review)
     }
-}
-
-/** An amount as it is typed: "45,5" / "45.5". */
-private fun amountText(amount: Double?, locale: Locale): String {
-    val value = amount ?: 0.0
-    val text = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.2f", value).trimEnd('0')
-    return if (locale.language == "en") text else text.replace('.', ',')
 }
 
 /** The second step: which months cost something else, who owes more or less today (as tiles), and a few short lines. */

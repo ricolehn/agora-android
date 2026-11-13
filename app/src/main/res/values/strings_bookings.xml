@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Editing and deleting booked entries of the history (treasurers), like the web app's edit dialog -->
+<resources>
+    <string name="booking_edit_payment">Edit payment</string>
+    <string name="booking_edit_donation">Edit donation</string>
+    <string name="booking_edit_expense">Edit expense</string>
+    <string name="booking_delete">Delete entry</string>
+    <string name="booking_delete_confirm">Do you really want to delete this entry? This cannot be undone.</string>
+    <string name="booking_gone">This entry was changed or deleted in the meantime – the history now shows the current state.</string>
+    <string name="toast_payment_updated">Payment updated</string>
+    <string name="toast_donation_updated">Donation updated</string>
+    <string name="toast_expense_updated">Expense updated</string>
+    <string name="toast_payment_deleted">Payment deleted</string>
+    <string name="toast_donation_deleted">Donation deleted</string>
+    <string name="toast_expense_deleted">Expense deleted</string>
+</resources>
