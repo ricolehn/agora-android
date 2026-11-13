@@ -98,7 +98,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -136,7 +135,6 @@ import org.agora.app.ui.components.EmptyState
 import org.agora.app.ui.components.GradientCard
 import org.agora.app.ui.components.LoadingBox
 import org.agora.app.ui.components.LocalContainer
-import org.agora.app.ui.components.LocalSnackbar
 import org.agora.app.ui.components.Pill
 import org.agora.app.ui.components.SectionTitle
 import org.agora.app.ui.components.TextInputSheet
@@ -231,8 +229,6 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
     var openRequest by remember { mutableStateOf<FinanceRequest?>(null) }
     var reportOpen by rememberSaveable { mutableStateOf(false) }
     val store = LocalContainer.current.store
-    val snackbar = LocalSnackbar.current
-    val scope = rememberCoroutineScope()
     // Expenses show the issuer's picture: their uid from the member records by name (like the web)
     val uidByName = remember(state.people) { state.people.filter { it.uid.isNotBlank() }.associate { it.name.trim().lowercase() to it.uid } }
     var entryKind by rememberSaveable { mutableStateOf<String?>(null) }
@@ -327,14 +323,10 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
 
     selectedTx?.let { tx -> TransactionSheet(tx, canEdit = canManage, onEdit = { editingTx = tx }, onDismiss = { selectedTx = null }) }
     // Treasurers change or delete a booking from its details, like the web's edit button; the member's own fee card
-    // follows when it was one of their payments. Said from here: the sheet closes right away
+    // follows when it was one of their payments
     editingTx?.let { tx ->
         EditBookingSheet(tx, person = state.people.firstOrNull { it.id == tx.personId }, onDismiss = { editingTx = null },
-            onChanged = { message ->
-                vm.reload()
-                store.refreshInBackground()
-                scope.launch { snackbar.showSnackbar(message) }
-            })
+            onChanged = { vm.reload(); store.refreshInBackground() })
     }
     if (reportOpen) ReportSheet(state.people, onDismiss = { reportOpen = false })
     openRequest?.let { request ->

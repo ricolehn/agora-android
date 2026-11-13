@@ -73,17 +73,38 @@ import org.agora.app.ui.theme.Agora
 
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("AppContainer not provided") }
 val LocalSnackbar = staticCompositionLocalOf { SnackbarHostState() }
+/**
+ * The scope messages are shown from: that of the app's window, so a message stays when the sheet or page that shows it
+ * closes (null: the caller's own scope).
+ */
+val LocalMessageScope = staticCompositionLocalOf<CoroutineScope?> { null }
 /** Who has a profile picture, with its version ([org.agora.app.data.AppData.pictureVersions]); null: unknown. */
 val LocalPictureVersions = compositionLocalOf<Map<String, Long>?> { null }
 
 @Composable
 fun ProvideAppLocals(container: AppContainer, snackbar: SnackbarHostState, content: @Composable () -> Unit) =
-    CompositionLocalProvider(LocalContainer provides container, LocalSnackbar provides snackbar, content = content)
+    CompositionLocalProvider(
+        LocalContainer provides container, LocalSnackbar provides snackbar, LocalMessageScope provides rememberCoroutineScope(), content = content
+    )
 
-/** Runs a suspending action, tracks `busy` and reports errors (German server messages) as snackbar. */
-class ActionRunner(private val scope: CoroutineScope, private val snackbar: SnackbarHostState, private val fallbackError: String) {
+/**
+ * Runs a suspending action, tracks `busy` and reports the outcome as snackbar (errors: the server's message). The
+ * message is shown from [messages], the scope of the app's window: most actions close their sheet or leave their page,
+ * which takes their own coroutines with it - a message shown from there vanished with the sheet.
+ */
+class ActionRunner(
+    private val scope: CoroutineScope,
+    private val messages: CoroutineScope,
+    private val snackbar: SnackbarHostState,
+    private val fallbackError: String
+) {
     var busy by mutableStateOf(false)
         private set
+
+    /** Shows [text] in the app's snackbar; it stays when the sheet or page that asked closes. */
+    fun show(text: String) {
+        messages.launch { snackbar.showSnackbar(text) }
+    }
 
     fun run(successMessage: String? = null, onError: (String) -> Unit = {}, block: suspend () -> Unit) {
         if (busy) return
@@ -91,14 +112,15 @@ class ActionRunner(private val scope: CoroutineScope, private val snackbar: Snac
             busy = true
             try {
                 block()
-                successMessage?.let { snackbar.showSnackbar(it) }
+                successMessage?.let(::show)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 val message = (e as? ApiException)?.message?.takeIf { it.isNotBlank() } ?: fallbackError
                 onError(message)
-                snackbar.showSnackbar(message)
+                show(message)
             } finally {
+                // Done when the action is: not only once the message is gone again (the button kept spinning meanwhile)
                 busy = false
             }
         }
@@ -108,9 +130,10 @@ class ActionRunner(private val scope: CoroutineScope, private val snackbar: Snac
 @Composable
 fun rememberActionRunner(): ActionRunner {
     val scope = rememberCoroutineScope()
+    val messages = LocalMessageScope.current ?: scope
     val snackbar = LocalSnackbar.current
     val fallback = stringResource(R.string.error_generic)
-    return remember(scope, snackbar) { ActionRunner(scope, snackbar, fallback) }
+    return remember(scope, messages, snackbar) { ActionRunner(scope, messages, snackbar, fallback) }
 }
 
 /** `.card`: white surface floating on the page: 20px radius, hairline border and a soft, slightly deep shadow. */

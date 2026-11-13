@@ -216,11 +216,11 @@ fun FinanceEntrySheet(kind: String, onDismiss: () -> Unit, onSaved: () -> Unit) 
 /**
  * Treasurer: change a booked entry of the history - amount, date, note or description, the donor of a donation or who
  * issued an expense and its receipts - or delete it, like the web app's edit dialog. [person]: the member of a
- * payment, for what a date before their fresh start does. [onChanged]: saved or deleted (or found changed meanwhile),
- * with what to tell the treasurer - by the screen, as this sheet closes (a message shown from here would go with it).
+ * payment, for what a date before their fresh start does. [onChanged]: saved or deleted, or found gone meanwhile - the
+ * history and the balance are reloaded.
  */
 @Composable
-internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () -> Unit, onChanged: (message: String) -> Unit) {
+internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () -> Unit, onChanged: () -> Unit) {
     val container = LocalContainer.current
     val context = LocalContext.current
     val locale = Dates.locale(context)
@@ -249,8 +249,8 @@ internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () ->
     val value = parseTypedAmount(amount)
     val valid = value != null && (value > 0 || amount == initialAmount) && Dates.parse(date) != null && (isPayment || name.isNotBlank())
 
-    // Also when the entry was changed or deleted meanwhile (nothing is written then): the history is reloaded and says so.
-    // Other errors keep the sheet open with the message.
+    // Also when the entry is gone meanwhile (nothing is written then): the history is reloaded and says so. Other errors
+    // keep the sheet open with the message.
     fun submit(doneMsg: String, action: suspend () -> Unit) = runner.run {
         val message = try {
             action()
@@ -258,8 +258,9 @@ internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () ->
         } catch (e: Bookings.GoneException) {
             goneMsg
         }
-        onChanged(message)
+        onChanged()
         sheet.dismiss()
+        runner.show(message)
     }
 
     AgoraSheet(
