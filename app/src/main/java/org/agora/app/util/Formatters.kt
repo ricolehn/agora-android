@@ -20,6 +20,12 @@ object Money {
     private val euro = NumberFormat.getCurrencyInstance(Locale.GERMANY)
     fun format(amount: Double): String = euro.format(amount)
     fun signed(amount: Double, income: Boolean): String = (if (income) "+ " else "- ") + euro.format(kotlin.math.abs(amount))
+
+    /** An amount as it is typed into a field, to edit it: "45", "45,5" / "45.5" (no thousands separators). */
+    fun typed(amount: Double, locale: Locale): String {
+        val text = if (amount % 1.0 == 0.0) amount.toLong().toString() else String.format(Locale.US, "%.2f", amount).trimEnd('0')
+        return if (locale.language == "en") text else text.replace('.', ',')
+    }
 }
 
 object Dates {

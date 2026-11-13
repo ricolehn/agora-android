@@ -15,7 +15,7 @@ It talks to the same backend as the web app (PWA) and mirrors its screens and ru
 |---|---|
 | **Start** | Greeting with date, overdue or soon-due membership fee (nothing while all is paid), open duty requests with *Accept* / *Decline*, *Up next* (the next five appointments and events as a swipeable row), your upcoming duties, unread mentoring messages |
 | **Finances (members)** | Fee status with monthly rate (the fee of this month as the server works it out, server CALDERA), requests (payment, standing order, status change, expense with receipts), request status, payment history. After a fresh start of the fee accounts: the chip *Fresh start on …* for 60 days, and the day as a marked point in the history with what happened then (credit carried over / open fees dropped / all paid up) – the entries below it, the settled time before, quieter. A payment request dated before the fresh start says that it first pays off the old arrears |
-| **Finances (treasurers)** | Cash balance, open requests (approve / reject with reason), searchable booking history with receipts, member list, member detail with payment booking, standing orders and status changes, record donations and expenses. Booking a payment – or deciding on a payment request – dated before a member's fresh start says what it does: it first pays off the open fees dropped then |
+| **Finances (treasurers)** | Cash balance, open requests (approve / reject with reason), searchable booking history with receipts, member list, member detail with payment booking, standing orders and status changes, record donations and expenses. Every booking of the history opens with its details; finance managers *Edit* it there like in the web app – amount, date, note or description, the donor or who issued an expense and its receipts (remove, add pictures) – or delete it after a confirmation. Booking a payment – deciding on a payment request, or moving a payment's date – before a member's fresh start says what it does: it first pays off the open fees dropped then |
 | **Events** | *Appointments* and *Events* tabs with the PWA's filter rules, search, highlight/cover cards, detail page with registration / waiting list, attendee list (guests without an account marked, their contact for the event's editors), duty roster (answer requests, managers add tasks, assign people or groups, remove entries), create / edit / delete events incl. cover image, target groups and recurring appointments |
 | **Sharing** | Share icon right of every event's title and organiser: a sheet with the event's link to copy or to hand to Android's share sheet, and, for those who may edit the event, the switch *Visible without an account* (server 3.2 or newer) that lets people without an account open the link and sign up as guests in the browser |
 | **Mentoring** | Conversations with unread badges, chat (live polling while open), end / reopen, find mentors and contact anonymously, mentor application / profile, review of applications for mentoring managers |
@@ -30,6 +30,14 @@ and person records carry what the server worked out (`_monthlyFee`, `_feeReset`,
 Changes go through the server's preview first (`POST /api/admin/fees/preview`, `GET /api/admin/fee-reset/preview`) and are
 saved with what was checked (`POST /api/admin/fees[/remove]` with the preview's `version`, `POST /api/admin/fee-reset[/remove]`
 with the day twice and the admin's password). Older servers answer neither: the app then shows the fee settings as before.
+
+Bookings: an edited or deleted booking is looked up again in what is stored now, as the web app does (`saveEditedPayment`):
+a payment in the member's record by its id (old ones without an id by their place, while it still holds the date and
+amount that were opened), a donation or an expense in its list. Donations and expenses are saved with the version of the
+list they were read with (`GET /api/db?…&raw=1`, `version` with `PUT /api/db`): a list someone else saved meanwhile is
+read and changed again instead of overwritten, and a deleted entry really goes. Servers that know no version save the
+list as before. A booking that is not there any more (deleted meanwhile, or an old one without an id that changed) is
+left alone, and the history says so and shows what is stored now.
 
 Live updates: while the app is visible it listens to the server's `/api/stream` (SSE) and refreshes what changed, just like
 the PWA: events, mentoring and the media library on their own, prayer requests, songs and the open folder only on their

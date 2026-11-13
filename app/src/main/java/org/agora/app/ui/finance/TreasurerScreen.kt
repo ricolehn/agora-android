@@ -98,6 +98,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -135,12 +136,14 @@ import org.agora.app.ui.components.EmptyState
 import org.agora.app.ui.components.GradientCard
 import org.agora.app.ui.components.LoadingBox
 import org.agora.app.ui.components.LocalContainer
+import org.agora.app.ui.components.LocalSnackbar
 import org.agora.app.ui.components.Pill
 import org.agora.app.ui.components.SectionTitle
 import org.agora.app.ui.components.TextInputSheet
 import org.agora.app.ui.components.UserAvatar
 import org.agora.app.ui.components.containerViewModel
 import org.agora.app.ui.components.rememberActionRunner
+import org.agora.app.ui.components.rememberSheetController
 import org.agora.app.ui.theme.Agora
 import org.agora.app.util.Dates
 import org.agora.app.util.Money
@@ -224,9 +227,12 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
     var tab by rememberSaveable { mutableStateOf(0) }
     var peopleFilter by rememberSaveable { mutableStateOf("") }
     var selectedTx by remember { mutableStateOf<Transaction?>(null) }
+    var editingTx by remember { mutableStateOf<Transaction?>(null) }
     var openRequest by remember { mutableStateOf<FinanceRequest?>(null) }
     var reportOpen by rememberSaveable { mutableStateOf(false) }
     val store = LocalContainer.current.store
+    val snackbar = LocalSnackbar.current
+    val scope = rememberCoroutineScope()
     // Expenses show the issuer's picture: their uid from the member records by name (like the web)
     val uidByName = remember(state.people) { state.people.filter { it.uid.isNotBlank() }.associate { it.name.trim().lowercase() to it.uid } }
     var entryKind by rememberSaveable { mutableStateOf<String?>(null) }
@@ -319,7 +325,17 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
         )
     }
 
-    selectedTx?.let { TransactionSheet(it) { selectedTx = null } }
+    selectedTx?.let { tx -> TransactionSheet(tx, canEdit = canManage, onEdit = { editingTx = tx }, onDismiss = { selectedTx = null }) }
+    // Treasurers change or delete a booking from its details, like the web's edit button; the member's own fee card
+    // follows when it was one of their payments. Said from here: the sheet closes right away
+    editingTx?.let { tx ->
+        EditBookingSheet(tx, person = state.people.firstOrNull { it.id == tx.personId }, onDismiss = { editingTx = null },
+            onChanged = { message ->
+                vm.reload()
+                store.refreshInBackground()
+                scope.launch { snackbar.showSnackbar(message) }
+            })
+    }
     if (reportOpen) ReportSheet(state.people, onDismiss = { reportOpen = false })
     openRequest?.let { request ->
         RequestDetailSheet(request, canDecide = canManage, onDismiss = { openRequest = null }, onDecided = { vm.reload(); store.refreshInBackground() },
@@ -364,15 +380,24 @@ private fun TransactionRow(tx: Transaction, avatarUid: String?, onClick: () -> U
     }
 }
 
+/** A booking's details; [canEdit]: treasurers get "Edit" ([onEdit] opens the edit sheet once this one is closed). */
 @Composable
-private fun TransactionSheet(tx: Transaction, onDismiss: () -> Unit) {
+private fun TransactionSheet(tx: Transaction, canEdit: Boolean, onEdit: () -> Unit, onDismiss: () -> Unit) {
     val container = LocalContainer.current
     val locale = Dates.locale(LocalContext.current)
+    val sheet = rememberSheetController(onDismiss)
     val receipts = receiptFiles(tx.receipt)
     val (icon, tint) = txTypeStyle(tx)
     val typeLabel = stringResource(when (tx.type) { "exp" -> R.string.tx_type_expense; "don" -> R.string.tx_type_donation; else -> R.string.tx_type_payment })
     val amountColor = if (tx.isIncome) Agora.colors.success else Agora.colors.danger
-    AgoraSheet(title = tx.who, subtitle = typeLabel, icon = icon, iconTint = tint, onDismiss = onDismiss) {
+    AgoraSheet(
+        title = tx.who, subtitle = typeLabel, icon = icon, iconTint = tint, onDismiss = onDismiss, controller = sheet,
+        actions = if (!canEdit) null else ({
+            SecondaryButton(onClick = { sheet.dismiss(onEdit) }, modifier = Modifier.weight(1f).height(46.dp)) {
+                ButtonLabel(stringResource(R.string.edit), Icons.Outlined.Edit)
+            }
+        })
+    ) {
         // Amount hero tinted like the transaction type, date and standing-order flag below it
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(amountColor.copy(alpha = 0.08f)).padding(vertical = 18.dp),
@@ -399,7 +424,7 @@ private fun TransactionSheet(tx: Transaction, onDismiss: () -> Unit) {
 
 /** Type tile of a transaction: payment green, donation purple, expense red. */
 @Composable
-private fun txTypeStyle(tx: Transaction): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color> = when (tx.type) {
+internal fun txTypeStyle(tx: Transaction): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color> = when (tx.type) {
     "exp" -> Icons.Outlined.Euro to Agora.colors.danger
     "don" -> Icons.Outlined.FavoriteBorder to Color(0xFF8B5CF6)
     else -> Icons.Outlined.Person to Agora.colors.success

@@ -47,6 +47,7 @@ import org.agora.app.data.model.NotificationKinds
 import org.agora.app.data.model.NotificationPrefs
 import org.agora.app.data.model.Person
 import org.agora.app.data.model.StatusResponse
+import org.agora.app.data.model.Transaction
 import org.agora.app.data.model.TransactionPage
 import org.agora.app.data.model.UploadResponse
 import org.agora.app.data.model.User
@@ -84,6 +85,18 @@ enum class RequestDecision {
     /** The amount of the request cannot be read: it is not booked as 0 €, the request stays open. */
     UNREADABLE_AMOUNT
 }
+
+/**
+ * What a booked entry of the history is changed to. [name]: the donor of a donation or who issued an expense (null:
+ * a payment, whose member stays); [receipts]: the files of an expense (null: they stay as they are stored).
+ */
+data class BookingEdit(
+    val amount: Double,
+    val date: String,
+    val description: String,
+    val name: String? = null,
+    val receipts: List<String>? = null
+)
 
 class AgoraRepository(val api: AgoraApi) {
     private val json get() = api.json
@@ -367,19 +380,33 @@ class AgoraRepository(val api: AgoraApi) {
         }
     }
 
-    /** Donations/expenses are stored as whole lists: read, change, write back ([change] null: nothing to write). */
+    /**
+     * Donations/expenses are stored as whole lists: read the list with its version, change it, write it back with that
+     * version ([change] null: nothing to write), like the PWA's runTransaction. A list someone else saved meanwhile is
+     * refused (409) and read and changed again. Without the version the server keeps entries the app may not have
+     * seen, so a deleted entry could stay; servers from before the version ignore it and save the list as before.
+     */
     private suspend fun mutateCollection(name: String, change: (List<JsonElement>) -> List<JsonElement>?) {
-        val current = api.get<JsonElement>("/api/db", mapOf("path" to name))
-        val list = when (current) {
-            is JsonArray -> current.toList()
-            is JsonObject -> current.values.toList()
-            else -> emptyList()
-        }.filterNot { it is JsonNull }
-        val next = change(list) ?: return
-        api.put<JsonObject>("/api/db", buildJsonObject {
-            put("path", name)
-            put("value", JsonArray(next))
-        })
+        repeat(3) { attempt ->
+            val raw = api.get<JsonObject>("/api/db", mapOf("path" to name, "raw" to "1"))
+            val list = when (val current = raw["value"]) {
+                is JsonArray -> current.toList()
+                is JsonObject -> current.values.toList()
+                else -> emptyList()
+            }.filterNot { it is JsonNull }
+            val next = change(list) ?: return
+            val version = (raw["version"] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.contentOrNull
+            try {
+                api.put<JsonObject>("/api/db", buildJsonObject {
+                    put("path", name)
+                    put("value", JsonArray(next))
+                    if (!version.isNullOrEmpty()) put("version", version)
+                })
+                return
+            } catch (e: ApiException) {
+                if (e.status != 409 || attempt == 2) throw e
+            }
+        }
     }
 
     suspend fun bookPayment(personId: String, amount: Double, date: String, note: String, standingOrder: Boolean) =
@@ -429,6 +456,51 @@ class AgoraRepository(val api: AgoraApi) {
             if (receipts.isEmpty()) put("receipt", JsonNull)
             else put("receipt", json.encodeToString(ListSerializer(String.serializer()), receipts))
         } }
+
+    /**
+     * Changes a booked entry of the history (treasurers), like the PWA's saveEditedPayment: a payment in the member's
+     * record (the paid total follows), a donation or an expense in its list. Throws [Bookings.GoneException] when the
+     * entry is not there any more (deleted since the history was loaded, or an old one without an id that changed):
+     * nothing is written then.
+     */
+    suspend fun editBooking(tx: Transaction, edit: BookingEdit) {
+        val original = tx.payment as? JsonObject
+        when (tx.type) {
+            "pay" -> mutatePerson(tx.personId) { Bookings.editPayment(it, tx.id, tx.paymentIndex, original, edit.amount, edit.date, edit.description) }
+            "don" -> mutateCollection("donations") { list ->
+                Bookings.editEntry(list, tx.id, original, buildMap {
+                    put("amount", JsonPrimitive(edit.amount))
+                    put("date", JsonPrimitive(edit.date))
+                    put("description", JsonPrimitive(edit.description))
+                    edit.name?.let { put("name", JsonPrimitive(it)) }
+                })
+            }
+            "exp" -> mutateCollection("expenses") { list ->
+                Bookings.editEntry(list, tx.id, original, buildMap {
+                    put("amount", JsonPrimitive(edit.amount))
+                    put("date", JsonPrimitive(edit.date))
+                    put("description", JsonPrimitive(edit.description))
+                    edit.name?.let { put("issuer", JsonPrimitive(it)) }
+                    // As the PWA writes them: the files as a JSON list in a text, none as an empty text
+                    edit.receipts?.let { files ->
+                        put("receipt", JsonPrimitive(if (files.isEmpty()) "" else json.encodeToString(ListSerializer(String.serializer()), files)))
+                    }
+                })
+            }
+            else -> throw Bookings.GoneException()
+        }
+    }
+
+    /** Deletes a booked entry of the history (treasurers), like the PWA's confirmDeleteRecordedPayment ([Bookings.GoneException] as above). */
+    suspend fun deleteBooking(tx: Transaction) {
+        val original = tx.payment as? JsonObject
+        when (tx.type) {
+            "pay" -> mutatePerson(tx.personId) { Bookings.removePayment(it, tx.id, tx.paymentIndex, original) }
+            "don" -> mutateCollection("donations") { Bookings.removeEntry(it, tx.id, original) }
+            "exp" -> mutateCollection("expenses") { Bookings.removeEntry(it, tx.id, original) }
+            else -> throw Bookings.GoneException()
+        }
+    }
 
     /** Whether the request is still open on the server: the list on screen can be older than a decision made elsewhere. */
     private suspend fun isPending(requestId: String): Boolean = requestId.isNotBlank() &&
@@ -659,6 +731,10 @@ private fun JsonObject.withTotal(added: Double): JsonObject {
     return JsonObject(this + ("totalPaid" to JsonPrimitive(total + added)))
 }
 
+/** What a member's [payments] add up to (amounts as stored: numbers, or texts like "50,00" from older versions). */
+private fun paidTotal(payments: List<JsonElement>): Double =
+    payments.sumOf { ((it as? JsonObject)?.get("amount") as? JsonPrimitive)?.contentOrNull?.let(::parseAmount) ?: 0.0 }
+
 /** Ending / removing standing orders, ported from the PWA (saveStandingOrderEnd) so both clients write identical records. */
 object StandingOrders {
     private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
@@ -687,11 +763,10 @@ object StandingOrders {
                 else -> JsonObject(order + ("endDate" to JsonPrimitive(endDate)))
             }
         }
-        val total = payments.sumOf { ((it as? JsonObject)?.get("amount") as? JsonPrimitive)?.contentOrNull?.let(::parseAmount) ?: 0.0 }
         return JsonObject(person + mapOf(
             "payments" to JsonArray(payments),
             "standingOrders" to JsonArray(orders),
-            "totalPaid" to JsonPrimitive(total)
+            "totalPaid" to JsonPrimitive(paidTotal(payments))
         ))
     }
 
@@ -807,5 +882,88 @@ object RequestBookings {
     fun withoutExpense(expenses: List<JsonElement>, request: FinanceRequest): List<JsonElement>? {
         val id = id(request)
         return if (expenses.hasId(id)) expenses.withoutId(id) else null
+    }
+}
+
+/**
+ * Editing and deleting a booked entry of the history, ported from the PWA (saveEditedPayment,
+ * confirmDeleteRecordedPayment, replaceById and findPaymentIndex in assets/finance.js) so both clients change the same
+ * entry the same way. The entry is looked up again in what is stored now, not by where it was when the history was
+ * loaded: another booking meanwhile must not make it change or delete a different one.
+ */
+object Bookings {
+    /** The entry was changed or deleted since the history was loaded: nothing is written. */
+    class GoneException : Exception("The entry was changed or deleted in the meantime")
+
+    /** The id as the PWA compares it (String(id)); null for none (missing, null or empty). */
+    private fun JsonElement.idText(): String? =
+        ((this as? JsonObject)?.get("id") as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content?.takeIf { it.isNotEmpty() }
+
+    /** A field as it is stored, as text ("" for none): old amounts can be texts like "50,00". */
+    private fun JsonObject.stored(key: String): String = (this[key] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content.orEmpty()
+
+    private fun JsonObject.list(key: String): List<JsonElement> = (this[key] as? JsonArray)?.toList().orEmpty()
+
+    /**
+     * Where the payment that was opened is in [payments] now, or -1 when it is gone. By its [id]: the list can change
+     * while the sheet is open (another booking for the member shifts the positions). Old payments without an id only
+     * by their position [index], while the payment there is still the one that was opened ([original]: the same date
+     * and amount, compared as stored).
+     */
+    fun findPaymentIndex(payments: List<JsonElement>, id: String, index: Int, original: JsonObject?): Int {
+        val byId = payments.indexOfFirst { it.idText() == id }
+        if (byId >= 0) return byId
+        val there = payments.getOrNull(index) as? JsonObject ?: return -1
+        val unchanged = there.idText() == null &&
+            (original == null || (there["date"] == original["date"] && there.stored("amount") == original.stored("amount")))
+        return if (unchanged) index else -1
+    }
+
+    /** The member's record with the payment that was opened changed; the paid total follows. */
+    fun editPayment(person: JsonObject, id: String, index: Int, original: JsonObject?, amount: Double, date: String, description: String): JsonObject {
+        val payments = person.list("payments").toMutableList()
+        val at = findPaymentIndex(payments, id, index, original)
+        if (at < 0) throw GoneException()
+        payments[at] = JsonObject((payments[at] as JsonObject) + mapOf(
+            "amount" to JsonPrimitive(amount),
+            "date" to JsonPrimitive(date),
+            "description" to JsonPrimitive(description)
+        ))
+        return person.withPayments(payments)
+    }
+
+    /** The member's record without the payment that was opened; the paid total follows. */
+    fun removePayment(person: JsonObject, id: String, index: Int, original: JsonObject?): JsonObject {
+        val payments = person.list("payments")
+        val at = findPaymentIndex(payments, id, index, original)
+        if (at < 0) throw GoneException()
+        return person.withPayments(payments.filterIndexed { i, _ -> i != at })
+    }
+
+    private fun JsonObject.withPayments(payments: List<JsonElement>) =
+        JsonObject(this + mapOf("payments" to JsonArray(payments), "totalPaid" to JsonPrimitive(paidTotal(payments))))
+
+    /**
+     * Where the donation or expense that was opened is in [entries] now, or -1 when it is gone: by its [id]. An entry
+     * from an old version without an id: the one that is still exactly as it was opened ([original]).
+     */
+    fun findEntryIndex(entries: List<JsonElement>, id: String, original: JsonObject?): Int {
+        val byId = entries.indexOfFirst { it.idText() == id }
+        if (byId >= 0 || original == null || original.idText() != null) return byId
+        return entries.indexOfFirst { it.idText() == null && it == original }
+    }
+
+    /** [entries] with the entry that was opened changed by [fields] (the other fields of it stay). */
+    fun editEntry(entries: List<JsonElement>, id: String, original: JsonObject?, fields: Map<String, JsonElement>): List<JsonElement> {
+        val at = findEntryIndex(entries, id, original)
+        if (at < 0) throw GoneException()
+        return entries.toMutableList().apply { this[at] = JsonObject((this[at] as JsonObject) + fields) }
+    }
+
+    /** [entries] without the entry that was opened. */
+    fun removeEntry(entries: List<JsonElement>, id: String, original: JsonObject?): List<JsonElement> {
+        val at = findEntryIndex(entries, id, original)
+        if (at < 0) throw GoneException()
+        return entries.filterIndexed { i, _ -> i != at }
     }
 }
