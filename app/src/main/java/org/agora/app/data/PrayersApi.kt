@@ -32,20 +32,23 @@ data class PrayerList(val prayers: List<Prayer> = emptyList(), val canModerate: 
 enum class PrayerDuration(val key: String) { WEEK("week"), MONTH("month"), QUARTER("quarter") }
 
 /** The running requests (newest first) plus the own expired ones. */
-suspend fun AgoraRepository.prayers(): PrayerList = api.get("/api/prayers")
+suspend fun AgoraRepository.prayers(): PrayerList = v2Or({ this.prayers() }, { api.get("/api/prayers") })
 
 suspend fun AgoraRepository.sharePrayer(text: String, duration: PrayerDuration, anonymous: Boolean): Prayer =
-    api.post("/api/prayers", buildJsonObject {
-        put("text", text)
-        put("duration", duration.key)
-        put("anonymous", anonymous)
-    })
+    v2Or({ this.sharePrayer(text, duration, anonymous) }) {
+        api.post("/api/prayers", buildJsonObject {
+            put("text", text)
+            put("duration", duration.key)
+            put("anonymous", anonymous)
+        })
+    }
 
 /** The owner adds a month (from the later of now and the old end). */
 suspend fun AgoraRepository.extendPrayer(id: String, duration: PrayerDuration = PrayerDuration.MONTH): Prayer =
-    api.patch("/api/prayers/${Uri.encode(id)}", buildJsonObject { put("extend", duration.key) })
+    v2Or({ this.extendPrayer(id, duration) }, { api.patch("/api/prayers/${Uri.encode(id)}", buildJsonObject { put("extend", duration.key) }) })
 
 /** Done (owner) or removed by a member with the manage_prayers permission. */
-suspend fun AgoraRepository.deletePrayer(id: String) {
+suspend fun AgoraRepository.deletePrayer(id: String) = v2Or({ this.deletePrayer(id) }) {
     api.delete<JsonObject>("/api/prayers/${Uri.encode(id)}")
+    Unit
 }

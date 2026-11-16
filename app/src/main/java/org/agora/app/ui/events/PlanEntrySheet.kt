@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.agora.app.R
+import org.agora.app.data.CalendarLimits
 import org.agora.app.data.PlanSong
 import org.agora.app.data.ProgramItem
 import org.agora.app.data.addEmptyTask
@@ -206,7 +207,7 @@ internal fun PlanEntrySheet(
                 listOf(stringResource(R.string.plan_kind_task) to Icons.Outlined.Handyman, stringResource(R.string.plan_kind_song) to Icons.Outlined.MusicNote),
                 selected = if (kind == "song") 1 else 0, onSelect = { kind = if (it == 1) "song" else "task" }
             )
-            if (kind == "task") AgoraTextField(name, { name = it }, label = { Text(stringResource(R.string.plan_name)) },
+            if (kind == "task") AgoraTextField(name, { name = it.take(CalendarLimits.PLAN_NAME) }, label = { Text(stringResource(R.string.plan_name)) },
                 placeholder = { Text(stringResource(R.string.plan_name_ph)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             else SongPicker(songs, songId, songQuery, { songQuery = it }) { picked ->
                 songId = picked.id

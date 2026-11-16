@@ -32,6 +32,8 @@ class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             container.api.token = session.token
         }
         val repo = container.repo
+        // Through the API the app goes through in the foreground (v2 where the server offers all of it)
+        if (!container.api.apiV2) repo.checkServer()
         val prefs = user.effectiveNotifications
         val seen = sessionStore.seenState()
         val ctx = applicationContext

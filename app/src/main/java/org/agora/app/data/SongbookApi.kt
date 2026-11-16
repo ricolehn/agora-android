@@ -44,10 +44,12 @@ data class SongInput(
     val tempo: Int? = null
 )
 
-suspend fun AgoraRepository.songbook(): Songbook = api.get("/api/songs")
+suspend fun AgoraRepository.songbook(): Songbook = v2Or({ this.songbook() }, { api.get("/api/songs") })
 
 /** Creates a song ([id] null) or saves an existing one; returns the song as stored. */
-suspend fun AgoraRepository.saveSong(id: String?, input: SongInput): Song {
+suspend fun AgoraRepository.saveSong(id: String?, input: SongInput): Song = v2Or({ this.saveSong(id, input) }, { saveSongOld(id, input) })
+
+private suspend fun AgoraRepository.saveSongOld(id: String?, input: SongInput): Song {
     val body = buildJsonObject {
         put("title", input.title)
         put("artist", input.artist)
@@ -61,6 +63,7 @@ suspend fun AgoraRepository.saveSong(id: String?, input: SongInput): Song {
     return if (id == null) api.post("/api/songs", body) else api.put("/api/songs/$id", body)
 }
 
-suspend fun AgoraRepository.deleteSong(id: String) {
+suspend fun AgoraRepository.deleteSong(id: String) = v2Or({ this.deleteSong(id) }) {
     api.delete<JsonObject>("/api/songs/$id")
+    Unit
 }

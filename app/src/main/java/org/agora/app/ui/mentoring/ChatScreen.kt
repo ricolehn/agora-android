@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import org.agora.app.R
+import org.agora.app.data.MentoringLimits
 import org.agora.app.data.model.ChatMessage
 import org.agora.app.ui.components.LoadingBox
 import org.agora.app.ui.components.LocalContainer
@@ -178,7 +179,7 @@ fun ChatScreen(threadId: String, onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AgoraTextField(
-                        value = text, onValueChange = { text = it },
+                        value = text, onValueChange = { text = it.take(MentoringLimits.MESSAGE) },
                         placeholder = { Text(stringResource(R.string.mentoring_input_placeholder)) },
                         maxLines = 5, shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.weight(1f)

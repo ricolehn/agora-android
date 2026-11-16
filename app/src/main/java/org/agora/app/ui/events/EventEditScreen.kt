@@ -85,6 +85,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.agora.app.R
+import org.agora.app.data.CalendarLimits
 import org.agora.app.data.EventInput
 import org.agora.app.data.model.User
 import org.agora.app.ui.components.AgoraCard
@@ -277,7 +278,8 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
             imageUrl = imageUrl,
             isRecurring = recurring && existing == null && type == "termin",
             recurringRule = rule,
-            recurringCount = (count.toIntOrNull() ?: 4).coerceIn(2, 52)
+            recurringCount = (count.toIntOrNull() ?: 4).coerceIn(2, 52),
+            managed = isManager
         )
         runner.run(savedMsg) {
             container.repo.saveEvent(existing?.id, input)
@@ -403,7 +405,7 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
 
             EditorSection(Icons.Outlined.Edit, Color(0xFF0891B2), stringResource(R.string.editor_title_label), required = true) {
                 AgoraTextField(
-                    title, { title = it; if (it.isNotBlank()) error = null },
+                    title, { title = it.take(CalendarLimits.TITLE); if (it.isNotBlank()) error = null },
                     placeholder = { Text(stringResource(R.string.editor_title_hint)) },
                     textStyle = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
                     singleLine = true, isError = error == titleRequired, modifier = Modifier.fillMaxWidth()
@@ -452,12 +454,12 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
             }
 
             EditorSection(Icons.Outlined.Place, Agora.colors.success, stringResource(R.string.editor_where)) {
-                AgoraTextField(location, { location = it }, placeholder = { Text(stringResource(R.string.editor_where_hint)) },
+                AgoraTextField(location, { location = it.take(CalendarLimits.LOCATION) }, placeholder = { Text(stringResource(R.string.editor_where_hint)) },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
             }
 
             EditorSection(Icons.AutoMirrored.Outlined.Notes, Color(0xFFD97706), stringResource(R.string.description)) {
-                AgoraTextField(description, { description = it }, placeholder = { Text(stringResource(R.string.editor_description_hint)) },
+                AgoraTextField(description, { description = it.take(CalendarLimits.DESCRIPTION) }, placeholder = { Text(stringResource(R.string.editor_description_hint)) },
                     minLines = 5, modifier = Modifier.fillMaxWidth())
             }
 
@@ -494,9 +496,9 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
                 if (registration) {
                     HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        AgoraTextField(maxP, { maxP = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.max_participants_label)) },
+                        AgoraTextField(maxP, { maxP = it.filter(Char::isDigit).take(CalendarLimits.PLACES_DIGITS) }, label = { Text(stringResource(R.string.max_participants_label)) },
                             singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                        AgoraTextField(minP, { minP = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.min_participants_label)) },
+                        AgoraTextField(minP, { minP = it.filter(Char::isDigit).take(CalendarLimits.PLACES_DIGITS) }, label = { Text(stringResource(R.string.min_participants_label)) },
                             singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
                     }
                 }

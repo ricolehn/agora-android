@@ -25,20 +25,25 @@ It talks to the same backend as the web app (PWA) and mirrors its screens and ru
 | **Monthly fees** *(server CALDERA)* | *Settings → Monthly fees* for system admins and treasurers. **Fees over time:** the fees of this month as tiles (*Since …*), the change still to come, every change with the month it counts from, what it changed, who set it and what it is today (in effect, planned, replaced), and a log. System admins change the fees in two steps: the three amounts and the month they count from (next month is offered; a line says what the month means – later, now, or reaching back), then what it does as the server works it out (the months that cost something else, who owes how much more or less today, a warning when it reaches back before a fresh start) – only then it is saved, exactly as it was checked (changed by someone else in between: refused, checked again). Every change can be edited, moved or taken back; the fees from the beginning can be corrected. **Fresh start:** the days the fee accounts were started afresh with their state; system admins choose a day (past or future), see the numbers (open fees dropped / credit carried over, how many members) and confirm by typing the day again and their password – taking one back works the same way. Treasurers read both. Servers before CALDERA: the fee settings as before |
 | **Settings** | Profile picture (256×256 JPEG like the PWA), notification preferences, push setup, theme (system/light/dark), language (system/German/English), monthly fees (see above), password change, calendar subscription (iCal / Google Calendar), registration code |
 
-Fees: from server CALDERA on, the app reads the fees over time (`GET /api/fees`) and the fresh starts (`GET /api/fee-reset`),
-and person records carry what the server worked out (`_monthlyFee`, `_feeReset`, `_feeCarriedOver`, `_feeWrittenOff`).
-Changes go through the server's preview first (`POST /api/admin/fees/preview`, `GET /api/admin/fee-reset/preview`) and are
-saved with what was checked (`POST /api/admin/fees[/remove]` with the preview's `version`, `POST /api/admin/fee-reset[/remove]`
-with the day twice and the admin's password). Older servers answer neither: the app then shows the fee settings as before.
+Fees: from server CALDERA on, the app reads the fees over time (`GET /fees` of API v2) and the fresh starts
+(`GET /fresh-starts`), and the fee accounts carry what the server worked out (`monthlyFeeCents`, `freshStart`, …). Changes
+go through the server's preview first (`POST /fees/preview`, `GET /fresh-starts/preview`) and are saved with what was
+checked (`POST /fees[/remove]` with the preview's `version`, `POST /fresh-starts[/remove]` with the day twice and the
+admin's password) – on a CALDERA beta without the whole of v2 through the old API's `/api/fees`, `/api/fee-reset` and
+`/api/admin/...`. Older servers answer neither: the app then shows the fee settings as before.
 
 ### API v2 (server CALDERA)
 
-From server CALDERA (3.4) on, the books go through **API v2** (`/api/v2`, `docs/API_V2.md` in the Agora repository):
-record ids, money in whole cents, days as `YYYY-MM-DD`, every list in pages with a cursor, errors as
-`{ error: { code, message, field } }` in the app's language, and every change names the version of the data it is
-based on – refused with 409 instead of overwriting what someone else changed meanwhile. The app asks the server when it
-connects and with every refresh (`GET /api/status` → `apiVersions: [1, 2]`, then `GET /api/v2` → the resources) and
-goes through v2 where the server offers every resource of the books (3.4.0-beta6 on):
+From server CALDERA (3.4) on, the app goes through **API v2** (`/api/v2`, `docs/API_V2.md` in the Agora repository) for
+everything that is data of the community: record ids, money in whole cents, days as `YYYY-MM-DD`, every list in pages
+with a cursor, errors as `{ error: { code, message, field } }` in the app's language, and every change of the books
+names the version of the data it is based on – refused with 409 instead of overwriting what someone else changed
+meanwhile. The app asks the server when it connects and with every refresh (`GET /api/status` → `apiVersions: [1, 2]`,
+then `GET /api/v2` → the resources) – before it loads anything while it goes the old way – and goes through v2 **all or
+nothing**: only where the server offers every resource the app uses (`ApiV2.NEEDED`), so what the screens show always
+comes through one API.
+
+The books:
 
 | What | Through API v2 |
 |---|---|
@@ -54,14 +59,31 @@ change or deletion only while the entry is still what was opened – otherwise n
 what is stored now. The forms take no more than v2 does (notes and descriptions 5,000 characters, names 200, a
 rejection's reason 500). The app asks for every answer in its language (`Accept-Language`, also from the old API).
 
-Still through the old API, which v2 keeps working for every app version: the calendar with its duty roster, mentoring,
-the songbook, prayer requests, media, the fees over time and fresh starts (the settings page), and what v2 leaves to v1
-anyway (signing in, push, live updates, the AI assistant). Servers before CALDERA, the betas of CALDERA before
-3.4.0-beta6, and a CALDERA server whose database upgrade waits (its previous version serves the instance) are asked the
-old way throughout; a v2 route the server does not know switches back at once. A server that is starting or upgrading
-its database (`503`, `ready: false`) gets *try again in a moment*.
+Everything else:
 
-The app's own calls can be checked against a real CALDERA server (`LiveServerTest`; only a test instance: with *manage
+| What | Through API v2 |
+|---|---|
+| Calendar | `GET /events` (page after page, with `createdByName`, `isFull`, `canEdit`, the share link's `shareToken` and the duty roster with its names for those who see it), created with its series (`recurrence`) and duties, changed, shared (`isPublic`) and deleted; signing up (`PUT` / `DELETE /events/:id/registration`), the participants (a guest as `guest:<id>`), pictures (`POST /events/images`), the order of service (`GET /events/:id` → `program`, `PUT /events/:id/program`), the personal calendar feed |
+| Duty roster | asked (`POST /events/:id/duties`, `POST /duties/:id/request`), given to a group or person (`/assignment`), answered (`/answer`), taken and given back (`PUT` / `DELETE /duties/:id/claim`), notes, deleted; the duties asked of the person (`GET /duty-requests`), the people and groups it can go to (`/people`, `/groups`) |
+| Own account | notifications, time zone (`PATCH /me`), the profile picture (`PUT /me/picture`, the others' from `/pictures`), the registration code (`/registration-code`: a new one is made by the server), reports to the admins (`POST /reports`) |
+| Community | the songbook (`/songs`, with the CCLI licence; who manages it from `GET /me`), prayer requests (`/prayers`), mentoring (mentors, applications, the own profile, conversations – reading one marks what the other wrote as read, `POST /mentoring/threads/:id/read` – and their messages page after page) |
+| Media library | `/media`, `/media/items` (the folder and its entries, page after page), previews, files, uploads, folders, deleting, ZIP downloads, rights |
+| Fees and fresh starts | `GET /fees` (in cents; the settings page shows euros), previews and changes (`POST /fees/preview`, `/fees`, `/fees/remove` with the preview's version), the fresh starts (`/fresh-starts`, preview, set and take back with the admin's password) |
+
+v2 checks every value and refuses what does not fit (`400 invalid`) instead of cutting it, as the old API did: the forms
+stop where v2 does (an event's title 200, place 300, description 10,000 characters; an entry of the plan 80; a song's
+title 120 and text 20,000; a mentor's profile 2,000 and a message 10,000 characters, at most 50 mentees; a report is
+cut to the 4,000 characters the server takes).
+
+Only what v2 leaves to the old API by design goes there: signing in and the account itself (`/api/auth/...`), push
+(`/api/push/...`), the live updates (`/api/stream`), the AI assistant (`/api/ai/...`) and the instance's administration
+(`/api/admin/...`). Servers before CALDERA, the betas of CALDERA whose v2 had only a part of this, and a CALDERA server
+whose database upgrade waits (its previous version serves the instance) are asked the old way throughout; a v2 route
+the server does not know switches back at once, and a lost connection while asking keeps the API it was. A server that
+is starting or upgrading its database (`503`, `ready: false`) gets *try again in a moment*.
+
+The app's own calls can be checked against a real CALDERA server (`LiveServerTest`: the calendar, the community, the
+media library and the fee settings read through v2 and the old API side by side; only a test instance: with *manage
 finances* it books, changes and removes a donation, a payment and a standing order, and leaves the books as they were):
 
 ```bash
@@ -123,6 +145,9 @@ app/src/main/java/org/agora/app
 │   ├── remote/ApiV2.kt      API v2 (server CALDERA): pages with a cursor, falls back when the server answers no v2
 │   ├── AgoraRepository.kt   every endpoint the app uses, v2 where the server answers it; treasurer write flows ported from the PWA
 │   ├── FinanceV2.kt         the books through API v2: fee accounts, versions, standing orders, receipts, the ledger
+│   ├── CalendarV2.kt        the calendar and its duty roster through API v2
+│   ├── CommunityV2.kt       songbook, prayer requests and mentoring through API v2
+│   ├── AccountV2.kt         the own account's settings, pictures, registration code and reports through API v2
 │   ├── MediaApi.kt          media library (Nextcloud through the server): listing, previews, streamed up/downloads, rights
 │   ├── AppStore.kt          single source of truth (auth state + member data), live updates
 │   ├── local/SessionStore.kt DataStore: server, token, cached user, theme, push state

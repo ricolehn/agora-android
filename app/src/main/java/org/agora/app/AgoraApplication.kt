@@ -63,7 +63,11 @@ class AgoraApplication : Application(), SingletonImageLoader.Factory {
             PushManager.setSignedIn(this, true)
             PollWorker.schedule(this)
             runCatching { container.push.sync() }
-            runCatching { container.repo.syncTimeZone(it) }
+            runCatching {
+                // Through the API the data goes through (the session check runs beside the first load)
+                if (!container.api.apiV2) container.repo.checkServer()
+                container.repo.syncTimeZone(it)
+            }
         }
         container.store.onLoggingOut = { remote ->
             PushManager.setSignedIn(this, false)

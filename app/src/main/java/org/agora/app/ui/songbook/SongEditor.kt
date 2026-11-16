@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.agora.app.R
 import org.agora.app.data.Song
+import org.agora.app.data.SongLimits
 import org.agora.app.data.SongInput
 import org.agora.app.data.deleteSong
 import org.agora.app.data.saveSong
@@ -123,9 +124,9 @@ fun SongEditor(song: Song?, licenseMissing: Boolean, onClose: () -> Unit, onSave
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             CapsLabel(stringResource(R.string.songbook_song))
-            AgoraTextField(title, { title = it }, label = { Text(stringResource(R.string.songbook_title_ph)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            AgoraTextField(title, { title = it.take(SongLimits.TITLE) }, label = { Text(stringResource(R.string.songbook_title_ph)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AgoraTextField(artist, { artist = it }, label = { Text(stringResource(R.string.songbook_artist_ph)) }, singleLine = true, modifier = Modifier.weight(1f))
+                AgoraTextField(artist, { artist = it.take(SongLimits.ARTIST) }, label = { Text(stringResource(R.string.songbook_artist_ph)) }, singleLine = true, modifier = Modifier.weight(1f))
                 AgoraTextField(
                     key, { key = it.take(4) }, label = { Text(stringResource(R.string.songbook_key_ph)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
@@ -135,7 +136,7 @@ fun SongEditor(song: Song?, licenseMissing: Boolean, onClose: () -> Unit, onSave
 
             CapsLabel(stringResource(R.string.songbook_text), Modifier.padding(top = 8.dp))
             AgoraTextField(
-                content, { content = it }, minLines = 10, modifier = Modifier.fillMaxWidth(),
+                content, { content = it.take(SongLimits.CONTENT) }, minLines = 10, modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 14.sp)
             )
             Text(stringResource(R.string.songbook_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -151,7 +152,7 @@ fun SongEditor(song: Song?, licenseMissing: Boolean, onClose: () -> Unit, onSave
                 ccli, { ccli = it.filter(Char::isDigit).take(12) }, label = { Text(stringResource(R.string.songbook_ccli_song)) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth()
             )
-            AgoraTextField(copyright, { copyright = it }, label = { Text(stringResource(R.string.songbook_copyright)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            AgoraTextField(copyright, { copyright = it.take(SongLimits.COPYRIGHT) }, label = { Text(stringResource(R.string.songbook_copyright)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             // A CCLI song number only counts together with the church's licence number
             if (licenseMissing) Text(stringResource(R.string.songbook_license_missing), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

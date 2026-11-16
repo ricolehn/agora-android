@@ -31,9 +31,14 @@ data class PlanSong(val id: String = "", val title: String = "", val artist: Str
 @Serializable
 data class PlanSongs(val songs: List<PlanSong> = emptyList())
 
-suspend fun AgoraRepository.program(eventId: String): Program = api.get("/api/events/$eventId/program")
+suspend fun AgoraRepository.program(eventId: String): Program =
+    v2Or({ this.program(eventId) }, { api.get("/api/events/$eventId/program") })
 
+/** Saves the order of service as a whole (the server checks every item: titles 120, who 80, notes 300, 0-600 minutes). */
 suspend fun AgoraRepository.saveProgram(eventId: String, items: List<ProgramItem>): Program =
+    v2Or({ this.saveProgram(eventId, items) }, { saveProgramOld(eventId, items) })
+
+private suspend fun AgoraRepository.saveProgramOld(eventId: String, items: List<ProgramItem>): Program =
     api.put("/api/events/$eventId/program", buildJsonObject {
         put("items", buildJsonArray {
             items.forEach { item ->
@@ -50,9 +55,11 @@ suspend fun AgoraRepository.saveProgram(eventId: String, items: List<ProgramItem
         })
     })
 
-suspend fun AgoraRepository.planSongs(): List<PlanSong> = api.get<PlanSongs>("/api/songs").songs
+suspend fun AgoraRepository.planSongs(): List<PlanSong> =
+    v2Or({ all("/songs", PlanSong.serializer()).items }, { api.get<PlanSongs>("/api/songs").songs })
 
 /** Adds an empty task (no person, no e-mail), like the web's `{ roleName }`. */
-suspend fun AgoraRepository.addEmptyTask(eventId: String, roleName: String) {
+suspend fun AgoraRepository.addEmptyTask(eventId: String, roleName: String) = v2Or({ this.addDuty(eventId, roleName, "", null, null, sendEmail = false) }) {
     api.post<JsonObject>("/api/events/$eventId/duties", buildJsonObject { put("roleName", roleName) })
+    Unit
 }

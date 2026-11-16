@@ -4,6 +4,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.agora.app.data.AgoraRepository
 import org.agora.app.data.BookingEdit
+import org.agora.app.data.mediaStatus
+import org.agora.app.data.prayers
+import org.agora.app.data.songbook
+import org.agora.app.data.model.FEE_STATUSES
 import org.agora.app.data.model.Person
 import org.agora.app.data.model.Transaction
 import org.agora.app.data.model.User
@@ -19,8 +23,8 @@ import java.time.LocalDate
 import kotlin.math.roundToLong
 
 /**
- * The app's own calls against a real server - a CALDERA instance with API v2 (3.4.0-beta6 on) - signed in as a real
- * account. Only runs when asked for:
+ * The app's own calls against a real server - a CALDERA instance whose API v2 offers everything the app uses - signed
+ * in as a real account. Only runs when asked for:
  *
  * ```
  * AGORA_LIVE_EMAIL=... AGORA_LIVE_PASSWORD=... ./gradlew testDebugUnitTest --tests '*LiveServerTest*' -PliveServer=https://beta.example.org
@@ -49,7 +53,7 @@ class LiveServerTest {
             repo.status(server)
             repo.api.token = repo.login(email, password).token
             user = repo.me()
-            assertTrue("the server answers the books through API v2 (3.4.0-beta6 on)", repo.checkServer()!!.answersV2 && repo.v2.available)
+            assertTrue("the server answers everything the app uses through API v2", repo.checkServer()!!.answersV2 && repo.v2.available)
         }
     }
 
@@ -61,6 +65,46 @@ class LiveServerTest {
         } finally {
             repo.api.apiV2 = true
         }
+    }
+
+    @Test
+    fun `the calendar, the community, the media library and the fee settings through API v2 are what the old API shows`() = runBlocking {
+        // Only reads: messages are not read (that would mark them read)
+        val events = repo.events()
+        val oldEvents = viaOldApi { repo.events() }
+        assertEquals(oldEvents.map { listOf(it.id, it.title, it.date, it.startTime, it.eventType, it.status) }, events.map { listOf(it.id, it.title, it.date, it.startTime, it.eventType, it.status) })
+        assertEquals(oldEvents.map { listOf(it.registeredCount, it.waitlistCount, it.myRegistration?.status, it.isFull, it.canEdit) },
+            events.map { listOf(it.registeredCount, it.waitlistCount, it.myRegistration?.status, it.isFull, it.canEdit) })
+        assertEquals("who sees the roster", oldEvents.map { it.canAccessDutyPlan }, events.map { it.canAccessDutyPlan })
+        assertEquals(oldEvents.map { event -> event.duties.map { listOf(it.id, it.roleName, it.status, it.assignedUser, it.assignedGroup, it.requestedUser) } },
+            events.map { event -> event.duties.map { listOf(it.id, it.roleName, it.status, it.assignedUser, it.assignedGroup, it.requestedUser) } })
+        assertEquals("the names on the roster", oldEvents.map { event -> event.duties.map { it.assignedUserName.ifBlank { null } } },
+            events.map { event -> event.duties.map { it.assignedUserName.ifBlank { null } } })
+        assertEquals(oldEvents.map { it.publicToken }, events.map { it.publicToken })
+        assertEquals(viaOldApi { repo.myDutyRequests() }.map { it.id to it.eventId }, repo.myDutyRequests().map { it.id to it.eventId })
+        assertEquals(viaOldApi { repo.groups() }.map { it.id to it.name }.sortedBy { it.first }, repo.groups().map { it.id to it.name }.sortedBy { it.first })
+        assertEquals(viaOldApi { repo.calendarFeed() }.feedUrl, repo.calendarFeed().feedUrl)
+
+        assertEquals(viaOldApi { repo.threads() }.map { it.id to it.unreadCount }.sortedBy { it.first }, repo.threads().map { it.id to it.unreadCount }.sortedBy { it.first })
+        assertEquals(viaOldApi { repo.mentors() }.map { it.id to it.user }.sortedBy { it.first }, repo.mentors().map { it.id to it.user }.sortedBy { it.first })
+        assertEquals(viaOldApi { repo.myMentorProfile() }.mentor?.status, repo.myMentorProfile().mentor?.status)
+        val book = repo.songbook()
+        val oldBook = viaOldApi { repo.songbook() }
+        assertEquals(oldBook.songs.map { it.id to it.title }.sortedBy { it.first }, book.songs.map { it.id to it.title }.sortedBy { it.first })
+        assertEquals(listOf(oldBook.ccliLicense, oldBook.canManage), listOf(book.ccliLicense, book.canManage))
+        val prayers = repo.prayers()
+        val oldPrayers = viaOldApi { repo.prayers() }
+        assertEquals(oldPrayers.prayers.map { listOf(it.id, it.isMine, it.anonymous, it.expiresAt) }, prayers.prayers.map { listOf(it.id, it.isMine, it.anonymous, it.expiresAt) })
+        assertEquals(oldPrayers.canModerate, prayers.canModerate)
+        assertEquals(viaOldApi { repo.mediaStatus() }, repo.mediaStatus())
+        assertEquals(viaOldApi { repo.pictureVersions() }, repo.pictureVersions())
+
+        val plan = repo.feePlan()
+        val oldPlan = viaOldApi { repo.feePlan() }
+        assertEquals(oldPlan?.current, plan?.current)
+        assertEquals(oldPlan?.entries?.map { listOf(it.from, it.fees, it.state) }, plan?.entries?.map { listOf(it.from, it.fees, it.state) })
+        assertEquals(viaOldApi { repo.feeResets() }?.resets?.map { it.date to it.state }, repo.feeResets()?.resets?.map { it.date to it.state })
+        assertEquals(viaOldApi { repo.feeSettings() }.rates.filterKeys { it in FEE_STATUSES }, repo.feeSettings().rates.filterKeys { it in FEE_STATUSES })
     }
 
     @Test

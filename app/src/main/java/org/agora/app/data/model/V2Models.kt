@@ -165,7 +165,7 @@ fun euros(cents: Long?): Double = (cents ?: 0L) / 100.0
 fun cents(amount: Double): Long = Math.round(amount * 100.0)
 
 /** Milliseconds of an ISO moment, 0 without one. */
-private fun millisOf(moment: String?): Long = moment?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L
+internal fun millisOf(moment: String?): Long = moment?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: 0L
 
 /** The receipts as the app keeps them in one field: the web app's list as JSON text; none: null. */
 fun receiptField(names: List<String>): String? =

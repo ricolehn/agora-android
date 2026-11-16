@@ -52,6 +52,13 @@ import org.agora.app.data.model.TransactionPage
 import org.agora.app.data.model.UploadResponse
 import org.agora.app.data.model.User
 import org.agora.app.data.model.V2Booking
+import org.agora.app.data.model.V2FeePreview
+import org.agora.app.data.model.V2Fees
+import org.agora.app.data.model.V2FreshStartPreview
+import org.agora.app.data.model.V2FreshStarts
+import org.agora.app.data.model.toImpact
+import org.agora.app.data.model.toPlan
+import org.agora.app.data.model.toResets
 import org.agora.app.data.model.cents
 import org.agora.app.data.model.StandingOrder
 import org.agora.app.data.model.toFinanceRequest
@@ -84,7 +91,13 @@ data class EventInput(
     val isRecurring: Boolean = false,
     val recurringRule: String = "weekly",
     val recurringCount: Int = 4,
-    val duties: List<String> = emptyList()
+    val duties: List<String> = emptyList(),
+    /**
+     * Set by one who manages events: the kind (an appointment) and pinning are theirs to choose. API v2 refuses them from
+     * anyone else (the old API left them out), so they are sent only then - an event's creator who no longer manages
+     * events still saves their appointment.
+     */
+    val managed: Boolean = true
 )
 
 /** How approving or rejecting a request ended. */
@@ -138,13 +151,34 @@ class AgoraRepository(val api: AgoraApi) {
 
     /**
      * Asks the current server again what it answers, and whether the app goes through its API v2: the server lists v2
-     * (CALDERA) and - asked by a signed-in person - offers every resource of the books the app uses ([ApiV2.BOOKS]; the
-     * betas before 3.4.0-beta6 had only some of them, and are asked the old way). Not reachable: as it was.
+     * (CALDERA) and - asked by a signed-in person - offers every resource the app uses ([ApiV2.NEEDED]; the betas of
+     * CALDERA had only parts of it, and are asked the old way throughout). Not reachable: as it was.
      */
     suspend fun checkServer(): StatusResponse? {
         val status = runCatching { status(api.baseUrl) }.getOrNull() ?: return null
-        api.apiV2 = status.answersV2 && api.token != null && runCatching { v2.offersBooks() }.getOrDefault(false)
+        api.apiV2 = when {
+            !status.answersV2 || api.token == null -> false
+            else -> try {
+                v2.offersAll()
+            } catch (e: ApiException) {
+                // The network failed in between: as it was (no switching APIs back and forth on a bad connection)
+                if (e.status == 0) api.apiV2 else false
+            }
+        }
         return status
+    }
+
+    /**
+     * [newWay] through API v2 where the server answers it ([AgoraApi.apiV2]), else [oldWay] - also when it turns out
+     * that it does not (a server that went back to an older version): nothing was done through v2 then.
+     */
+    internal suspend fun <T> v2Or(newWay: suspend ApiV2.() -> T, oldWay: suspend () -> T): T {
+        if (!v2.available) return oldWay()
+        return try {
+            v2.newWay()
+        } catch (e: V2UnavailableException) {
+            oldWay()
+        }
     }
 
     /** App name from the PWA's config module (`appName: "..."`). */
@@ -187,42 +221,51 @@ class AgoraRepository(val api: AgoraApi) {
     }
 
     /** Reports an AI reply ("ai") or a chat conversation ("chat") to the admins. */
-    suspend fun report(type: String, content: String, reason: String, prompt: String = "", threadId: String = "") {
-        api.post<JsonObject>("/api/reports", buildJsonObject {
-            put("type", type)
-            put("content", content)
-            put("reason", reason)
-            if (prompt.isNotBlank()) put("prompt", prompt)
-            if (threadId.isNotBlank()) put("threadId", threadId)
-        })
-    }
+    suspend fun report(type: String, content: String, reason: String, prompt: String = "", threadId: String = "") =
+        v2Or({ this.report(type, content, reason, prompt, threadId) }) {
+            api.post<JsonObject>("/api/reports", buildJsonObject {
+                put("type", type)
+                put("content", content)
+                put("reason", reason)
+                if (prompt.isNotBlank()) put("prompt", prompt)
+                if (threadId.isNotBlank()) put("threadId", threadId)
+            })
+            Unit
+        }
 
     // ---------- profile & settings ----------
 
     /** Uploads the own picture; returns its new version (servers 3.3+), or null. */
-    suspend fun uploadProfilePicture(jpeg: ByteArray): Long? {
+    suspend fun uploadProfilePicture(jpeg: ByteArray): Long? = v2Or({ uploadPicture(jpeg) }) {
         val answer = api.upload("/api/profile/picture", JsonObject.serializer()) {
             addFormDataPart("picture", "profile.jpg", AgoraApi.fileBody(jpeg, "image/jpeg"))
         }
-        return (answer["version"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong()
+        (answer["version"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong()
     }
 
     /**
      * Who has a profile picture, with its version (server 3.3 BA SING SE): lists only ask for those, under an
      * address with the version that stays cached until the picture changes. Null on older servers.
      */
-    suspend fun pictureVersions(): Map<String, Long>? = try {
-        api.get<Map<String, Long>>("/api/profile/pictures")
-    } catch (e: ApiException) {
-        if (e.status == 404) null else throw e
+    suspend fun pictureVersions(): Map<String, Long>? = v2Or({ this.pictureVersions() }) {
+        try {
+            api.get<Map<String, Long>>("/api/profile/pictures")
+        } catch (e: ApiException) {
+            if (e.status == 404) null else throw e
+        }
     }
 
     /** [version] from [pictureVersions]: the same address always shows the same picture (cached for good). */
     fun profilePictureUrl(uid: String, version: Long? = null): String =
-        api.absolute("/api/profile/picture/$uid" + if (version != null) "?v=$version" else "")
+        if (v2.available) v2.pictureUrl(uid, version)
+        else api.absolute("/api/profile/picture/$uid" + if (version != null) "?v=$version" else "")
 
     /** Saves channels and kinds like the web (flat keys = push choice, for older servers). */
-    suspend fun saveNotificationSettings(uid: String, prefs: NotificationPrefs) {
+    suspend fun saveNotificationSettings(uid: String, prefs: NotificationPrefs) = v2Or({ this.saveNotificationSettings(prefs) }) {
+        saveNotificationSettingsOld(uid, prefs)
+    }
+
+    private suspend fun saveNotificationSettingsOld(uid: String, prefs: NotificationPrefs) {
         fun kinds(k: NotificationKinds) = buildJsonObject {
             put("duties", k.duties); put("events", k.events); put("messages", k.messages)
             put("requests", k.requests); put("finances", k.finances); put("reports", k.reports)
@@ -245,25 +288,37 @@ class AgoraRepository(val api: AgoraApi) {
     suspend fun syncTimeZone(user: User) {
         val zone = java.time.ZoneId.systemDefault().id
         if (zone.isBlank() || zone == user.timeZone) return
-        api.patch<JsonObject>("/api/db", buildJsonObject {
-            put("path", "users/${user.userId}")
-            putJsonObject("value") { put("timeZone", zone) }
-        })
+        v2Or({ saveTimeZone(zone) }) {
+            api.patch<JsonObject>("/api/db", buildJsonObject {
+                put("path", "users/${user.userId}")
+                putJsonObject("value") { put("timeZone", zone) }
+            })
+            Unit
+        }
     }
 
-    suspend fun calendarFeed(): CalendarFeed = api.get("/api/user/calendar-feed")
-    suspend fun resetCalendarFeed(): CalendarFeed = api.post("/api/user/calendar-feed/reset")
+    suspend fun calendarFeed(): CalendarFeed = v2Or({ this.calendarFeed() }, { api.get("/api/user/calendar-feed") })
+    suspend fun resetCalendarFeed(): CalendarFeed = v2Or({ this.calendarFeed(reset = true) }, { api.post("/api/user/calendar-feed/reset") })
 
-    suspend fun inviteCode(): String? = runCatching { api.get<String>("/api/db", mapOf("path" to "system/inviteCode")) }.getOrNull()
+    suspend fun inviteCode(): String? = runCatching {
+        v2Or({ registrationCode() }, { api.get<String>("/api/db", mapOf("path" to "system/inviteCode")) })
+    }.getOrNull()
 
-    suspend fun setInviteCode(code: String) {
+    /** A new registration code (the one before stops working): made by the server through v2, else here. */
+    suspend fun newInviteCode(): String = v2Or({ newRegistrationCode() }) {
+        val code = kotlin.random.Random.nextInt(100000, 1000000).toString()
         api.put<JsonObject>("/api/db", buildJsonObject {
             put("path", "system/inviteCode")
             put("value", code)
         })
+        code
     }
 
-    suspend fun feeSettings(): FeeSettings = FeeSettings.from(runCatching { api.get<JsonObject>("/api/db", mapOf("path" to "settings")) }.getOrNull())
+    /** This month's fee of each status: through v2 the fees as they count now, else the old fee settings. */
+    suspend fun feeSettings(): FeeSettings = v2Or(
+        { FeeSettings(call("GET", "/fees", V2Fees.serializer()).toPlan().current) },
+        { FeeSettings.from(runCatching { api.get<JsonObject>("/api/db", mapOf("path" to "settings")) }.getOrNull()) }
+    )
 
     suspend fun saveFeeSettings(rates: Map<String, Double>) {
         val current = api.get<JsonObject>("/api/db", mapOf("path" to "settings"))
@@ -277,29 +332,61 @@ class AgoraRepository(val api: AgoraApi) {
     // ---------- monthly fees over time and the fresh start (server CALDERA) ----------
 
     /** The fees over time; null on a server from before them (it only knows the fee settings above). */
-    suspend fun feePlan(): FeePlan? = untilCaldera { api.get<FeePlan>("/api/fees") }?.takeIf { it.entries.isNotEmpty() }
+    suspend fun feePlan(): FeePlan? = v2Or(
+        { call("GET", "/fees", V2Fees.serializer()).toPlan() },
+        { untilCaldera { api.get<FeePlan>("/api/fees") } }
+    )?.takeIf { it.entries.isNotEmpty() }
 
     /** The days the fee accounts were started afresh; null on a server from before them. */
-    suspend fun feeResets(): FeeResets? = untilCaldera { api.get<FeeResets>("/api/fee-reset") }
+    suspend fun feeResets(): FeeResets? =
+        v2Or({ call("GET", "/fresh-starts", V2FreshStarts.serializer()).toResets() }, { untilCaldera { api.get<FeeResets>("/api/fee-reset") } })
 
     /** What [change] does, in numbers worked out by the server; nothing is saved (system admins). */
-    suspend fun previewFeeChange(change: FeeChange): FeeChangeImpact = api.post("/api/admin/fees/preview", feeChangeBody(change))
+    suspend fun previewFeeChange(change: FeeChange): FeeChangeImpact = v2Or(
+        { call("POST", "/fees/preview", V2FeePreview.serializer(), feeChangeBodyV2(change)).toImpact() },
+        { api.post("/api/admin/fees/preview", feeChangeBody(change)) }
+    )
 
     /** Saves [change] as it was checked: [version] is that of the preview (409 when the fees changed in between). */
-    suspend fun saveFeeChange(change: FeeChange, version: String): FeePlan =
-        api.post(if (change.remove) "/api/admin/fees/remove" else "/api/admin/fees", feeChangeBody(change, version))
+    suspend fun saveFeeChange(change: FeeChange, version: String): FeePlan = v2Or(
+        { call("POST", if (change.remove) "/fees/remove" else "/fees", V2Fees.serializer(), feeChangeBodyV2(change, version)).toPlan() },
+        { api.post(if (change.remove) "/api/admin/fees/remove" else "/api/admin/fees", feeChangeBody(change, version)) }
+    )
 
     /** What setting a fresh start on [date] (or with [remove] taking it back) changes (system admins). */
-    suspend fun previewFeeReset(date: String, remove: Boolean): FeeResetImpact =
-        api.get("/api/admin/fee-reset/preview", buildMap { put("date", date); if (remove) put("remove", "1") })
+    suspend fun previewFeeReset(date: String, remove: Boolean): FeeResetImpact = v2Or(
+        { call("GET", "/fresh-starts/preview", V2FreshStartPreview.serializer(), query = buildMap { put("day", date); if (remove) put("remove", "1") }).toImpact() },
+        { api.get("/api/admin/fee-reset/preview", buildMap { put("date", date); if (remove) put("remove", "1") }) }
+    )
 
     /** Sets (or takes back) the fresh start on [date]: the day a second time and the admin's own password. */
-    suspend fun saveFeeReset(date: String, remove: Boolean, password: String): FeeResets =
-        api.post(if (remove) "/api/admin/fee-reset/remove" else "/api/admin/fee-reset", buildJsonObject {
-            put("date", date)
-            put("confirmDate", date)
-            put("password", password)
-        })
+    suspend fun saveFeeReset(date: String, remove: Boolean, password: String): FeeResets = v2Or(
+        {
+            call("POST", if (remove) "/fresh-starts/remove" else "/fresh-starts", V2FreshStarts.serializer(), buildJsonObject {
+                put("day", date)
+                put("confirmDay", date)
+                put("password", password)
+            }).toResets()
+        },
+        {
+            api.post(if (remove) "/api/admin/fee-reset/remove" else "/api/admin/fee-reset", buildJsonObject {
+                put("date", date)
+                put("confirmDate", date)
+                put("password", password)
+            })
+        }
+    )
+
+    /** A change of the fees as v2 takes it: the month it counts from (null: the fees from the beginning), fees in cents. */
+    private fun feeChangeBodyV2(change: FeeChange, version: String? = null) = buildJsonObject {
+        put("fromMonth", change.from?.let(::JsonPrimitive) ?: JsonNull)
+        if (change.remove) put("remove", true)
+        else {
+            putJsonObject("feesCents") { change.fees.forEach { (status, amount) -> put(status, cents(amount)) } }
+            change.replaces?.let { put("replaces", it) }
+        }
+        version?.let { put("version", it) }
+    }
 
     private fun feeChangeBody(change: FeeChange, version: String? = null) = buildJsonObject {
         // from null means the fees from the beginning: it goes as null, not left out
@@ -319,7 +406,7 @@ class AgoraRepository(val api: AgoraApi) {
         if (e.status == 404) null else throw e
     }
 
-    suspend fun groups(): List<Group> = runCatching { api.get<List<Group>>("/api/groups") }.getOrDefault(emptyList())
+    suspend fun groups(): List<Group> = runCatching { v2Or({ this.groups() }, { api.get<List<Group>>("/api/groups") }) }.getOrDefault(emptyList())
 
     // ---------- finances (member) ----------
 
@@ -746,69 +833,88 @@ class AgoraRepository(val api: AgoraApi) {
 
     // ---------- events ----------
 
-    suspend fun events(): List<AgoraEvent> = api.get("/api/events")
-    suspend fun myDutyRequests(): List<DutyRequest> = api.get("/api/events/my-requests")
-    suspend fun eventSettings(): EventSettings = runCatching { api.get<EventSettings>("/api/events/settings") }.getOrDefault(EventSettings())
-    suspend fun attendees(eventId: String): Attendees = api.get("/api/events/$eventId/attendees")
-    suspend fun candidates(): Candidates = api.get("/api/events/candidates")
+    suspend fun events(): List<AgoraEvent> = v2Or({ this.events() }, { api.get("/api/events") })
+    suspend fun myDutyRequests(): List<DutyRequest> = v2Or({ this.dutyRequests() }, { api.get("/api/events/my-requests") })
 
-    suspend fun register(eventId: String, register: Boolean) {
+    /** The old API's event settings; with v2 every member may create events (CALDERA has no such setting any more). */
+    suspend fun eventSettings(): EventSettings =
+        v2Or({ EventSettings() }, { runCatching { api.get<EventSettings>("/api/events/settings") }.getOrDefault(EventSettings()) })
+
+    suspend fun attendees(eventId: String): Attendees = v2Or({ this.participants(eventId) }, { api.get("/api/events/$eventId/attendees") })
+    suspend fun candidates(): Candidates = v2Or({ this.candidates() }, { api.get("/api/events/candidates") })
+
+    suspend fun register(eventId: String, register: Boolean) = v2Or({ this.register(eventId, register) }) {
         api.post<JsonObject>("/api/events/$eventId/register", buildJsonObject { put("action", if (register) "register" else "cancel") })
+        Unit
     }
 
-    suspend fun removeAttendee(eventId: String, userId: String) {
+    /** [userId]: a member's account id, or a guest as `guest:<guestId>` ([org.agora.app.data.model.Attendee.userId]). */
+    suspend fun removeAttendee(eventId: String, userId: String) = v2Or({ this.removeParticipant(eventId, userId) }) {
         api.delete<JsonObject>("/api/events/$eventId/attendees/$userId")
+        Unit
     }
 
     /** The share switch: whether people without an account may open the event's link (only its editors). */
     suspend fun setEventPublic(eventId: String, isPublic: Boolean) {
-        api.patch<JsonObject>("/api/events/$eventId", buildJsonObject { put("isPublic", isPublic) })
+        val change = buildJsonObject { put("isPublic", isPublic) }
+        v2Or({ this.changeEvent(eventId, change) }) { api.patch<JsonObject>("/api/events/$eventId", change); Unit }
     }
 
-    suspend fun respondToDuty(dutyId: String, accept: Boolean) {
+    suspend fun respondToDuty(dutyId: String, accept: Boolean) = v2Or({ this.answerDuty(dutyId, accept) }) {
         api.post<JsonObject>("/api/events/duties/$dutyId/respond", buildJsonObject { put("action", if (accept) "accept" else "decline") })
+        Unit
     }
 
-    suspend fun claimDuty(dutyId: String, claim: Boolean) {
+    suspend fun claimDuty(dutyId: String, claim: Boolean) = v2Or({ this.claimDuty(dutyId, claim) }) {
         api.post<JsonObject>("/api/events/duties/$dutyId/claim", if (claim) buildJsonObject {} else buildJsonObject { put("action", "unclaim") })
+        Unit
     }
 
-    suspend fun cancelDutyRequest(dutyId: String) {
+    suspend fun cancelDutyRequest(dutyId: String) = v2Or({ this.withdrawDutyRequest(dutyId) }) {
         api.post<JsonObject>("/api/events/duties/$dutyId/cancel-request")
+        Unit
     }
 
-    suspend fun addDuty(eventId: String, roleName: String, section: String, userId: String?, groupId: String?) {
-        api.post<JsonObject>("/api/events/$eventId/duties", buildJsonObject {
-            put("roleName", roleName)
-            if (section.isNotBlank()) put("section", section)
-            userId?.let { put("targetUserId", it) }
-            groupId?.let { put("targetGroupId", it) }
-            put("sendEmail", true)
-        })
-    }
+    suspend fun addDuty(eventId: String, roleName: String, section: String, userId: String?, groupId: String?) =
+        v2Or({ this.addDuty(eventId, roleName, section, userId, groupId) }) {
+            api.post<JsonObject>("/api/events/$eventId/duties", buildJsonObject {
+                put("roleName", roleName)
+                if (section.isNotBlank()) put("section", section)
+                userId?.let { put("targetUserId", it) }
+                groupId?.let { put("targetGroupId", it) }
+                put("sendEmail", true)
+            })
+            Unit
+        }
 
-    suspend fun assignDuty(dutyId: String, userId: String?, groupId: String?) {
+    suspend fun assignDuty(dutyId: String, userId: String?, groupId: String?) = v2Or({ this.assignDuty(dutyId, userId, groupId) }) {
         api.post<JsonObject>("/api/events/duties/$dutyId/assign", buildJsonObject {
             userId?.let { put("targetUserId", it) }
             groupId?.let { put("targetGroupId", it) }
             put("sendEmail", true)
         })
+        Unit
     }
 
-    suspend fun updateDutyNotes(dutyId: String, notes: String) {
+    suspend fun updateDutyNotes(dutyId: String, notes: String) = v2Or({ this.changeDutyNotes(dutyId, notes) }) {
         api.patch<JsonObject>("/api/events/duties/$dutyId", buildJsonObject { put("notes", notes) })
+        Unit
     }
 
-    suspend fun deleteDuty(dutyId: String) {
+    suspend fun deleteDuty(dutyId: String) = v2Or({ this.deleteDuty(dutyId) }) {
         api.delete<JsonObject>("/api/events/duties/$dutyId")
+        Unit
     }
 
-    suspend fun uploadEventImage(jpeg: ByteArray): String =
+    suspend fun uploadEventImage(jpeg: ByteArray): String = v2Or({ this.uploadEventImage(jpeg) }) {
         api.upload("/api/events/upload-image", UploadResponse.serializer()) {
             addFormDataPart("image", "cover.jpg", AgoraApi.fileBody(jpeg, "image/jpeg"))
         }.url
+    }
 
-    suspend fun saveEvent(existingId: String?, input: EventInput) {
+    suspend fun saveEvent(existingId: String?, input: EventInput) = v2Or({ this.saveEvent(existingId, input) }) { saveEventOld(existingId, input) }
+
+    private suspend fun saveEventOld(existingId: String?, input: EventInput) {
         val body = buildJsonObject {
             put("title", input.title.trim())
             put("date", input.date)
@@ -838,45 +944,57 @@ class AgoraRepository(val api: AgoraApi) {
         if (existingId == null) api.post<JsonObject>("/api/events", body) else api.patch<JsonObject>("/api/events/$existingId", body)
     }
 
-    suspend fun deleteEvent(eventId: String) {
+    suspend fun deleteEvent(eventId: String) = v2Or({ this.deleteEvent(eventId) }) {
         api.delete<JsonObject>("/api/events/$eventId")
+        Unit
     }
 
     // ---------- mentoring ----------
 
-    suspend fun threads(): List<MentoringThread> = api.get("/api/mentoring/threads")
-    suspend fun messages(threadId: String): List<ChatMessage> = api.get("/api/mentoring/threads/$threadId/messages")
+    suspend fun threads(): List<MentoringThread> = v2Or({ this.threads() }, { api.get("/api/mentoring/threads") })
 
-    suspend fun sendMessage(threadId: String, text: String) {
+    /** The messages, the oldest first; what the other one wrote is read now. */
+    suspend fun messages(threadId: String): List<ChatMessage> =
+        v2Or({ this.messages(threadId) }, { api.get("/api/mentoring/threads/$threadId/messages") })
+
+    suspend fun sendMessage(threadId: String, text: String) = v2Or({ this.sendMessage(threadId, text) }) {
         api.post<JsonObject>("/api/mentoring/threads/$threadId/messages", buildJsonObject { put("text", text) })
+        Unit
     }
 
-    suspend fun setThreadStatus(threadId: String, status: String) {
+    suspend fun setThreadStatus(threadId: String, status: String) = v2Or({ this.setThreadStatus(threadId, status) }) {
         api.patch<JsonObject>("/api/mentoring/threads/$threadId/status", buildJsonObject { put("status", status) })
+        Unit
     }
 
     suspend fun mentors(status: String? = null): List<Mentor> =
-        api.get("/api/mentoring/mentors", status?.let { mapOf("status" to it) } ?: emptyMap())
+        v2Or({ this.mentors(status) }, { api.get("/api/mentoring/mentors", status?.let { mapOf("status" to it) } ?: emptyMap()) })
 
-    suspend fun myMentorProfile(): MyMentorProfile = runCatching { api.get<MyMentorProfile>("/api/mentoring/my-profile") }.getOrDefault(MyMentorProfile())
+    suspend fun myMentorProfile(): MyMentorProfile = runCatching {
+        v2Or({ this.myMentorProfile() }, { api.get<MyMentorProfile>("/api/mentoring/my-profile") })
+    }.getOrDefault(MyMentorProfile())
 
-    suspend fun contactMentor(mentorUserId: String, message: String): String =
+    suspend fun contactMentor(mentorUserId: String, message: String): String = v2Or({ this.contactMentor(mentorUserId, message) }) {
         api.post<CreateThreadResponse>("/api/mentoring/threads", buildJsonObject {
             put("mentorId", mentorUserId)
             put("initialMessage", message)
         }).threadId
-
-    suspend fun saveMentorProfile(isNew: Boolean, bio: String, maxMentees: Int, isAccepting: Boolean) {
-        val body = buildJsonObject {
-            put("bio", bio.trim())
-            put("max_mentees", maxMentees)
-            if (!isNew) put("isAccepting", isAccepting)
-        }
-        if (isNew) api.post<JsonObject>("/api/mentoring/apply", body) else api.put<JsonObject>("/api/mentoring/my-profile", body)
     }
 
-    suspend fun setMentorStatus(mentorRecordId: String, status: String) {
+    suspend fun saveMentorProfile(isNew: Boolean, bio: String, maxMentees: Int, isAccepting: Boolean) =
+        v2Or({ this.saveMentorProfile(isNew, bio, maxMentees, isAccepting) }) {
+            val body = buildJsonObject {
+                put("bio", bio.trim())
+                put("max_mentees", maxMentees)
+                if (!isNew) put("isAccepting", isAccepting)
+            }
+            if (isNew) api.post<JsonObject>("/api/mentoring/apply", body) else api.put<JsonObject>("/api/mentoring/my-profile", body)
+            Unit
+        }
+
+    suspend fun setMentorStatus(mentorRecordId: String, status: String) = v2Or({ this.setMentorStatus(mentorRecordId, status) }) {
         api.post<JsonObject>("/api/mentoring/manage/$mentorRecordId/status", buildJsonObject { put("status", status) })
+        Unit
     }
 
     // ---------- AI ----------

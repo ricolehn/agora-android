@@ -204,9 +204,9 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null, privat
 
     // ---------- uploads ----------
 
-    suspend fun <T> upload(path: String, deserializer: DeserializationStrategy<T>, build: MultipartBody.Builder.() -> Unit): T {
+    suspend fun <T> upload(path: String, deserializer: DeserializationStrategy<T>, method: String = "POST", build: MultipartBody.Builder.() -> Unit): T {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM).apply(build).build()
-        val request = Request.Builder().url(url(path)).post(body).build()
+        val request = Request.Builder().url(url(path)).method(method, body).build()
         return decode(deserializer, execute(request, reportUnauthorized = true))
     }
 

@@ -89,6 +89,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.agora.app.R
+import org.agora.app.data.MentoringLimits
 import org.agora.app.data.model.Mentor
 import org.agora.app.data.model.User
 import org.agora.app.ui.components.AgoraCard
@@ -346,7 +347,7 @@ private fun ContactMentorSheet(mentor: Mentor, onDismiss: () -> Unit, onCreated:
     ) {
         Text(stringResource(R.string.mentoring_contact_hint, mentor.displayName), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        AgoraTextField(message, { message = it }, label = { Text(stringResource(R.string.mentoring_first_message)) }, minLines = 4, modifier = Modifier.fillMaxWidth())
+        AgoraTextField(message, { message = it.take(MentoringLimits.MESSAGE) }, label = { Text(stringResource(R.string.mentoring_first_message)) }, minLines = 4, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -371,7 +372,7 @@ private fun MentorProfileSheet(onDismiss: () -> Unit) {
                 confirmLabel = stringResource(if (existing == null) R.string.mentoring_submit_application else R.string.save),
                 onConfirm = {
                     runner.run(savedMsg) {
-                        container.repo.saveMentorProfile(existing == null, bio, (max.toIntOrNull() ?: 3).coerceAtLeast(1), accepting)
+                        container.repo.saveMentorProfile(existing == null, bio, (max.toIntOrNull() ?: 3).coerceIn(1, MentoringLimits.MOST_MENTEES), accepting)
                         container.store.refreshAll()
                         sheet.dismiss()
                     }
@@ -382,7 +383,7 @@ private fun MentorProfileSheet(onDismiss: () -> Unit) {
             )
         }
     ) {
-        AgoraTextField(bio, { bio = it }, label = { Text(stringResource(R.string.mentoring_bio)) }, minLines = 4, modifier = Modifier.fillMaxWidth())
+        AgoraTextField(bio, { bio = it.take(MentoringLimits.BIO) }, label = { Text(stringResource(R.string.mentoring_bio)) }, minLines = 4, modifier = Modifier.fillMaxWidth())
         AgoraTextField(max, { max = it.filter(Char::isDigit).take(2) }, label = { Text(stringResource(R.string.mentoring_capacity_label)) },
             singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
         if (existing != null) SheetToggleRow(stringResource(R.string.mentoring_accepting), accepting, { accepting = it })

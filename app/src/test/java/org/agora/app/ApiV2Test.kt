@@ -1,9 +1,7 @@
 package org.agora.app
 
-import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +21,7 @@ import org.agora.app.data.model.V2Member
 import org.agora.app.data.model.toPerson
 import org.agora.app.data.remote.AgoraApi
 import org.agora.app.data.remote.ApiException
+import org.agora.app.data.remote.ApiV2
 import org.agora.app.util.Dates
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,8 +29,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.net.InetSocketAddress
-import java.net.URLDecoder
 import java.time.YearMonth
 
 /**
@@ -72,12 +69,19 @@ class ApiV2Test {
     }
 
     @Test
-    fun `the books go through API v2 only where the server offers all of their resources`() = FakeServer().use { server ->
+    fun `the app goes through API v2 only where the server offers every resource it uses - all or nothing`() = FakeServer().use { server ->
         val repo = server.repository(json, signedIn = true)
+        val all = ApiV2.NEEDED.joinToString(",") { "\"$it\"" }
         server.on("GET", "/api/status") { 200 to """{"setupMode":false,"ready":true,"updating":false,"apiVersions":[1,2]}""" }
-        server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":["me","members","payments","standing-orders","status-changes","donations","expenses","receipts","requests","finance/ledger","finance/summary","events"]}""" }
+        // Everything it uses - and more it does not know yet
+        server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":[$all,"somethingNew"]}""" }
         assertTrue(runBlocking { repo.checkServer() }!!.answersV2)
         assertTrue(repo.v2.available)
+        // CALDERA's 3.4.0-beta6: the books, the calendar and the community - but not the own account's settings,
+        // pictures and reports: asked the old way throughout
+        server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":[${(ApiV2.NEEDED - setOf("registration-code", "pictures", "me/picture", "reports")).joinToString(",") { "\"$it\"" }}]}""" }
+        runBlocking { repo.checkServer() }
+        assertFalse(repo.v2.available)
         // A beta before 3.4.0-beta6: v2, but not all of the books
         server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":["me","members","payments","donations","expenses","requests","finance/summary"]}""" }
         runBlocking { repo.checkServer() }
@@ -452,45 +456,5 @@ class ApiV2Test {
             "details":{"amount":"12.5","date":"2026-05-09","note":"v2"},"receipts":[],"createdAt":"2026-05-09T08:30:00.000Z"}"""
         const val LEDGER_PAYMENT = """{"kind":"memberPayment","id":"pay1","amountCents":8000,"date":"2026-10-16","who":"Anna Alt","memberId":"m-anna",
             "description":"Zahlung (Genehmigt)","receipts":[],"clientId":"1792157573926","source":"manual"}"""
-    }
-
-    private class Call(val method: String, val path: String, val query: Map<String, String>, val headers: Map<String, String>, val body: String) {
-        fun json(): JsonObject = Json.parseToJsonElement(body).jsonObject
-    }
-
-    /** Answers by method and path ([on]) and records every call. */
-    private class FakeServer : AutoCloseable {
-        private val handlers = mutableMapOf<String, (Map<String, String>) -> Pair<Int, String>>()
-        private val recorded = mutableListOf<Call>()
-        private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
-            createContext("/") { exchange ->
-                val uri = exchange.requestURI
-                val query = uri.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() }.associate {
-                    URLDecoder.decode(it.substringBefore('='), "UTF-8") to URLDecoder.decode(it.substringAfter('=', ""), "UTF-8")
-                }
-                val headers = exchange.requestHeaders.mapValues { it.value.joinToString(",") }
-                val call = Call(exchange.requestMethod, uri.path, query, headers, exchange.requestBody.readBytes().decodeToString())
-                val (code, text) = synchronized(recorded) {
-                    recorded += call
-                    handlers["${call.method} ${call.path}"]
-                }?.invoke(query) ?: (500 to """{"error":"unexpected call ${call.method} ${call.path}"}""")
-                val bytes = text.toByteArray()
-                exchange.responseHeaders.add("Content-Type", "application/json")
-                exchange.sendResponseHeaders(code, if (code == 204) -1 else bytes.size.toLong())
-                if (code != 204) exchange.responseBody.use { it.write(bytes) } else exchange.close()
-            }
-            start()
-        }
-        val base = "http://127.0.0.1:${server.address.port}"
-
-        fun on(method: String, path: String, answer: (Map<String, String>) -> Pair<Int, String>) = synchronized(recorded) { handlers["$method $path"] = answer }
-        fun calls(method: String, path: String): List<Call> = synchronized(recorded) { recorded.filter { it.method == method && it.path == path } }
-
-        fun repository(json: Json, signedIn: Boolean = false) =
-            AgoraRepository(AgoraApi(json, "test", null).apply { baseUrl = base; if (signedIn) token = "token" })
-        /** A repository for a signed-in person on a server known to answer API v2. */
-        fun v2Repository(json: Json) = repository(json, signedIn = true).also { it.api.apiV2 = true }
-
-        override fun close() = server.stop(0)
     }
 }

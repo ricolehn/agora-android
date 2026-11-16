@@ -155,7 +155,6 @@ import org.agora.app.ui.components.CapsLabel
 import org.agora.app.ui.components.PillTabs
 import org.agora.app.ui.components.SubPageHeader
 import java.util.Locale
-import kotlin.random.Random
 
 fun openInBrowser(context: Context, url: String) {
     try {
@@ -574,8 +573,7 @@ private fun InviteCard() {
                     Text(" " + stringResource(R.string.copy_btn))
                 }
                 SecondaryButton(onClick = {
-                    val code = Random.nextInt(100000, 1000000).toString()
-                    runner.run(savedMsg) { container.repo.setInviteCode(code); inviteCode = code }
+                    runner.run(savedMsg) { inviteCode = container.repo.newInviteCode() }
                 }, enabled = !runner.busy) {
                     Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp))
                     Text(" " + stringResource(R.string.btn_generate_new))
