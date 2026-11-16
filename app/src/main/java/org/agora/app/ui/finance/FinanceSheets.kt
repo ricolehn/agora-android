@@ -16,6 +16,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.AsyncImage
 import org.agora.app.data.BookingEdit
+import org.agora.app.data.TextLimits
 import org.agora.app.data.Bookings
 import org.agora.app.data.model.Transaction
 import org.agora.app.ui.components.CapsLabel
@@ -97,7 +98,7 @@ internal fun BookPaymentSheet(person: Person, onDismiss: () -> Unit, onSaved: ()
                 onConfirm = {
                     parseTypedAmount(amount)?.let { value ->
                         runner.run(bookedMsg) {
-                            container.repo.bookPayment(person.id, value, date, note.trim(), standingOrder)
+                            container.repo.bookPayment(person, value, date, note.trim(), standingOrder)
                             onSaved()
                             sheet.dismiss()
                         }
@@ -113,7 +114,7 @@ internal fun BookPaymentSheet(person: Person, onDismiss: () -> Unit, onSaved: ()
         DateField(stringResource(if (standingOrder) R.string.start_date else R.string.date), date, { date = it })
         // Dated before the member's fresh start: it first pays off the open fees dropped then (CALDERA)
         FeeResetNote(if (standingOrder) null else feeResetPaymentHint(person, date))
-        AgoraTextField(note, { note = it }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
+        AgoraTextField(note, { note = it.take(TextLimits.TEXT) }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
         SheetToggleRow(stringResource(R.string.is_standing_order), standingOrder, { standingOrder = it }, icon = Icons.Outlined.Autorenew)
     }
 }
@@ -137,7 +138,7 @@ internal fun ChangeStatusSheet(person: Person, onDismiss: () -> Unit, onSaved: (
                 confirmLabel = stringResource(R.string.save),
                 onConfirm = {
                     runner.run(doneMsg) {
-                        container.repo.changeStatus(person.id, status, date)
+                        container.repo.changeStatus(person, status, date)
                         onSaved()
                         sheet.dismiss()
                     }
@@ -173,7 +174,9 @@ fun FinanceEntrySheet(kind: String, onDismiss: () -> Unit, onSaved: () -> Unit) 
         scope.launch { uris.forEach { uri -> readPickedFile(context, uri)?.let { receipts += it } } }
     }
     val value = parseTypedAmount(amount)
-    val valid = value != null && value > 0 && name.isNotBlank() && date.isNotBlank() && (!isExpense || description.isNotBlank())
+    // An expense keeps at most 20 receipts through API v2
+    val receiptsFit = !isExpense || container.repo.receiptsFit(receipts.size)
+    val valid = value != null && value > 0 && name.isNotBlank() && date.isNotBlank() && (!isExpense || description.isNotBlank()) && receiptsFit
     AgoraSheet(
         title = stringResource(if (isExpense) R.string.action_book_expense else R.string.action_capture_donation),
         icon = if (isExpense) Icons.Outlined.Euro else Icons.Outlined.FavoriteBorder,
@@ -200,12 +203,13 @@ fun FinanceEntrySheet(kind: String, onDismiss: () -> Unit, onSaved: () -> Unit) 
         }
     ) {
         AmountField(stringResource(R.string.amount), amount, { amount = it })
-        AgoraTextField(name, { name = it }, label = { Text(stringResource(if (isExpense) R.string.issuer else R.string.donor_name)) },
+        AgoraTextField(name, { name = it.take(TextLimits.NAME) }, label = { Text(stringResource(if (isExpense) R.string.issuer else R.string.donor_name)) },
             singleLine = true, modifier = Modifier.fillMaxWidth())
         DateField(stringResource(R.string.date), date, { date = it })
-        AgoraTextField(description, { description = it }, label = { Text(stringResource(R.string.description)) }, modifier = Modifier.fillMaxWidth())
+        AgoraTextField(description, { description = it.take(TextLimits.TEXT) }, label = { Text(stringResource(R.string.description)) }, modifier = Modifier.fillMaxWidth())
         if (isExpense) {
             receipts.toList().forEach { file -> SheetFileRow(file.name) { receipts.remove(file) } }
+            if (!receiptsFit) ReceiptsTooMany()
             SecondaryButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
                 ButtonLabel(stringResource(R.string.add_receipts), Icons.Outlined.AttachFile)
             }
@@ -247,7 +251,12 @@ internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () ->
     val goneMsg = stringResource(R.string.booking_gone)
     // A new amount has to be one that can be booked; an old entry's amount left as it is (also 0 or less) may stay
     val value = parseTypedAmount(amount)
-    val valid = value != null && (value > 0 || amount == initialAmount) && Dates.parse(date) != null && (isPayment || name.isNotBlank())
+    // Receipts only count when they change (what is stored stays as it is otherwise)
+    val receiptsChanged = newReceipts.isNotEmpty() || storedReceipts.toList() != receiptFiles(tx.receipt)
+    val receiptsFit = !isExpense || !receiptsChanged || container.repo.receiptsFit(storedReceipts.size + newReceipts.size)
+    // A donation or expense booked without a name may stay without one
+    val valid = value != null && (value > 0 || amount == initialAmount) && Dates.parse(date) != null &&
+        (isPayment || name.isNotBlank() || tx.who.isBlank()) && receiptsFit
 
     // Also when the entry is gone meanwhile (nothing is written then): the history is reloaded and says so. Other errors
     // keep the sheet open with the message.
@@ -292,17 +301,18 @@ internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () ->
         }
     ) {
         AmountField(stringResource(R.string.amount), amount, { amount = it })
-        if (!isPayment) AgoraTextField(name, { name = it }, label = { Text(stringResource(if (isExpense) R.string.issuer else R.string.donor_name)) },
+        if (!isPayment) AgoraTextField(name, { name = it.take(TextLimits.NAME) }, label = { Text(stringResource(if (isExpense) R.string.issuer else R.string.donor_name)) },
             singleLine = true, modifier = Modifier.fillMaxWidth())
         DateField(stringResource(R.string.date), date, { date = it })
         // Dated before the member's fresh start: it first pays off the open fees dropped then (CALDERA)
         if (isPayment) FeeResetNote(feeResetPaymentHint(person, date))
-        AgoraTextField(description, { description = it }, label = { Text(stringResource(if (isPayment) R.string.note else R.string.description)) },
+        AgoraTextField(description, { description = it.take(TextLimits.TEXT) }, label = { Text(stringResource(if (isPayment) R.string.note else R.string.description)) },
             modifier = Modifier.fillMaxWidth())
         if (isExpense) {
             CapsLabel(stringResource(R.string.receipts), Modifier.padding(top = 4.dp))
             storedReceipts.toList().forEach { file -> StoredReceiptRow(container.repo.receiptUrl(file), file) { storedReceipts.remove(file) } }
             newReceipts.toList().forEach { file -> SheetFileRow(file.name) { newReceipts.remove(file) } }
+            if (!receiptsFit) ReceiptsTooMany()
             SecondaryButton(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
                 ButtonLabel(stringResource(R.string.add_receipts), Icons.Outlined.AttachFile)
             }
@@ -319,6 +329,12 @@ internal fun EditBookingSheet(tx: Transaction, person: Person?, onDismiss: () ->
         onConfirm = { submit(deletedMsg) { container.repo.deleteBooking(tx) } },
         onDismiss = { confirmDelete = false }
     )
+}
+
+/** More receipts than one expense can keep (API v2 keeps them in one field): one of them has to go. */
+@Composable
+private fun ReceiptsTooMany() {
+    Text(stringResource(R.string.receipts_too_many), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
 }
 
 /** A stored receipt of the expense being edited: its picture, the file name and remove (takes effect on saving). */
@@ -366,7 +382,7 @@ internal fun ManageStandingOrderSheet(person: Person, order: StandingOrder, onDi
                 confirmIcon = Icons.Outlined.EventBusy,
                 onConfirm = {
                     runner.run(updatedMsg) {
-                        container.repo.endStandingOrder(person.id, order.id, endDate)
+                        container.repo.endStandingOrder(person, order, endDate)
                         onSaved()
                         sheet.dismiss()
                     }
@@ -398,7 +414,7 @@ internal fun ManageStandingOrderSheet(person: Person, order: StandingOrder, onDi
         destructive = true,
         onConfirm = {
             runner.run(deletedMsg) {
-                container.repo.deleteStandingOrder(person.id, order.id)
+                container.repo.deleteStandingOrder(person, order)
                 onSaved()
                 sheet.dismiss()
             }

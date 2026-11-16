@@ -215,7 +215,7 @@ class ScreenshotTest {
     @Test fun maxDeleteAccountSheet() = shoot("sheet-delete-account", "max", "settings", tap = listOf("Account & privacy", ">Delete account"), sheet = true)
     @Test fun ownerStandingOrderSheet() = shoot(
         "sheet-standing-order", "owner", "finances", tap = listOf(MEMBERS_TAB, "Max Mitglied", ">@Manage"), sheet = true,
-        prepare = { c -> c.repo.bookPayment(c.repo.allPeople().first { it.name == "Max Mitglied" }.id, 25.0, "2026-07-01", "Beitrag", standingOrder = true) }
+        prepare = { c -> c.repo.bookPayment(c.repo.allPeople().first { it.name == "Max Mitglied" }, 25.0, "2026-07-01", "Beitrag", standingOrder = true) }
     )
 
     // Monthly fees (server CALDERA): the fees over time, the fresh start, and what they look like for a member
@@ -281,25 +281,28 @@ class ScreenshotTest {
             container.store.login("owner@test.de", "test1234")
             val repo = container.repo
             val id = repo.allPeople().first { it.name == "Mia Mentorin" }.id
-            suspend fun orders() = repo.person(id)!!.standingOrders
+            suspend fun mia() = repo.person(id)!!
+            suspend fun orders() = mia().standingOrders
             val before = orders().size
-            repo.bookPayment(id, 12.5, "2026-08-01", "E2E", standingOrder = true)
+            repo.bookPayment(mia(), 12.5, "2026-08-01", "E2E", standingOrder = true)
             val order = orders().last { it.note == "E2E" }
             org.junit.Assert.assertEquals(before + 1, orders().size)
 
             val future = java.time.LocalDate.now().plusMonths(2).toString()
-            repo.endStandingOrder(id, order.id, future)
+            repo.endStandingOrder(mia(), order, future)
             org.junit.Assert.assertEquals(future, orders().first { it.id == order.id }.endDate)
 
-            repo.endStandingOrder(id, order.id, java.time.LocalDate.now().minusDays(3).toString())
-            org.junit.Assert.assertTrue("ended in the past -> removed", orders().none { it.id == order.id })
+            // Ended in the past: removed at once through the old API, by the server's daily run through API v2
+            val past = java.time.LocalDate.now().minusDays(3).toString()
+            repo.endStandingOrder(mia(), order, past)
+            org.junit.Assert.assertTrue("ended in the past", orders().none { it.id == order.id } || orders().first { it.id == order.id }.endDate == past)
 
-            repo.bookPayment(id, 9.0, "2026-09-01", "E2E delete", standingOrder = true)
+            repo.bookPayment(mia(), 9.0, "2026-09-01", "E2E delete", standingOrder = true)
             val second = orders().last { it.note == "E2E delete" }
-            val paymentsBefore = repo.person(id)!!.payments.size
-            repo.deleteStandingOrder(id, second.id)
+            val paymentsBefore = mia().payments.size
+            repo.deleteStandingOrder(mia(), second)
             org.junit.Assert.assertTrue(orders().none { it.id == second.id })
-            org.junit.Assert.assertEquals(paymentsBefore, repo.person(id)!!.payments.size)
+            org.junit.Assert.assertEquals(paymentsBefore, mia().payments.size)
             runCatching { container.store.logout() }
         }
     }

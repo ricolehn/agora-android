@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Was der Server antwortet (CALDERA): ein Server, der startet oder seine Datenbank aktualisiert, Fehler von API v2, ihre Grenzen -->
+<resources>
+    <string name="error_server_starting">Der Server startet gerade oder aktualisiert seine Datenbank. Bitte gleich noch einmal versuchen.</string>
+    <string name="error_rate_limited">Zu viele Anfragen auf einmal. Bitte einen Moment warten und erneut versuchen.</string>
+    <string name="error_conflict">Das wurde inzwischen von jemand anderem geändert. Bitte neu laden und erneut versuchen.</string>
+    <string name="receipts_too_many">Eine Ausgabe nimmt höchstens 20 Belege auf. Bitte einen entfernen.</string>
+</resources>

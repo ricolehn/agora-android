@@ -202,6 +202,7 @@ fun LoginScreen(
     val shortPw = stringResource(R.string.error_password_short)
     val mismatch = stringResource(R.string.error_password_mismatch)
     val generic = stringResource(R.string.error_generic)
+    val resources = androidx.compose.ui.platform.LocalResources.current
 
     val submit: () -> Unit = { if (!busy) scope.launch submit@{
         error = null
@@ -219,7 +220,8 @@ fun LoginScreen(
         try {
             if (registerMode) onRegister(code, email, firstName, lastName, password) else onLogin(email, password)
         } catch (e: ApiException) {
-            error = e.message ?: generic
+            // A server that is starting or upgrading its database (CALDERA) asks to try again in a moment
+            error = org.agora.app.ui.components.knownErrorText(e)?.let(resources::getString) ?: e.message ?: generic
         } catch (e: Exception) {
             error = generic
         }

@@ -36,8 +36,10 @@ object Dates {
     fun parse(iso: String?): LocalDate? = iso?.takeIf { it.length >= 10 }?.let { runCatching { LocalDate.parse(it.substring(0, 10)) }.getOrNull() }
 
     /** `_paidUntil` is an ISO instant of a server-local midnight; only its month matters. */
+    /** The month a fee account is paid up to: the old API names the moment (`_paidUntil`), API v2 the day (`paidUntil`). */
     fun paidUntilMonth(iso: String?): YearMonth? = iso?.let {
         runCatching { YearMonth.from(Instant.parse(it).plusSeconds(12 * 3600).atOffset(ZoneOffset.UTC)) }.getOrNull()
+            ?: runCatching { YearMonth.from(LocalDate.parse(it.take(10))) }.getOrNull()
     }
 
     fun monthYear(month: YearMonth, locale: Locale): String =

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the server answers (CALDERA): a server that starts or upgrades its database, API v2's errors, its limits -->
+<resources>
+    <string name="error_server_starting">The server is starting or updating its database. Please try again in a moment.</string>
+    <string name="error_rate_limited">Too many requests at once. Please wait a moment and try again.</string>
+    <string name="error_conflict">This was changed by someone else in the meantime. Please reload and try again.</string>
+    <string name="receipts_too_many">An expense keeps at most 20 receipts. Please remove one.</string>
+</resources>

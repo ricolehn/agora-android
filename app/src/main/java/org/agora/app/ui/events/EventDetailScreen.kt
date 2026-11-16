@@ -477,7 +477,10 @@ private fun RegistrationCard(event: AgoraEvent, user: User) {
     val meta = listOfNotNull(
         if (max > 0) stringResource(R.string.reg_places_taken, count, max) else stringResource(R.string.reg_count, count),
         if (max > 0) (if (free > 0) stringResource(R.string.reg_places_free, free) else stringResource(R.string.reg_booked_out)) else null,
-        if (event.minParticipants > 0) stringResource(R.string.reg_min, event.minParticipants) else null
+        // The minimum: how many are still needed, or that it is reached (members and guests count alike, like the web)
+        if (event.minParticipants <= 0) null
+        else if (count >= event.minParticipants) stringResource(R.string.reg_min_reached, event.minParticipants)
+        else stringResource(R.string.reg_min_missing, event.minParticipants - count, event.minParticipants)
     ).joinToString(" · ")
     val leave = {
         runner.run(resources.getString(R.string.events_unregistered_success)) { container.repo.register(event.id, false); container.store.refreshAll() }

@@ -15,13 +15,13 @@ It talks to the same backend as the web app (PWA) and mirrors its screens and ru
 |---|---|
 | **Start** | Greeting with date, overdue or soon-due membership fee (nothing while all is paid), open duty requests with *Accept* / *Decline*, *Up next* (the next five appointments and events as a swipeable row), your upcoming duties, unread mentoring messages |
 | **Finances (members)** | Fee status with monthly rate (the fee of this month as the server works it out, server CALDERA), requests (payment, standing order, status change, expense with receipts), request status, payment history. After a fresh start of the fee accounts: the chip *Fresh start on …* for 60 days, and the day as a marked point in the history with what happened then (credit carried over / open fees dropped / all paid up) – the entries below it, the settled time before, quieter. A payment request dated before the fresh start says that it first pays off the old arrears |
-| **Finances (treasurers)** | Cash balance, open requests (approve / reject with reason), searchable booking history with receipts, member list, member detail with payment booking, standing orders and status changes, record donations and expenses. Every booking of the history opens with its details; finance managers *Edit* it there like in the web app – amount, date, note or description, the donor or who issued an expense and its receipts (remove, add pictures) – or delete it after a confirmation. Booking a payment – deciding on a payment request, or moving a payment's date – before a member's fresh start says what it does: it first pays off the open fees dropped then |
-| **Events** | *Appointments* and *Events* tabs with the PWA's filter rules, search, highlight/cover cards, detail page with registration / waiting list, attendee list (guests without an account marked, their contact for the event's editors), duty roster (answer requests, managers add tasks, assign people or groups, remove entries), create / edit / delete events incl. cover image, target groups and recurring appointments |
+| **Finances (treasurers)** | Cash balance, open requests (approve / reject with reason), searchable booking history with receipts (through API v2 on servers CALDERA and newer, see below), member list, member detail with payment booking, standing orders and status changes, record donations and expenses. Every booking of the history opens with its details; finance managers *Edit* it there like in the web app – amount, date, note or description, the donor or who issued an expense and its receipts (remove, add pictures) – or delete it after a confirmation. Booking a payment – deciding on a payment request, or moving a payment's date – before a member's fresh start says what it does: it first pays off the open fees dropped then |
+| **Events** | *Appointments* and *Events* tabs with the PWA's filter rules, search, highlight/cover cards, detail page with registration / waiting list (with the minimum: *2 more needed (min. 5)* / *minimum of 5 reached*; a minimum above the places is refused before saving, as server CALDERA does), attendee list (guests without an account marked, their contact for the event's editors), duty roster (answer requests, managers add tasks, assign people or groups, remove entries), create / edit / delete events incl. cover image, target groups and recurring appointments |
 | **Sharing** | Share icon right of every event's title and organiser: a sheet with the event's link to copy or to hand to Android's share sheet, and, for those who may edit the event, the switch *Visible without an account* (server 3.2 or newer) that lets people without an account open the link and sign up as guests in the browser |
 | **Mentoring** | Conversations with unread badges, chat (live polling while open), end / reopen, find mentors and contact anonymously, mentor application / profile, review of applications for mentoring managers |
 | **Extras** | One tab for the further offers in the web's order: the AI chat across the full width on top, then *Media*, *Songbook* and *Prayer requests* as tiles with flat tinted icons (each only for those who may use it) |
 | **Media** *(server 3.3 BA SING SE)* | The community's Nextcloud folder as a library: folders and thumbnails (Nextcloud's previews in the server's fixed sizes, cached until the file changes), path above the list, sort by name or newest, back goes up a folder. Pictures open full screen (swipe, pinch or double tap to zoom; zoomed in, the largest preview takes over – never the original, so DNG, RAW or HEIC show too), PDFs page by page (Android's PdfRenderer), videos and music in the app's player (Media3, seekable), anything else in another app. Holding an entry selects; the selection downloads as one ZIP (or the single file) to a place you pick and, with write access, is deleted. With write access: upload files (streamed, with progress) and create folders. Members with *Extended media rights* set the rights of every folder (all members, groups, single people: read, write, no access) and see all folder rights at a glance |
-| **AI support** | Streaming answers rendered as Markdown; the assistant's orb, a greeting by name with three suggestions, "Thinking · 4 s" / "Thought · 12 s" (tap to read the thoughts); says when a model only thought or the connection died (servers 3.3+ keep the stream alive while the model thinks); only visible with permission and when AI is enabled on the server |
+| **AI support** | Streaming answers rendered as Markdown; the assistant's orb, a greeting by name with three suggestions, "Thinking · 4 s" / "Thought · 12 s" (tap to read the thoughts); from server CALDERA on the line says what the server looks up for the AI right now (*Finding Nick among the members*, or *Looking up expenses 2019–2024*), afterwards "Thought · looked up 2× · 12 s", and the opened line lists the steps in order – thoughts, the notes written on the way (no longer glued to the answer) and every lookup with what it found (*12 entries · €345.50*, *not allowed*); says when a model only thought or the connection died (servers 3.3+ keep the stream alive while the model thinks); only visible with permission and when AI is enabled on the server |
 | **Monthly fees** *(server CALDERA)* | *Settings → Monthly fees* for system admins and treasurers. **Fees over time:** the fees of this month as tiles (*Since …*), the change still to come, every change with the month it counts from, what it changed, who set it and what it is today (in effect, planned, replaced), and a log. System admins change the fees in two steps: the three amounts and the month they count from (next month is offered; a line says what the month means – later, now, or reaching back), then what it does as the server works it out (the months that cost something else, who owes how much more or less today, a warning when it reaches back before a fresh start) – only then it is saved, exactly as it was checked (changed by someone else in between: refused, checked again). Every change can be edited, moved or taken back; the fees from the beginning can be corrected. **Fresh start:** the days the fee accounts were started afresh with their state; system admins choose a day (past or future), see the numbers (open fees dropped / credit carried over, how many members) and confirm by typing the day again and their password – taking one back works the same way. Treasurers read both. Servers before CALDERA: the fee settings as before |
 | **Settings** | Profile picture (256×256 JPEG like the PWA), notification preferences, push setup, theme (system/light/dark), language (system/German/English), monthly fees (see above), password change, calendar subscription (iCal / Google Calendar), registration code |
 
@@ -31,7 +31,44 @@ Changes go through the server's preview first (`POST /api/admin/fees/preview`, `
 saved with what was checked (`POST /api/admin/fees[/remove]` with the preview's `version`, `POST /api/admin/fee-reset[/remove]`
 with the day twice and the admin's password). Older servers answer neither: the app then shows the fee settings as before.
 
-Bookings: an edited or deleted booking is looked up again in what is stored now, as the web app does (`saveEditedPayment`):
+### API v2 (server CALDERA)
+
+From server CALDERA (3.4) on, the books go through **API v2** (`/api/v2`, `docs/API_V2.md` in the Agora repository):
+record ids, money in whole cents, days as `YYYY-MM-DD`, every list in pages with a cursor, errors as
+`{ error: { code, message, field } }` in the app's language, and every change names the version of the data it is
+based on – refused with 409 instead of overwriting what someone else changed meanwhile. The app asks the server when it
+connects and with every refresh (`GET /api/status` → `apiVersions: [1, 2]`, then `GET /api/v2` → the resources) and
+goes through v2 where the server offers every resource of the books (3.4.0-beta6 on):
+
+| What | Through API v2 |
+|---|---|
+| Fee accounts | `GET /members` – the fee account as the server works it out (`feeState`, `isDueSoon`, `hasActiveStandingOrder`, `currentStatus`, `freshStart` …) for the treasury's list and the start page; a member with its payments, standing orders and status periods from `GET /members/:id` |
+| Payments | booked on the member's `memberVersion` (`POST /payments`), changed and deleted by their record (`PATCH` / `DELETE /payments/:id`) |
+| Standing orders, status changes | `POST /standing-orders` (the server books its months up to today, as the web app does), ended (`PATCH`, also retroactively) or removed (`DELETE`); `POST /status-changes` – the server rewrites the history by the web app's rule |
+| Donations, expenses | added, changed and deleted by their record with the `listVersion` of the list; receipts as a list (`receipts`, at most 20 – the form says when no more fit), uploaded and read through `/receipts` (also PDFs) |
+| Requests | read, filed (`POST /requests` with `notify`: the server tells the treasurers), and approved in one step (`POST /requests/:id/decision` with `book: true`: booked once as the web app books it – what cannot be booked as it is stays open), rejected once |
+| History, report, cash balance | `GET /finance/ledger` – every booking newest first, a page at a time, searched by the server (`?q=`: who, description, day, amount); the cash balance from `GET /finance/summary` |
+
+A change of a booking is made on the version read for it: a new booking simply goes on the books as they are now, a
+change or deletion only while the entry is still what was opened – otherwise nothing is written and the history shows
+what is stored now. The forms take no more than v2 does (notes and descriptions 5,000 characters, names 200, a
+rejection's reason 500). The app asks for every answer in its language (`Accept-Language`, also from the old API).
+
+Still through the old API, which v2 keeps working for every app version: the calendar with its duty roster, mentoring,
+the songbook, prayer requests, media, the fees over time and fresh starts (the settings page), and what v2 leaves to v1
+anyway (signing in, push, live updates, the AI assistant). Servers before CALDERA, the betas of CALDERA before
+3.4.0-beta6, and a CALDERA server whose database upgrade waits (its previous version serves the instance) are asked the
+old way throughout; a v2 route the server does not know switches back at once. A server that is starting or upgrading
+its database (`503`, `ready: false`) gets *try again in a moment*.
+
+The app's own calls can be checked against a real CALDERA server (`LiveServerTest`; only a test instance: with *manage
+finances* it books, changes and removes a donation, a payment and a standing order, and leaves the books as they were):
+
+```bash
+AGORA_LIVE_EMAIL=… AGORA_LIVE_PASSWORD=… ./gradlew testDebugUnitTest --tests '*LiveServerTest*' -PliveServer=https://beta.example.org
+```
+
+Bookings through the old API: an edited or deleted booking is looked up again in what is stored now, as the web app does (`saveEditedPayment`):
 a payment in the member's record by its id (old ones without an id by their place, while it still holds the date and
 amount that were opened), a donation or an expense in its list. Donations and expenses are saved with the version of the
 list they were read with (`GET /api/db?…&raw=1`, `version` with `PUT /api/db`): a list someone else saved meanwhile is
@@ -82,8 +119,10 @@ app/src/main/java/org/agora/app
 ├── AgoraApplication.kt      AppContainer (manual DI), Coil image loader sharing the authenticated OkHttp client
 ├── MainActivity.kt          splash, edge-to-edge, notification deep links
 ├── data/
-│   ├── remote/AgoraApi.kt   OkHttp + kotlinx.serialization, Bearer token, error parsing, uploads, SSE & AI streams
-│   ├── AgoraRepository.kt   every endpoint the app uses; treasurer write flows ported from the PWA
+│   ├── remote/AgoraApi.kt   OkHttp + kotlinx.serialization, Bearer token, error parsing (old API and v2), uploads, SSE & AI streams
+│   ├── remote/ApiV2.kt      API v2 (server CALDERA): pages with a cursor, falls back when the server answers no v2
+│   ├── AgoraRepository.kt   every endpoint the app uses, v2 where the server answers it; treasurer write flows ported from the PWA
+│   ├── FinanceV2.kt         the books through API v2: fee accounts, versions, standing orders, receipts, the ledger
 │   ├── MediaApi.kt          media library (Nextcloud through the server): listing, previews, streamed up/downloads, rights
 │   ├── AppStore.kt          single source of truth (auth state + member data), live updates
 │   ├── local/SessionStore.kt DataStore: server, token, cached user, theme, push state

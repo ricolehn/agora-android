@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AI chat (server CALDERA): what the server looks up for the AI while it works, and what it found (web: aiReply.js) -->
+<resources>
+    <string name="ai_lookup_payments">payments</string>
+    <string name="ai_lookup_expenses">expenses</string>
+    <string name="ai_lookup_donations">donations</string>
+    <string name="ai_lookup_money">money</string>
+    <string name="ai_lookup_members">members</string>
+    <string name="ai_lookup_events">events</string>
+    <string name="ai_lookup_money_totals">totals</string>
+    <string name="ai_lookup_finance_changes">change log</string>
+    <string name="ai_lookup_unknown">data</string>
+    <string name="ai_lookup_since">since %1$s</string>
+    <string name="ai_lookup_until">until %1$s</string>
+    <string name="ai_lookup_about">“%1$s”</string>
+    <!-- "Looking up" before what is looked up, while the model gave no words of its own -->
+    <string name="ai_looking_up">Looking up %1$s</string>
+    <string name="ai_thought_lookups">Thought · looked up %1$d×</string>
+    <plurals name="ai_found_entries">
+        <item quantity="one">%d entry</item>
+        <item quantity="other">%d entries</item>
+    </plurals>
+    <plurals name="ai_found_events">
+        <item quantity="one">%d event</item>
+        <item quantity="other">%d events</item>
+    </plurals>
+    <plurals name="ai_found_changes">
+        <item quantity="one">%d change</item>
+        <item quantity="other">%d changes</item>
+    </plurals>
+    <plurals name="ai_found_members">
+        <item quantity="one">%d member</item>
+        <item quantity="other">%d members</item>
+    </plurals>
+    <plurals name="ai_found_periods">
+        <item quantity="one">%d period</item>
+        <item quantity="other">%d periods</item>
+    </plurals>
+    <string name="ai_found_cut">shortened</string>
+    <string name="ai_found_forbidden">not allowed</string>
+    <string name="ai_found_failed">failed</string>
+</resources>

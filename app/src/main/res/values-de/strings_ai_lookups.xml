@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- KI-Chat (Server CALDERA): was der Server für die KI nachschlägt, während sie arbeitet, und was er gefunden hat -->
+<resources>
+    <string name="ai_lookup_payments">Zahlungen</string>
+    <string name="ai_lookup_expenses">Ausgaben</string>
+    <string name="ai_lookup_donations">Spenden</string>
+    <string name="ai_lookup_money">Geld</string>
+    <string name="ai_lookup_members">Mitglieder</string>
+    <string name="ai_lookup_events">Termine</string>
+    <string name="ai_lookup_money_totals">Summen</string>
+    <string name="ai_lookup_finance_changes">Änderungsprotokoll</string>
+    <string name="ai_lookup_unknown">Daten</string>
+    <string name="ai_lookup_since">seit %1$s</string>
+    <string name="ai_lookup_until">bis %1$s</string>
+    <string name="ai_lookup_about">„%1$s“</string>
+    <string name="ai_looking_up">Schlägt %1$s nach</string>
+    <string name="ai_thought_lookups">Nachgedacht · %1$d× nachgeschlagen</string>
+    <plurals name="ai_found_entries">
+        <item quantity="one">%d Eintrag</item>
+        <item quantity="other">%d Einträge</item>
+    </plurals>
+    <plurals name="ai_found_events">
+        <item quantity="one">%d Termin</item>
+        <item quantity="other">%d Termine</item>
+    </plurals>
+    <plurals name="ai_found_changes">
+        <item quantity="one">%d Änderung</item>
+        <item quantity="other">%d Änderungen</item>
+    </plurals>
+    <plurals name="ai_found_members">
+        <item quantity="one">%d Mitglied</item>
+        <item quantity="other">%d Mitglieder</item>
+    </plurals>
+    <plurals name="ai_found_periods">
+        <item quantity="one">%d Zeitraum</item>
+        <item quantity="other">%d Zeiträume</item>
+    </plurals>
+    <string name="ai_found_cut">gekürzt</string>
+    <string name="ai_found_forbidden">nicht erlaubt</string>
+    <string name="ai_found_failed">fehlgeschlagen</string>
+</resources>

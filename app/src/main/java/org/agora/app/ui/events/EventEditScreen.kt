@@ -253,10 +253,14 @@ fun EventEditScreen(eventId: String?, initialType: String, user: User, onBack: (
     val pickImage = { pickCover.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val savedMsg = stringResource(R.string.event_saved)
     val titleRequired = stringResource(R.string.error_title_required)
+    val minAboveMax = stringResource(R.string.error_min_above_max)
     val isTermin = type == "termin"
 
     val save: () -> Unit = save@{
         if (title.isBlank()) { error = titleRequired; return@save }
+        // The server refuses a minimum above the places (CALDERA): said here, before anything is sent
+        val (min, max) = (minP.toIntOrNull() ?: 0) to (maxP.toIntOrNull() ?: 0)
+        if (registration && max > 0 && min > max) { error = minAboveMax; return@save }
         error = null
         val input = EventInput(
             title = title, date = date,

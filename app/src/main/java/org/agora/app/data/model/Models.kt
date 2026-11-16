@@ -9,8 +9,20 @@ import kotlinx.serialization.json.contentOrNull
 
 // ---------- Auth & user ----------
 
+/**
+ * `GET /api/status`. [ready]: the server answers everything; until then (null on servers before CALDERA, which say
+ * nothing) a configured instance is starting or upgrading its database ([updating]) and asks the apps to try again in
+ * a moment. [apiVersions]: the versions of the API it answers - `[1, 2]` from CALDERA on (API v2), none before.
+ */
 @Serializable
-data class StatusResponse(val setupMode: Boolean = false)
+data class StatusResponse(
+    val setupMode: Boolean = false,
+    val ready: Boolean? = null,
+    val updating: Boolean = false,
+    val apiVersions: List<Int> = emptyList()
+) {
+    val answersV2: Boolean get() = 2 in apiVersions
+}
 
 @Serializable
 data class AuthResponse(val token: String? = null, val user: User? = null)
@@ -202,7 +214,13 @@ data class Person(
     @SerialName("_feeCarriedOver") @Serializable(FlexDoubleSerializer::class) val feeCarriedOver: Double = 0.0,
     @SerialName("_feeWrittenOff") @Serializable(FlexDoubleSerializer::class) val feeWrittenOff: Double = 0.0,
     /** What this month costs at the member's status (CALDERA); null on older servers: the fee settings say it. */
-    @SerialName("_monthlyFee") val monthlyFee: Double? = null
+    @SerialName("_monthlyFee") val monthlyFee: Double? = null,
+    /**
+     * Read through API v2: the member's record id and the version of its books, which a change of them names (its
+     * standing orders then carry their record ids). Null: read through the old API ([id] is the key either way).
+     */
+    val memberId: String? = null,
+    val version: String? = null
 ) {
     val effectiveStatus: String get() = currentStatus ?: status
 
@@ -210,6 +228,12 @@ data class Person(
     fun monthlyFee(fees: FeeSettings): Double = monthlyFee ?: fees.rateFor(effectiveStatus)
 }
 
+/**
+ * A request of a member to the treasury. Read through the old API, [id] is the request's key and [personId] the key of
+ * the member's record. Read through API v2 ([v2]), [id] is the request's record id - the one its decision and the
+ * booking for it name - [memberId] the member's record id and [personId] still the member's key (the app's members
+ * are the old API's records); [amountCents] is the amount as the server reads it.
+ */
 @Serializable
 data class FinanceRequest(
     @Serializable(FlexStringSerializer::class) val id: String = "",
@@ -220,11 +244,21 @@ data class FinanceRequest(
     val data: JsonObject = JsonObject(emptyMap()),
     val status: String = "pending",
     val rejectionReason: String? = null,
-    val timestamp: Long = 0
+    val timestamp: Long = 0,
+    val v2: Boolean = false,
+    val memberId: String? = null,
+    val amountCents: Long? = null
 ) {
     fun field(key: String): String? = (data[key] as? JsonPrimitive)?.contentOrNull
+
+    /** The amount asked for: as the server read it (API v2), else as written in the request; null when unreadable. */
+    val amount: Double? get() = amountCents?.let { it / 100.0 } ?: field("amount")?.let(::parseAmount)
 }
 
+/**
+ * A booking of the history: a member's payment ("pay"), a donation ("don") or an expense ("exp"). [personId]: the key
+ * of the member's record (payments). Read through API v2 the entry carries what a change of it names ([booking]).
+ */
 @Serializable
 data class Transaction(
     @Serializable(FlexStringSerializer::class) val id: String = "",
@@ -240,10 +274,27 @@ data class Transaction(
     /** A payment's place in the member's list: finds old payments without an id again when one is edited. */
     @Serializable(FlexIntSerializer::class) val paymentIndex: Int = -1,
     /** The entry as it is stored (amounts and dates as written), to edit or delete exactly this one. */
-    val payment: JsonElement? = null
+    val payment: JsonElement? = null,
+    /** Read through API v2: the record and the version a change of it is based on; null through the old API. */
+    val booking: V2Booking? = null
 ) {
     val isIncome: Boolean get() = type != "exp"
 }
+
+/**
+ * What API v2 needs to change or delete a booking: its [recordId], the [version] it was read with (a payment: its
+ * member's version; a donation or an expense: the version of the list), the member of a payment ([memberId]), the
+ * amount in whole cents (null: one no whole number of cents can hold) and what the entry held when it was read
+ * ([fingerprint]: a change is only repeated on a newer version while the entry itself is still the same).
+ */
+@Serializable
+data class V2Booking(
+    val recordId: String,
+    val version: String,
+    val memberId: String? = null,
+    val amountCents: Long? = null,
+    val fingerprint: String = ""
+)
 
 @Serializable
 data class TransactionPage(

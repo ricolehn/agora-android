@@ -51,9 +51,19 @@ import org.agora.app.data.model.Transaction
 import org.agora.app.data.model.TransactionPage
 import org.agora.app.data.model.UploadResponse
 import org.agora.app.data.model.User
+import org.agora.app.data.model.V2Booking
+import org.agora.app.data.model.cents
+import org.agora.app.data.model.StandingOrder
+import org.agora.app.data.model.toFinanceRequest
+import org.agora.app.data.model.toPerson
+import org.agora.app.data.model.toStats
 import org.agora.app.data.remote.AgoraApi
 import org.agora.app.data.remote.ApiException
+import org.agora.app.data.remote.ApiV2
+import org.agora.app.data.remote.V2UnavailableException
 import org.agora.app.data.model.parseAmount
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Event form content sent to POST/PATCH /api/events. */
 data class EventInput(
@@ -101,11 +111,40 @@ data class BookingEdit(
 class AgoraRepository(val api: AgoraApi) {
     private val json get() = api.json
 
+    /** API v2 of the server (CALDERA): the books in their own shapes. */
+    val v2 = ApiV2(api)
+    private val books = BooksV2(v2, api)
+
+    /**
+     * [newWay] through API v2 where the server answers it ([AgoraApi.apiV2]), else [oldWay] - also when it turns out
+     * that it does not (a server that went back to an older version): nothing was written through v2 then.
+     */
+    private suspend fun <T> v2OrOld(newWay: suspend BooksV2.() -> T, oldWay: suspend () -> T): T {
+        if (!v2.available) return oldWay()
+        return try {
+            books.newWay()
+        } catch (e: V2UnavailableException) {
+            oldWay()
+        }
+    }
+
     // ---------- server & auth ----------
 
+    /** What the server at [baseUrl] answers (setup mode, ready, the versions of its API). */
     suspend fun status(baseUrl: String): StatusResponse {
         api.baseUrl = baseUrl
         return api.call("GET", "/api/status", StatusResponse.serializer(), reportUnauthorized = false)
+    }
+
+    /**
+     * Asks the current server again what it answers, and whether the app goes through its API v2: the server lists v2
+     * (CALDERA) and - asked by a signed-in person - offers every resource of the books the app uses ([ApiV2.BOOKS]; the
+     * betas before 3.4.0-beta6 had only some of them, and are asked the old way). Not reachable: as it was.
+     */
+    suspend fun checkServer(): StatusResponse? {
+        val status = runCatching { status(api.baseUrl) }.getOrNull() ?: return null
+        api.apiV2 = status.answersV2 && api.token != null && runCatching { v2.offersBooks() }.getOrDefault(false)
+        return status
     }
 
     /** App name from the PWA's config module (`appName: "..."`). */
@@ -287,51 +326,86 @@ class AgoraRepository(val api: AgoraApi) {
     private val peopleSerializer = MapSerializer(String.serializer(), Person.serializer())
     private val requestsSerializer = MapSerializer(String.serializer(), FinanceRequest.serializer())
 
-    suspend fun ownPeople(uid: String): List<Person> =
-        api.call("GET", "/api/db", peopleSerializer, query = mapOf("path" to "people", "orderByChild" to "uid", "equalTo" to uid))
-            .values.filterNot { it.isDeleted }
+    /** The member records of the account [uid] (its own: one), with payments, standing orders and status history. */
+    suspend fun ownPeople(uid: String): List<Person> = v2OrOld(
+        {
+            members().values.filter { it.userId == uid && !it.isDeleted }.map { member(it.id).toPerson() }
+        },
+        {
+            api.call("GET", "/api/db", peopleSerializer, query = mapOf("path" to "people", "orderByChild" to "uid", "equalTo" to uid))
+                .values.filterNot { it.isDeleted }
+        }
+    )
 
-    suspend fun allPeople(): List<Person> =
-        api.call("GET", "/api/db", peopleSerializer, query = mapOf("path" to "people")).values.filterNot { it.isDeleted }
+    /** Every member record with its fee account (through API v2 without their payments: [person] reads one whole). */
+    suspend fun allPeople(): List<Person> = v2OrOld(
+        { members().values.filterNot { it.isDeleted }.map { it.toPerson() } },
+        { api.call("GET", "/api/db", peopleSerializer, query = mapOf("path" to "people")).values.filterNot { it.isDeleted } }
+    )
 
-    suspend fun person(personId: String): Person? =
-        api.call("GET", "/api/db", Person.serializer().nullable, query = mapOf("path" to "people/$personId"))
+    /** One member record, by the key the old API knows it by, with payments, standing orders and status history. */
+    suspend fun person(personId: String): Person? = v2OrOld(
+        { memberByKey(personId)?.let { member(it.id).toPerson() } },
+        { api.call("GET", "/api/db", Person.serializer().nullable, query = mapOf("path" to "people/$personId")) }
+    )
 
-    suspend fun allRequests(): List<FinanceRequest> =
-        api.call("GET", "/api/db", requestsSerializer, query = mapOf("path" to "requests")).values.sortedByDescending { it.timestamp }
+    /** The requests the person may see (treasurers all of them, members their own), newest first. */
+    suspend fun allRequests(): List<FinanceRequest> = v2OrOld(
+        {
+            // The members name the record each request is about by the key the app's member records have
+            coroutineScope {
+                val members = async { members() }
+                val requests = requests()
+                requests.map { it.toFinanceRequest(members.await()) }
+            }
+        },
+        { api.call("GET", "/api/db", requestsSerializer, query = mapOf("path" to "requests")).values.sortedByDescending { it.timestamp } }
+    )
 
-    suspend fun uploadReceipt(ownerName: String, date: String, fileName: String, mime: String, bytes: ByteArray): String =
-        api.upload("/api/upload", UploadResponse.serializer()) {
-            // name/date must precede the file: the server builds the stored filename from them
-            addFormDataPart("name", ownerName)
-            addFormDataPart("date", date)
-            addFormDataPart("receipt", fileName, AgoraApi.fileBody(bytes, mime))
-        }.filename
+    /** Uploads a receipt (a picture; through API v2 also a PDF) and answers the name it is kept under. */
+    suspend fun uploadReceipt(ownerName: String, date: String, fileName: String, mime: String, bytes: ByteArray): String = v2OrOld(
+        { uploadReceipt(fileName, mime, bytes) },
+        {
+            api.upload("/api/upload", UploadResponse.serializer()) {
+                // name/date must precede the file: older servers built the stored filename from them
+                addFormDataPart("name", ownerName)
+                addFormDataPart("date", date)
+                addFormDataPart("receipt", fileName, AgoraApi.fileBody(bytes, mime))
+            }.filename
+        }
+    )
 
     /** Receipt names come from request data members write: only a plain file name, encoded, stays in the path. */
     fun receiptUrl(filename: String): String {
         val name = filename.substringAfterLast('/').substringAfterLast('\\').takeUnless { it == "." || it == ".." }.orEmpty()
-        return api.absolute("/api/receipts/" + android.net.Uri.encode(name))
+        return api.absolute((if (v2.available) ApiV2.BASE + "/receipts/" else "/api/receipts/") + android.net.Uri.encode(name))
     }
 
-    /** Member â†’ treasurer application; the client has to notify the admins itself afterwards. */
+    /**
+     * Member -> treasurer application about the member's own record (the server decides whose it is); the client has to
+     * notify the admins itself afterwards.
+     */
     suspend fun submitRequest(user: User, person: Person?, type: String, data: JsonObject) {
-        val id = System.currentTimeMillis().toString()
         val personName = person?.name ?: user.fullName
-        api.put<JsonObject>("/api/db", buildJsonObject {
-            put("path", "requests/$id")
-            putJsonObject("value") {
-                put("id", id)
-                put("type", type)
-                put("userId", user.userId)
-                put("personId", person?.id ?: user.userId)
-                put("personName", personName)
-                put("data", data)
-                put("status", "pending")
-                put("timestamp", id.toLong())
-            }
+        // Through API v2 the server tells the treasurers itself (notify)
+        val told = v2OrOld({ ask(type, data); true }, {
+            val id = System.currentTimeMillis().toString()
+            api.put<JsonObject>("/api/db", buildJsonObject {
+                put("path", "requests/$id")
+                putJsonObject("value") {
+                    put("id", id)
+                    put("type", type)
+                    put("userId", user.userId)
+                    put("personId", person?.id ?: user.userId)
+                    put("personName", personName)
+                    put("data", data)
+                    put("status", "pending")
+                    put("timestamp", id.toLong())
+                }
+            })
+            false
         })
-        runCatching {
+        if (!told) runCatching {
             api.post<JsonObject>("/api/notify-admins", buildJsonObject {
                 put("reqType", type)
                 put("personName", personName)
@@ -341,21 +415,28 @@ class AgoraRepository(val api: AgoraApi) {
 
     // ---------- finances (treasurer) ----------
 
-    suspend fun stats(): FinanceStats = api.get("/api/stats")
+    /** The cash balance as the statistics count it (booked up to today). */
+    suspend fun stats(): FinanceStats = v2OrOld({ summary().toStats() }, { api.get("/api/stats") })
 
-    suspend fun transactions(page: Int, search: String): TransactionPage =
-        api.get("/api/transactions", mapOf("page" to page.toString(), "perPage" to "50", "search" to search))
+    /**
+     * The history of the treasury, newest first, read a page at a time ([BookingHistory.loadMore]); with [search] only
+     * what it finds (who, description, day). Through API v2 every entry carries its record and version.
+     */
+    suspend fun bookingHistory(search: String): BookingHistory = v2OrOld(
+        { history(search) },
+        { OldBookingHistory { page -> api.get("/api/transactions", mapOf("page" to page.toString(), "perPage" to "50", "search" to search)) } }
+    )
 
     /** Every booking (all pages), for the financial report. */
-    suspend fun allTransactions(): List<org.agora.app.data.model.Transaction> {
-        val all = mutableListOf<org.agora.app.data.model.Transaction>()
+    suspend fun allTransactions(): List<Transaction> = v2OrOld({ allBookings() }) {
+        val all = mutableListOf<Transaction>()
         var page = 1
         do {
             val result = api.get<TransactionPage>("/api/transactions", mapOf("page" to page.toString(), "perPage" to "500"))
             all += result.items
             page++
         } while (page <= result.totalPages)
-        return all
+        all
     }
 
     /** Optimistic-locking update of a person record, like the PWA's runTransaction (3 attempts). */
@@ -409,35 +490,62 @@ class AgoraRepository(val api: AgoraApi) {
         }
     }
 
-    suspend fun bookPayment(personId: String, amount: Double, date: String, note: String, standingOrder: Boolean) =
-        mutatePerson(personId) { person ->
-            if (standingOrder) person.appendTo("standingOrders", buildJsonObject {
+    /**
+     * Books a payment - or with [standingOrder] sets up a standing order - for [person]. Read through API v2 ([Person.memberId])
+     * it goes there - a standing order's months up to today are booked at once by the server, as by the web app;
+     * otherwise through the member's record, as before.
+     */
+    suspend fun bookPayment(person: Person, amount: Double, date: String, note: String, standingOrder: Boolean) {
+        val memberId = person.memberId
+        if (memberId != null && v2.available) {
+            changeV2 {
+                if (standingOrder) addStandingOrder(memberId, person.version, cents(amount), date, note)
+                else addPayment(memberId, person.version, cents(amount), date, note)
+            }
+            return
+        }
+        mutatePerson(person.id) { record ->
+            if (standingOrder) record.appendTo("standingOrders", buildJsonObject {
                 put("id", System.currentTimeMillis().toString())
                 put("amount", amount)
                 put("startDate", date)
                 put("note", note)
                 put("lastAutoPayment", JsonNull)
             })
-            else person.appendTo("payments", buildJsonObject {
+            else record.appendTo("payments", buildJsonObject {
                 put("amount", amount)
                 put("date", date)
                 put("description", note)
                 put("id", System.currentTimeMillis())
             }).withTotal(amount)
         }
+    }
 
-    /** Ends a standing order on [endDate] (also retroactively), see [StandingOrders.end]. */
-    suspend fun endStandingOrder(personId: String, orderId: String, endDate: String) =
-        mutatePerson(personId) { StandingOrders.end(it, orderId, endDate, LocalDate.now()) }
+    /** Ends a standing order of [person] on [endDate] (also retroactively), see [StandingOrders.end]. */
+    suspend fun endStandingOrder(person: Person, order: StandingOrder, endDate: String) {
+        val memberId = person.memberId
+        if (memberId != null && v2.available) return changeV2 { endStandingOrder(memberId, person.version, order.id, endDate) }
+        mutatePerson(person.id) { StandingOrders.end(it, order.id, endDate, LocalDate.now()) }
+    }
 
     /** Removes the standing order entry; payments it already booked stay. */
-    suspend fun deleteStandingOrder(personId: String, orderId: String) =
-        mutatePerson(personId) { StandingOrders.remove(it, orderId) }
+    suspend fun deleteStandingOrder(person: Person, order: StandingOrder) {
+        val memberId = person.memberId
+        if (memberId != null && v2.available) return changeV2 { deleteStandingOrder(memberId, person.version, order.id) }
+        mutatePerson(person.id) { StandingOrders.remove(it, order.id) }
+    }
 
-    suspend fun changeStatus(personId: String, newStatus: String, date: String) =
-        mutatePerson(personId) { StatusHistory.apply(it, newStatus, date) }
+    /** [person]'s income status from [date] on (the history is rewritten as the web app does: through v2 by the server). */
+    suspend fun changeStatus(person: Person, newStatus: String, date: String) {
+        val memberId = person.memberId
+        if (memberId != null && v2.available) return changeV2 { changeStatus(memberId, person.version, newStatus, date) }
+        mutatePerson(person.id) { StatusHistory.apply(it, newStatus, date) }
+    }
 
-    suspend fun addDonation(amount: Double, name: String, date: String, description: String) =
+    suspend fun addDonation(amount: Double, name: String, date: String, description: String) = v2OrOld({
+        addDonation(cents(amount), date, name, description.trim())
+        Unit
+    }) {
         mutateCollection("donations") { it + buildJsonObject {
             put("amount", amount)
             put("name", name)
@@ -445,8 +553,12 @@ class AgoraRepository(val api: AgoraApi) {
             put("description", description.trim())
             put("id", System.currentTimeMillis())
         } }
+    }
 
-    suspend fun addExpense(amount: Double, issuer: String, date: String, description: String, receipts: List<String>) =
+    suspend fun addExpense(amount: Double, issuer: String, date: String, description: String, receipts: List<String>) = v2OrOld({
+        addExpense(cents(amount), date, issuer, description, receipts)
+        Unit
+    }) {
         mutateCollection("expenses") { it + buildJsonObject {
             put("amount", amount)
             put("issuer", issuer)
@@ -456,14 +568,20 @@ class AgoraRepository(val api: AgoraApi) {
             if (receipts.isEmpty()) put("receipt", JsonNull)
             else put("receipt", json.encodeToString(ListSerializer(String.serializer()), receipts))
         } }
+    }
+
+    /** Whether [count] receipts can be kept with one expense ([Receipts.fitV2]; the old API has no such limit). */
+    fun receiptsFit(count: Int): Boolean = !v2.available || Receipts.fitV2(count)
 
     /**
      * Changes a booked entry of the history (treasurers), like the PWA's saveEditedPayment: a payment in the member's
      * record (the paid total follows), a donation or an expense in its list. Throws [Bookings.GoneException] when the
      * entry is not there any more (deleted since the history was loaded, or an old one without an id that changed):
-     * nothing is written then.
+     * nothing is written then. Read through API v2, the entry is changed there by its record ([BooksV2]) - and only
+     * while it is still what was opened.
      */
     suspend fun editBooking(tx: Transaction, edit: BookingEdit) {
+        tx.booking?.let { booking -> return changeV2 { editBookingV2(tx, booking, edit) } }
         val original = tx.payment as? JsonObject
         when (tx.type) {
             "pay" -> mutatePerson(tx.personId) { Bookings.editPayment(it, tx.id, tx.paymentIndex, original, edit.amount, edit.date, edit.description) }
@@ -493,11 +611,42 @@ class AgoraRepository(val api: AgoraApi) {
 
     /** Deletes a booked entry of the history (treasurers), like the PWA's confirmDeleteRecordedPayment ([Bookings.GoneException] as above). */
     suspend fun deleteBooking(tx: Transaction) {
+        tx.booking?.let { booking ->
+            return changeV2 {
+                when (tx.type) {
+                    "pay" -> deletePayment(booking)
+                    "don" -> deleteDonation(booking)
+                    "exp" -> deleteExpense(booking)
+                    else -> throw Bookings.GoneException()
+                }
+            }
+        }
         val original = tx.payment as? JsonObject
         when (tx.type) {
             "pay" -> mutatePerson(tx.personId) { Bookings.removePayment(it, tx.id, tx.paymentIndex, original) }
             "don" -> mutateCollection("donations") { Bookings.removeEntry(it, tx.id, original) }
             "exp" -> mutateCollection("expenses") { Bookings.removeEntry(it, tx.id, original) }
+            else -> throw Bookings.GoneException()
+        }
+    }
+
+    /** A change of an entry read through API v2. A server that answers no v2 any more: the history reads it anew. */
+    private suspend fun changeV2(change: suspend BooksV2.() -> Unit) {
+        try {
+            books.change()
+        } catch (e: V2UnavailableException) {
+            throw Bookings.GoneException()
+        }
+    }
+
+    private suspend fun BooksV2.editBookingV2(tx: Transaction, booking: V2Booking, edit: BookingEdit) {
+        // An amount left as it was is not sent again: an old amount beyond whole cents stays as it is written
+        val unchanged = cents(edit.amount) == booking.amountCents || (booking.amountCents == null && edit.amount == tx.amount)
+        val amountCents = if (unchanged) null else cents(edit.amount)
+        when (tx.type) {
+            "pay" -> editPayment(booking, amountCents, edit.date, edit.description)
+            "don" -> editDonation(booking, amountCents, edit.date, edit.name, edit.description)
+            "exp" -> editExpense(booking, amountCents, edit.date, edit.name, edit.description, edit.receipts)
             else -> throw Bookings.GoneException()
         }
     }
@@ -509,9 +658,33 @@ class AgoraRepository(val api: AgoraApi) {
     /**
      * Books an approved request and marks it approved, like the PWA. Approving a request twice (two treasurers, a
      * second device, a retry) used to book the money twice: only a pending request is booked, and the booking
-     * carries the request's id, so a request that is booked already changes nothing ([RequestBookings]).
+     * carries the request's id, so a request that is booked already changes nothing ([RequestBookings]). A request
+     * read through API v2 is booked and decided there ([approveRequestV2]).
      */
-    suspend fun approveRequest(request: FinanceRequest): RequestDecision {
+    suspend fun approveRequest(request: FinanceRequest): RequestDecision =
+        if (request.v2) v2OrOld({ approveRequestV2(request) }, { approveRequestOld(request) }) else approveRequestOld(request)
+
+    /**
+     * Through API v2 the request is decided and booked in one step, as the web app books it - the payment, the expense
+     * (with its receipts), the standing order (its months up to today) or the status change: once, however often it
+     * is sent. Decided meanwhile by someone else (409): an approval keeps its booking, after a rejection the server
+     * takes back what this call booked. What cannot be booked as it is stays open for the treasury to book by hand.
+     */
+    private suspend fun BooksV2.approveRequestV2(request: FinanceRequest): RequestDecision {
+        try {
+            decide(request.id, "approved", book = true)
+        } catch (e: ApiException) {
+            return when {
+                // Decided already (409), or gone with the cleanup of decided requests (404)
+                e.status == 409 || e.status == 404 -> RequestDecision.ALREADY_DECIDED
+                e.status == 400 && e.field == "details.amount" -> RequestDecision.UNREADABLE_AMOUNT
+                else -> throw e
+            }
+        }
+        return RequestDecision.DONE
+    }
+
+    private suspend fun approveRequestOld(request: FinanceRequest): RequestDecision {
         if (!isPending(request.id)) return RequestDecision.ALREADY_DECIDED
         val amount = request.field("amount")?.let(::parseAmount)
         if (amount == null && request.type != "status") return RequestDecision.UNREADABLE_AMOUNT
@@ -534,12 +707,28 @@ class AgoraRepository(val api: AgoraApi) {
         return RequestDecision.DONE
     }
 
-    suspend fun rejectRequest(requestId: String, reason: String): RequestDecision {
-        if (!isPending(requestId)) return RequestDecision.ALREADY_DECIDED
+    /** Rejects the request with [reason] (the member reads it); decided meanwhile by someone else, nothing changes. */
+    suspend fun rejectRequest(request: FinanceRequest, reason: String): RequestDecision {
+        val why = reason.ifBlank { "Kein Grund angegeben" }
+        if (request.v2) {
+            val decided = v2OrOld({
+                try {
+                    // Without a reason v2 says so itself, in each reader's language
+                    decide(request.id, "rejected", reason.trim().takeIf { it.isNotEmpty() })
+                    RequestDecision.DONE
+                } catch (e: ApiException) {
+                    // Decided already (409), or gone with the cleanup of decided requests (404)
+                    if (e.status != 409 && e.status != 404) throw e
+                    RequestDecision.ALREADY_DECIDED
+                }
+            }, { null })
+            if (decided != null) return decided
+        }
+        if (!isPending(request.id)) return RequestDecision.ALREADY_DECIDED
         try {
-            patchRequest(requestId, buildJsonObject {
+            patchRequest(request.id, buildJsonObject {
                 put("status", "rejected")
-                put("rejectionReason", reason.ifBlank { "Kein Grund angegeben" })
+                put("rejectionReason", why)
             })
         } catch (e: ApiException) {
             if (e.status != 409) throw e
@@ -789,7 +978,7 @@ object StatusHistory {
     /** Treasurer status change (retroactive or future), `applyStatusChangeToHistory` in the PWA. */
     fun apply(person: JsonObject, newStatus: String, changeDate: String): JsonObject {
         val memberSince = person.str("originalMemberSince") ?: person.str("memberSince") ?: changeDate
-        if (changeDate < memberSince) throw ApiException(400, "Ã„nderungsdatum liegt vor Beginn der Mitgliedschaft.")
+        if (changeDate < memberSince) throw ApiException(400, "Änderungsdatum liegt vor Beginn der Mitgliedschaft.")
         if (changeDate <= memberSince) {
             return JsonObject(person + mapOf("status" to JsonPrimitive(newStatus), "statusHistory" to JsonArray(listOf(entry(newStatus, memberSince, null)))))
         }

@@ -44,8 +44,16 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Error returned by the Agora backend (message is usually German and user-presentable). */
-class ApiException(val status: Int, message: String) : IOException(message)
+/**
+ * Error returned by the Agora backend (the message is the server's, usually user-presentable). [code]: what API v2
+ * says it is (`invalid`, `unauthorized`, `forbidden`, `not_found`, `conflict`, `too_large`, `rate_limited`,
+ * `server_error`, `unavailable` - a code the app does not know counts as any other error); the old API names none,
+ * except `unavailable` for a server that is starting.
+ */
+class ApiException(val status: Int, message: String, val code: String? = null, val field: String? = null) : IOException(message) {
+    /** The server is starting or upgrading its database (CALDERA): asking again in a moment helps. */
+    val isStarting: Boolean get() = code == "unavailable"
+}
 
 /** The AI stream went quiet although the server keeps it alive while the model thinks: the connection is gone. */
 class AiTimeoutException : IOException("AI stream timed out")
@@ -53,16 +61,62 @@ class AiTimeoutException : IOException("AI stream timed out")
 sealed interface AiChunk {
     data class Content(val text: String) : AiChunk
     data class Reasoning(val text: String) : AiChunk
+
+    /**
+     * The server looks something up for the AI (server CALDERA): [tool] - payments, expenses, donations, money,
+     * members, events, money_totals, finance_changes; anything else counts as data -, the model's own words for what it
+     * does ([step]), the days it reads ([from], [to]) and whom or what it is about ([about]).
+     */
+    data class Lookup(val id: Int?, val tool: String, val step: String? = null, val from: String? = null, val to: String? = null, val about: String? = null) : AiChunk
+
+    /**
+     * What lookup [id] found: [count] of [unit] (entries, events, changes, members, periods), with [eur] in all and
+     * [cut] when the result was shortened - or [error] (forbidden, failed).
+     */
+    data class LookupDone(val id: Int?, val count: Int? = null, val unit: String? = null, val eur: Double? = null, val cut: Boolean = false, val error: String? = null) : AiChunk
+
+    companion object {
+        private fun JsonObject.text(key: String) = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        private fun JsonObject.number(key: String) = (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.content?.toDoubleOrNull()
+
+        /** The chunks of one `data:` line of the AI stream ([event]: its JSON object); none for what the app does not know. */
+        fun of(event: JsonObject): List<AiChunk> = buildList {
+            (event["content"] as? JsonPrimitive)?.contentOrNull?.let { add(Content(it)) }
+            (event["reasoning"] as? JsonPrimitive)?.contentOrNull?.let { add(Reasoning(it)) }
+            (event["lookup"] as? JsonObject)?.let {
+                add(Lookup(it.number("id")?.toInt(), it.text("tool") ?: "unknown", it.text("step"), it.text("from"), it.text("to"), it.text("about")))
+            }
+            (event["lookupDone"] as? JsonObject)?.let {
+                add(LookupDone(it.number("id")?.toInt(), it.number("count")?.toInt(), it.text("unit"), it.number("eur"),
+                    (it["cut"] as? JsonPrimitive)?.contentOrNull == "true", it.text("error")))
+            }
+        }
+    }
 }
 
 /**
- * Thin OkHttp wrapper around the Agora REST API. Auth is a long-lived PocketBase JWT sent as Bearer token.
+ * Thin OkHttp wrapper around the Agora REST API. Auth is a long-lived PocketBase JWT sent as Bearer token. [languages]:
+ * the languages the app shows (`de-DE,en-US`), asked of the server so that its messages come in them
+ * (`Accept-Language`; API v2 answers every error in that language).
  */
 @OptIn(InternalCoroutinesApi::class)
-class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
+class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null, private val languages: () -> String? = { null }) {
 
+    /** The server; another one answers what it answers ([apiV2] is asked again). */
     @Volatile var baseUrl: String = ""
+        set(value) {
+            if (value != field) apiV2 = false
+            field = value
+        }
     @Volatile var token: String? = null
+
+    /**
+     * Whether the server answers API v2 (`/api/v2`, server CALDERA): its `GET /api/status` lists 2 in `apiVersions`.
+     * Older servers - and a CALDERA server whose database upgrade waits, served by its previous version - answer the
+     * old API only. Set from the status ([org.agora.app.data.AgoraRepository.status]); a v2 route the server does not
+     * know turns it off again ([ApiV2]).
+     */
+    @Volatile var apiV2: Boolean = false
 
     private val unauthorizedEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     /** Fires when the server rejects our token (password changed elsewhere, account deleted...). */
@@ -82,6 +136,9 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
             // Only send the token to our own server (event covers may be external URLs)
             if (currentToken != null && request.header("Authorization") == null && isOwnHost(request.url)) {
                 builder.header("Authorization", "Bearer $currentToken")
+            }
+            if (request.header("Accept-Language") == null && isOwnHost(request.url)) {
+                runCatching { languages() }.getOrNull()?.takeIf { it.isNotBlank() }?.let { builder.header("Accept-Language", it) }
             }
             chain.proceed(builder.build())
         }
@@ -280,8 +337,8 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
                     val payload = line.removePrefix("data:").trim()
                     if (payload == "[DONE]") break
                     val obj = runCatching { json.parseToJsonElement(payload).jsonObject }.getOrNull() ?: continue
-                    (obj["content"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Content(it)) }
-                    (obj["reasoning"] as? JsonPrimitive)?.contentOrNull?.let { emit(AiChunk.Reasoning(it)) }
+                    // Text, thoughts and - from CALDERA on - what the server looks up for the AI and what it found
+                    AiChunk.of(obj).forEach { emit(it) }
                     (obj["error"] as? JsonPrimitive)?.contentOrNull?.let { throw ApiException(response.code, it) }
                 }
             } } catch (e: IOException) {
@@ -323,13 +380,7 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
     private fun <T> decode(deserializer: DeserializationStrategy<T>, text: String): T =
         json.decodeFromString(deserializer, text.ifBlank { "{}" })
 
-    /** Route handlers answer `{error}` JSON, the auth middleware answers plain text. */
-    private fun errorFrom(code: Int, text: String): ApiException {
-        val fromJson = runCatching { (json.parseToJsonElement(text) as? JsonObject)?.get("error") as? JsonPrimitive }
-            .getOrNull()?.contentOrNull
-        val message = fromJson ?: text.trim().take(200).takeIf { it.isNotEmpty() && !it.startsWith("<") } ?: "HTTP $code"
-        return ApiException(code, message)
-    }
+    internal fun errorFrom(code: Int, text: String): ApiException = errorOf(json, code, text)
 
     companion object {
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
@@ -338,7 +389,28 @@ class AgoraApi(val json: Json, userAgent: String, cacheDir: File? = null) {
         const val AI_IDLE_TIMEOUT_MS = 75_000L
 
         fun fileBody(bytes: ByteArray, mime: String): RequestBody = bytes.toRequestBody(mime.toMediaType())
+
+        /**
+         * The error an answer with the HTTP status [code] and the body [text] stands for. API v2 answers
+         * `{ error: { code, message } }`, the old API `{ error }` (and `starting: true` while the server starts or
+         * upgrades its database), older servers' sign-in check plain text; anything else (an HTML page) only its status.
+         */
+        fun errorOf(json: Json, code: Int, text: String): ApiException {
+            val body = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+            val error = body?.get("error")
+            if (error is JsonObject) {
+                val message = (error["message"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "HTTP $code"
+                // [field]: the value of the request that did not fit (with invalid), as the request named it
+                return ApiException(code, message, (error["code"] as? JsonPrimitive)?.contentOrNull, (error["field"] as? JsonPrimitive)?.contentOrNull)
+            }
+            val fromJson = (error as? JsonPrimitive)?.contentOrNull ?: (body?.get("message") as? JsonPrimitive)?.contentOrNull
+            val message = fromJson?.takeIf { it.isNotBlank() }
+                ?: text.trim().take(200).takeIf { it.isNotEmpty() && !it.startsWith("<") && !it.startsWith("{") } ?: "HTTP $code"
+            val starting = (body?.get("starting") as? JsonPrimitive)?.contentOrNull == "true"
+            return ApiException(code, message, if (starting) "unavailable" else null)
+        }
     }
+
 }
 
 suspend fun Call.awaitResponse(): Response = suspendCancellableCoroutine { cont ->

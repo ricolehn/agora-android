@@ -123,8 +123,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import androidx.compose.material3.LinearProgressIndicator
 import org.agora.app.AppContainer
 import org.agora.app.R
+import org.agora.app.data.BookingHistory
 import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.FinanceStats
 import org.agora.app.data.model.Person
@@ -146,15 +148,19 @@ import org.agora.app.ui.theme.Agora
 import org.agora.app.util.Dates
 import org.agora.app.util.Money
 
+/**
+ * [transactions]: the history as far as it is read ([hasMore]: there is more). [searching]: a search reads the
+ * history anew (through API v2 all of it: v2 searches nothing itself).
+ */
 data class TreasurerState(
     val loading: Boolean = true,
     val stats: FinanceStats = FinanceStats(),
     val pending: List<FinanceRequest> = emptyList(),
     val people: List<Person> = emptyList(),
     val transactions: List<Transaction> = emptyList(),
-    val page: Int = 1,
-    val totalPages: Int = 1,
+    val hasMore: Boolean = false,
     val loadingMore: Boolean = false,
+    val searching: Boolean = false,
     val error: String? = null
 )
 
@@ -164,53 +170,71 @@ class TreasurerViewModel(private val c: AppContainer) : ViewModel() {
     val state = _state.asStateFlow()
     val search = MutableStateFlow("")
     private var loadJob: Job? = null
+    private var historyJob: Job? = null
+    /** The history on screen: read on page by page ([loadMore]). */
+    private var history: BookingHistory? = null
 
     init {
         reload()
         // Finance data only changes with "all" updates (events and chat messages have their own areas)
         viewModelScope.launch { c.store.serverChanges.collect { areas -> if ("all" in areas) reload() } }
-        viewModelScope.launch { search.drop(1).debounce(350).distinctUntilChanged().collect { reloadTransactions() } }
+        viewModelScope.launch { search.drop(1).debounce(350).distinctUntilChanged().collect { reloadHistory() } }
     }
 
     fun reload() {
         loadJob?.cancel()
+        historyJob?.cancel()
         loadJob = viewModelScope.launch {
             try {
                 coroutineScope {
                     val stats = async { c.repo.stats() }
                     val requests = async { c.repo.allRequests().filter { it.status == "pending" } }
                     val people = async { c.repo.allPeople().sortedBy { it.name.lowercase() } }
-                    val tx = async { c.repo.transactions(1, search.value) }
-                    val page = tx.await()
+                    val loaded = async { c.repo.bookingHistory(search.value).also { it.loadMore() } }.await()
+                    history = loaded
                     _state.value = TreasurerState(
                         loading = false, stats = stats.await(), pending = requests.await(), people = people.await(),
-                        transactions = page.items, page = page.page, totalPages = page.totalPages
+                        transactions = loaded.items, hasMore = loaded.hasMore
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message) }
+                _state.update { it.copy(loading = false, loadingMore = false, searching = false, error = e.message) }
             }
         }
     }
 
-    private suspend fun reloadTransactions() {
-        runCatching { c.repo.transactions(1, search.value) }.onSuccess { page ->
-            _state.update { it.copy(transactions = page.items, page = page.page, totalPages = page.totalPages) }
+    /** The history for the search as it is now (the rest of the page stays). */
+    private fun reloadHistory() {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            _state.update { it.copy(searching = true, loadingMore = false) }
+            try {
+                val loaded = c.repo.bookingHistory(search.value).also { it.loadMore() }
+                history = loaded
+                _state.update { it.copy(transactions = loaded.items, hasMore = loaded.hasMore, searching = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(searching = false) }
+            }
         }
     }
 
     fun loadMore() {
-        val s = _state.value
-        if (s.loadingMore || s.page >= s.totalPages) return
+        val current = history ?: return
+        if (_state.value.loadingMore || _state.value.searching || !current.hasMore) return
         _state.update { it.copy(loadingMore = true) }
-        viewModelScope.launch {
-            val next = runCatching { c.repo.transactions(s.page + 1, search.value) }.getOrNull()
-            _state.update {
-                if (next == null) it.copy(loadingMore = false)
-                else it.copy(transactions = it.transactions + next.items, page = next.page, totalPages = next.totalPages, loadingMore = false)
+        historyJob = viewModelScope.launch {
+            try {
+                current.loadMore()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Stays as it is; "load more" can be tapped again
             }
+            _state.update { if (history === current) it.copy(transactions = current.items, hasMore = current.hasMore, loadingMore = false) else it.copy(loadingMore = false) }
         }
     }
 }
@@ -272,8 +296,16 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                             }
                         }
                     }
-                    item { SearchField(query, { vm.search.value = it }, stringResource(R.string.search_transactions)) }
-                    if (state.transactions.isEmpty()) item { EmptyState(Icons.Outlined.Receipt, stringResource(R.string.no_transactions)) }
+                    item {
+                        Column {
+                            SearchField(query, { vm.search.value = it }, stringResource(R.string.search_transactions))
+                            // A search reads the history anew (through API v2 all of it): a quiet line while it does
+                            AnimatedVisibility(state.searching) {
+                                LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp).clip(CircleShape))
+                            }
+                        }
+                    }
+                    if (state.transactions.isEmpty() && !state.searching) item { EmptyState(Icons.Outlined.Receipt, stringResource(R.string.no_transactions)) }
                     // Grouped by day like the PWA's history
                     state.transactions.groupBy { it.date.take(10) }.forEach { (day, txs) ->
                         item(key = "day-$day") {
@@ -285,8 +317,8 @@ fun TreasurerScreen(user: User, contentPadding: PaddingValues) {
                             TransactionRow(tx, avatarUid) { selectedTx = tx }
                         }
                     }
-                    if (state.page < state.totalPages) item {
-                        TextButton(onClick = vm::loadMore, enabled = !state.loadingMore, modifier = Modifier.fillMaxWidth()) {
+                    if (state.hasMore) item {
+                        TextButton(onClick = vm::loadMore, enabled = !state.loadingMore && !state.searching, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.load_more))
                         }
                     }
@@ -356,7 +388,7 @@ private fun TransactionRow(tx: Transaction, avatarUid: String?, onClick: () -> U
                 Icon(icon, null, Modifier.size(20.dp), tint = tint)
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(tx.who, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(txTitle(tx), style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (tx.description.isNotBlank() || !tx.receipt.isNullOrBlank()) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tx.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -383,7 +415,7 @@ private fun TransactionSheet(tx: Transaction, canEdit: Boolean, onEdit: () -> Un
     val typeLabel = stringResource(when (tx.type) { "exp" -> R.string.tx_type_expense; "don" -> R.string.tx_type_donation; else -> R.string.tx_type_payment })
     val amountColor = if (tx.isIncome) Agora.colors.success else Agora.colors.danger
     AgoraSheet(
-        title = tx.who, subtitle = typeLabel, icon = icon, iconTint = tint, onDismiss = onDismiss, controller = sheet,
+        title = txTitle(tx), subtitle = typeLabel, icon = icon, iconTint = tint, onDismiss = onDismiss, controller = sheet,
         actions = if (!canEdit) null else ({
             SecondaryButton(onClick = { sheet.dismiss(onEdit) }, modifier = Modifier.weight(1f).height(46.dp)) {
                 ButtonLabel(stringResource(R.string.edit), Icons.Outlined.Edit)
@@ -413,6 +445,10 @@ private fun TransactionSheet(tx: Transaction, canEdit: Boolean, onEdit: () -> Un
         }
     }
 }
+
+/** Who a booking is from or for; a donation without a name is "Donation" (the old API named it "Spende" itself). */
+@Composable
+internal fun txTitle(tx: Transaction): String = tx.who.ifBlank { if (tx.type == "don") stringResource(R.string.tx_type_donation) else "" }
 
 /** Type tile of a transaction: payment green, donation purple, expense red. */
 @Composable

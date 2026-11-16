@@ -359,7 +359,10 @@
     <string name="reg_places_taken">%1$d of %2$d places taken</string>
     <string name="reg_places_free">%1$d free</string>
     <string name="reg_booked_out">booked out</string>
-    <string name="reg_min">min. %1$d</string>
+    <!-- The minimum of participants (server CALDERA, like the web): reached, or how many are still needed -->
+    <string name="reg_min_reached">minimum of %1$d reached</string>
+    <string name="reg_min_missing">%1$d more needed (min. %2$d)</string>
+    <string name="error_min_above_max">The minimum of participants cannot be higher than the places.</string>
     <string name="reg_count">%1$d registered</string>
     <string name="reg_status_registered">You are registered</string>
     <string name="reg_status_registered_sub">We look forward to seeing you!</string>

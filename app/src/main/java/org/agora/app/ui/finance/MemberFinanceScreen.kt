@@ -1,5 +1,6 @@
 package org.agora.app.ui.finance
 
+import org.agora.app.data.TextLimits
 import androidx.compose.material.icons.automirrored.outlined.Send
 import org.agora.app.ui.components.rememberSheetController
 import org.agora.app.ui.components.SheetFileRow
@@ -290,11 +291,11 @@ private fun NewRequestSheet(user: User, person: Person?, initialType: String, on
         DateField(stringResource(if (type == "payment" && standingOrder) R.string.start_date else R.string.date), date, { date = it })
         if (type == "payment" && !standingOrder) FeeResetNote(feeResetPaymentHint(person, date))
         if (type == "payment") {
-            AgoraTextField(note, { note = it }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
+            AgoraTextField(note, { note = it.take(TextLimits.TEXT) }, label = { Text(stringResource(R.string.note)) }, modifier = Modifier.fillMaxWidth())
             SheetToggleRow(stringResource(R.string.is_standing_order), standingOrder, { standingOrder = it }, icon = Icons.Outlined.Autorenew)
         }
         if (type == "expense") {
-            AgoraTextField(description, { description = it }, label = { Text(stringResource(R.string.description)) }, modifier = Modifier.fillMaxWidth())
+            AgoraTextField(description, { description = it.take(TextLimits.TEXT) }, label = { Text(stringResource(R.string.description)) }, modifier = Modifier.fillMaxWidth())
             receipts.toList().forEach { file -> SheetFileRow(file.name) { receipts.remove(file) } }
             SecondaryButton(onClick = { pickReceipts.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
                 ButtonLabel(stringResource(R.string.add_receipts), Icons.Outlined.AttachFile)

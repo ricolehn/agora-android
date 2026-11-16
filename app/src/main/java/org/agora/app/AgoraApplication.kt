@@ -33,7 +33,11 @@ class AppContainer(context: Context) {
         isLenient = true
         explicitNulls = false
     }
-    val api = AgoraApi(json, "AgoraAndroid/${BuildConfig.VERSION_NAME}", context.cacheDir)
+    // The server answers in the app's language (its own choice in the settings, else the system's)
+    val api = AgoraApi(json, "AgoraAndroid/${BuildConfig.VERSION_NAME}", context.cacheDir) {
+        androidx.appcompat.app.AppCompatDelegate.getApplicationLocales().toLanguageTags()
+            .ifBlank { androidx.core.os.LocaleListCompat.getAdjustedDefault().toLanguageTags() }
+    }
     val sessionStore = SessionStore(context, json)
     val repo = AgoraRepository(api)
     val store = AppStore(repo, sessionStore, appScope, DataCache(context, json))

@@ -78,6 +78,9 @@ android {
                 // Screenshot renders (ScreenshotTest) only run with -Pscreenshots=<server url>
                 it.systemProperty("agora.screenshots", project.findProperty("screenshots")?.toString() ?: "")
                 it.systemProperty("agora.screenshots.out", project.findProperty("screenshotsOut")?.toString() ?: "")
+                // The checks against a real server (LiveServerTest) only run with -PliveServer=<server url>; the
+                // account comes from AGORA_LIVE_EMAIL / AGORA_LIVE_PASSWORD in the environment, never from the build
+                it.systemProperty("agora.live", project.findProperty("liveServer")?.toString() ?: "")
                 it.systemProperty("roborazzi.test.record", "true")
             }
         }

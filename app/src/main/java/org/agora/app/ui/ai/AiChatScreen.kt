@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.NorthEast
 import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -81,8 +82,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -115,17 +119,24 @@ import org.agora.app.ui.theme.Agora
 /**
  * One message. A reply records when it started and, once the first words of the answer came, how long the model
  * thought ([thoughtMs]); [errorText] is the app's own message for a failed reply (else the server's in [content]).
+ * [steps]: its work in order - thoughts, notes on the way and, from server CALDERA on, the lookups the server made for
+ * it ([lookups] of them); [content] is the text after the last lookup, the answer.
  */
 data class AiEntry(
     val role: String,
     val content: String,
-    val reasoning: String = "",
+    val steps: List<AiStep> = emptyList(),
+    val lookups: Int = 0,
     val streaming: Boolean = false,
     val error: Boolean = false,
     val startedAt: Long = 0,
     val thoughtMs: Long? = null,
     @param:StringRes val errorText: Int? = null
-)
+) {
+    /** The lookup the AI is on right now (see [AiReplyWork.currentLookup]). */
+    val currentLookup: AiStep.Lookup?
+        get() = if (splitThinkingFull(content).answer.isNotBlank()) null else steps.lastOrNull() as? AiStep.Lookup
+}
 
 /** A reply split into the answer and the thought process; [open]: a `<think>` block is still running. */
 data class ThinkingSplit(val answer: String, val thinking: String, val open: Boolean)
@@ -165,34 +176,34 @@ class AiChatViewModel(private val c: AppContainer) : ViewModel() {
         _entries.value = history + AiEntry("assistant", "", streaming = true, startedAt = started)
         _busy.value = true
         job = viewModelScope.launch {
-            val content = StringBuilder()
-            val reasoning = StringBuilder()
+            val work = AiReplyWork()
             var thoughtMs: Long? = null
             var drawn = 0L
             // Long thoughts come in many small pieces: the reply is redrawn at most about once per frame
             fun draw(streaming: Boolean) {
                 if (thoughtMs == null) {
-                    val split = splitThinkingFull(content.toString())
+                    val split = splitThinkingFull(work.content)
                     if (split.answer.isNotEmpty() && !split.open) thoughtMs = System.currentTimeMillis() - started
                 }
                 _entries.update { list ->
                     val last = list.lastOrNull() ?: return@update list
-                    list.dropLast(1) + last.copy(content = content.toString(), reasoning = reasoning.toString(), streaming = streaming, thoughtMs = thoughtMs)
+                    list.dropLast(1) + last.copy(content = work.content, steps = work.steps, lookups = work.lookups, streaming = streaming, thoughtMs = thoughtMs)
                 }
                 drawn = System.currentTimeMillis()
             }
             try {
                 // The model gets the answers without their thoughts (like the web app)
                 c.repo.aiChat(history.map { AiMessage(it.role, if (it.role == "user") it.content else splitThinking(it.content).first) }).collect { chunk ->
-                    when (chunk) {
-                        is AiChunk.Content -> content.append(chunk.text)
-                        is AiChunk.Reasoning -> reasoning.append(chunk.text)
-                    }
-                    if (System.currentTimeMillis() - drawn >= FRAME_MS) draw(streaming = true)
+                    work.add(chunk)
+                    // A lookup (server CALDERA): what was written before it was a note on the way, the AI works on
+                    if (chunk is AiChunk.Lookup) {
+                        thoughtMs = null
+                        draw(streaming = true)
+                    } else if (System.currentTimeMillis() - drawn >= FRAME_MS) draw(streaming = true)
                 }
                 // A model that only thought (or a connection that ended early) gave no answer: say so
-                if (splitThinkingFull(content.toString()).answer.isBlank()) {
-                    throw EmptyReply(if (reasoning.isNotBlank() || splitThinking(content.toString()).second.isNotBlank()) R.string.ai_only_thought else R.string.ai_no_answer)
+                if (splitThinkingFull(work.content).answer.isBlank()) {
+                    throw EmptyReply(if (work.steps.isNotEmpty() || splitThinking(work.content).second.isNotBlank()) R.string.ai_only_thought else R.string.ai_no_answer)
                 }
                 draw(streaming = false)
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -287,7 +298,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
     val runner = rememberActionRunner()
     var reporting by remember { mutableStateOf<Int?>(null) }
     val reportedMsg = stringResource(R.string.report_sent)
-    val lastLength = entries.lastOrNull()?.let { it.content.length + it.reasoning.length } ?: 0
+    val lastLength = entries.lastOrNull()?.let { entry -> entry.content.length + entry.steps.sumOf { (it as? AiStep.Thought)?.text?.length ?: 0 } } ?: 0
     // Only new messages glide in, not those scrolled back into view (the count shown so far)
     val shown = remember { intArrayOf(0) }
 
@@ -514,8 +525,8 @@ private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         AiOrb(28.dp, thinking = entry.streaming && entry.thoughtMs == null)
         Column(Modifier.weight(1f).widthIn(max = 640.dp).padding(start = 10.dp, top = 2.dp).animateContentSize()) {
-            val split = splitThinkingFull(entry.content, entry.reasoning)
-            if (entry.streaming || split.thinking.isNotBlank() || entry.thoughtMs != null) ThinkingLine(entry, split.thinking)
+            val split = splitThinkingFull(entry.content)
+            if (entry.streaming || split.thinking.isNotBlank() || entry.steps.isNotEmpty() || entry.thoughtMs != null) ThinkingLine(entry, split.thinking)
             if (split.answer.isNotBlank()) SelectionContainer { org.agora.app.ui.components.AgoraMarkdown(split.answer) }
             if (onReport != null) Row(
                 Modifier.padding(top = 8.dp).clip(RoundedCornerShape(50)).border(1.dp, Agora.colors.hairline, RoundedCornerShape(50))
@@ -531,11 +542,13 @@ private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
 }
 
 /**
- * One quiet line (web: .ai-thinking): "Thinking · 4 s" with a shimmer while the model thinks, then "Thought · 12 s";
- * a tap shows the thoughts once there are some.
+ * One quiet line (web: .ai-thinking): "Thinking · 4 s" with a shimmer while the model thinks - or, from server CALDERA
+ * on, what the server looks up for it right now ("Finding Nick among the members", in the model's own words where it
+ * gave some) - then "Thought · 12 s" ("Thought · looked up 2×"). A tap shows the steps in order once there are some:
+ * thoughts, notes on the way, every lookup with what it found ([inlineThinking]: a `<think>` block of the answer).
  */
 @Composable
-private fun ThinkingLine(entry: AiEntry, thinking: String) {
+private fun ThinkingLine(entry: AiEntry, inlineThinking: String) {
     var open by rememberSaveable { mutableStateOf(false) }
     val live = entry.streaming && entry.thoughtMs == null
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -547,7 +560,15 @@ private fun ThinkingLine(entry: AiEntry, thinking: String) {
     }
     val millis = entry.thoughtMs ?: (now - entry.startedAt)
     val seconds = (millis / 1000).coerceAtLeast(1).toInt()
-    val canOpen = thinking.isNotBlank()
+    val steps = entry.steps + listOfNotNull(inlineThinking.takeIf { it.isNotBlank() }?.let { AiStep.Thought(it) })
+    val canOpen = steps.isNotEmpty()
+    val lookup = if (live) entry.currentLookup else null
+    val label = when {
+        lookup != null -> lookupTitle(lookup.lookup)
+        live -> stringResource(R.string.ai_thinking) + "…"
+        entry.lookups > 0 -> stringResource(R.string.ai_thought_lookups, entry.lookups)
+        else -> stringResource(R.string.ai_thought)
+    }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val labelStyle = if (live) {
         val shimmer by rememberInfiniteTransition(label = "shimmer").animateFloat(1f, -1.5f, infiniteRepeatable(tween(1_800, easing = LinearEasing)), label = "x")
@@ -563,20 +584,89 @@ private fun ThinkingLine(entry: AiEntry, thinking: String) {
             .background(MaterialTheme.colorScheme.surface)
             .clickable(enabled = canOpen) { open = !open }
             .padding(start = 11.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
-            .heightIn(min = 22.dp),
+            .heightIn(min = 22.dp)
+            .animateContentSize(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(stringResource(if (live) R.string.ai_thinking else R.string.ai_thought) + if (live) "…" else "", style = labelStyle)
-        Text(" · " + stringResource(R.string.ai_thinking_seconds, seconds), style = MaterialTheme.typography.labelMedium, color = secondary.copy(alpha = 0.85f))
+        // One line high whatever it says: a long step is cut, the seconds stay
+        Text(label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text(" · " + stringResource(R.string.ai_thinking_seconds, seconds), style = MaterialTheme.typography.labelMedium, color = secondary.copy(alpha = 0.85f), maxLines = 1)
         if (canOpen) Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 2.dp).size(16.dp), tint = secondary)
     }
-    if (open && canOpen) Text(
-        thinking, style = MaterialTheme.typography.bodySmall, color = secondary,
-        modifier = Modifier.padding(start = 6.dp, bottom = 10.dp)
+    if (open && canOpen) Column(
+        Modifier.padding(start = 6.dp, bottom = 10.dp)
             // A thin line in the orb's violet on the left (web: .ai-thinking-content)
             .drawBehind { drawRect(Color(0xFF7C6FD6).copy(alpha = 0.3f), size = Size(2.dp.toPx(), size.height)) }
             .padding(start = 14.dp)
             .heightIn(max = 260.dp)
-            .verticalScroll(rememberScrollState())
-    )
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        steps.forEach { step ->
+            when (step) {
+                is AiStep.Thought -> Text(step.text.trim(), style = MaterialTheme.typography.bodySmall, color = secondary)
+                is AiStep.Note -> Text(step.text.trim(), style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic), color = secondary)
+                is AiStep.Lookup -> Row(verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Outlined.Search, null, Modifier.padding(top = 1.dp).size(14.dp), tint = Color(0xFF7C6FD6))
+                    Column(Modifier.padding(start = 6.dp)) {
+                        Text(lookupTitle(step.lookup), style = MaterialTheme.typography.labelMedium, color = Agora.colors.heading)
+                        // What it read, when the model named it in its own words above
+                        if (step.lookup.step != null) Text(lookupWhat(step.lookup), style = MaterialTheme.typography.labelSmall, color = secondary)
+                        lookupFound(step.done)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = secondary) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A lookup's line: the model's own words for what it does, when it gave some - else what is looked up. */
+@Composable
+private fun lookupTitle(lookup: AiChunk.Lookup): String =
+    lookup.step?.trim()?.takeIf { it.isNotEmpty() }?.let { it.replaceFirstChar { first -> first.uppercase() } }
+        ?: stringResource(R.string.ai_looking_up, lookupWhat(lookup))
+
+/** What a lookup reads: "expenses 2019–2024 “Christmas”" (web: lookupWhat). */
+@Composable
+private fun lookupWhat(lookup: AiChunk.Lookup): String {
+    val parts = mutableListOf(stringResource(when (lookup.tool.takeIf { it in LOOKUP_TOOLS }) {
+        "payments" -> R.string.ai_lookup_payments
+        "expenses" -> R.string.ai_lookup_expenses
+        "donations" -> R.string.ai_lookup_donations
+        "money" -> R.string.ai_lookup_money
+        "members" -> R.string.ai_lookup_members
+        "events" -> R.string.ai_lookup_events
+        "money_totals" -> R.string.ai_lookup_money_totals
+        "finance_changes" -> R.string.ai_lookup_finance_changes
+        else -> R.string.ai_lookup_unknown
+    }))
+    val (from, to) = lookup.from to lookup.to
+    when {
+        from != null && to != null -> parts += if (from == to) from else "$from–$to"
+        from != null -> parts += stringResource(R.string.ai_lookup_since, from)
+        to != null -> parts += stringResource(R.string.ai_lookup_until, to)
+    }
+    lookup.about?.let { parts += stringResource(R.string.ai_lookup_about, it) }
+    return parts.joinToString(" ")
+}
+
+/** What a finished lookup found: "12 entries · €345.50" - or that it was not allowed or failed; null while it runs. */
+@Composable
+private fun lookupFound(done: AiChunk.LookupDone?): String? {
+    done ?: return null
+    done.error?.let { return stringResource(if (it == "forbidden") R.string.ai_found_forbidden else R.string.ai_found_failed) }
+    val count = done.count ?: return null
+    val unit = when (done.unit.takeIf { it in LOOKUP_UNITS }) {
+        "entries" -> R.plurals.ai_found_entries
+        "events" -> R.plurals.ai_found_events
+        "changes" -> R.plurals.ai_found_changes
+        "members" -> R.plurals.ai_found_members
+        "periods" -> R.plurals.ai_found_periods
+        else -> return null
+    }
+    return buildList {
+        add(pluralStringResource(unit, count, count))
+        done.eur?.let { add(org.agora.app.util.Money.format(it)) }
+        if (done.cut) add(stringResource(R.string.ai_found_cut))
+    }.joinToString(" · ")
 }

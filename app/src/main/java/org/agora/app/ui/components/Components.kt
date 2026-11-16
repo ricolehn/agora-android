@@ -88,15 +88,30 @@ fun ProvideAppLocals(container: AppContainer, snackbar: SnackbarHostState, conte
     )
 
 /**
- * Runs a suspending action, tracks `busy` and reports the outcome as snackbar (errors: the server's message). The
- * message is shown from [messages], the scope of the app's window: most actions close their sheet or leave their page,
- * which takes their own coroutines with it - a message shown from there vanished with the sheet.
+ * The app's own words for what every server answers alike: a server that is starting or upgrading its database, too
+ * many requests, and a change of API v2 based on data that changed meanwhile (which the app mostly repeats itself).
+ * Null: the server's own message says it best - in the app's language (`Accept-Language`).
+ */
+@androidx.annotation.StringRes
+fun knownErrorText(e: ApiException): Int? = when {
+    e.isStarting -> R.string.error_server_starting
+    e.code == "rate_limited" -> R.string.error_rate_limited
+    e.code == "conflict" -> R.string.error_conflict
+    else -> null
+}
+
+/**
+ * Runs a suspending action, tracks `busy` and reports the outcome as snackbar (errors: the server's message, or the
+ * app's own words for what [knownError] knows). The message is shown from [messages], the scope of the app's window:
+ * most actions close their sheet or leave their page, which takes their own coroutines with it - a message shown from
+ * there vanished with the sheet.
  */
 class ActionRunner(
     private val scope: CoroutineScope,
     private val messages: CoroutineScope,
     private val snackbar: SnackbarHostState,
-    private val fallbackError: String
+    private val fallbackError: String,
+    private val knownError: (ApiException) -> String? = { null }
 ) {
     var busy by mutableStateOf(false)
         private set
@@ -116,7 +131,7 @@ class ActionRunner(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val message = (e as? ApiException)?.message?.takeIf { it.isNotBlank() } ?: fallbackError
+                val message = (e as? ApiException)?.let { knownError(it) ?: it.message?.takeIf { text -> text.isNotBlank() } } ?: fallbackError
                 onError(message)
                 show(message)
             } finally {
@@ -133,7 +148,10 @@ fun rememberActionRunner(): ActionRunner {
     val messages = LocalMessageScope.current ?: scope
     val snackbar = LocalSnackbar.current
     val fallback = stringResource(R.string.error_generic)
-    return remember(scope, messages, snackbar) { ActionRunner(scope, messages, snackbar, fallback) }
+    val resources = androidx.compose.ui.platform.LocalResources.current
+    return remember(scope, messages, snackbar, resources) {
+        ActionRunner(scope, messages, snackbar, fallback) { e -> knownErrorText(e)?.let(resources::getString) }
+    }
 }
 
 /** `.card`: white surface floating on the page: 20px radius, hairline border and a soft, slightly deep shadow. */

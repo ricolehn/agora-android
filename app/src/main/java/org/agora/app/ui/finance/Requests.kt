@@ -67,9 +67,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import org.agora.app.R
 import org.agora.app.data.RequestDecision
+import org.agora.app.data.TextLimits
 import org.agora.app.data.model.FinanceRequest
 import org.agora.app.data.model.Person
-import org.agora.app.data.model.parseAmount
 import org.agora.app.ui.components.AgoraCard
 import org.agora.app.ui.components.AgoraSheet
 import org.agora.app.ui.components.AgoraTextField
@@ -109,7 +109,7 @@ private val RequestAmber = Color(0xFFF59E0B)
 fun requestAmount(request: FinanceRequest): String = when (request.type) {
     "status" -> statusName(request.field("newStatus"))
     else -> {
-        val amount = Money.format(request.field("amount")?.let(::parseAmount) ?: 0.0)
+        val amount = Money.format(request.amount ?: 0.0)
         if (request.type == "standing_order") "$amount ${stringResource(R.string.per_month)}" else amount
     }
 }
@@ -375,7 +375,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
                     Text(stringResource(R.string.cancel))
                 }
                 PrimaryButton(onClick = {
-                    submit(rejectedMsg) { container.repo.rejectRequest(request.id, reason.trim()) }
+                    submit(rejectedMsg) { container.repo.rejectRequest(request, reason.trim()) }
                 }, enabled = !runner.busy, danger = true, modifier = Modifier.weight(1.4f).height(46.dp)) {
                     if (runner.busy) ButtonProgress() else ButtonLabel(stringResource(R.string.request_reject_confirm), Icons.Outlined.Close)
                 }
@@ -434,7 +434,7 @@ fun RequestDetailSheet(request: FinanceRequest, canDecide: Boolean, onDismiss: (
             )
         }
         AnimatedVisibility(rejecting) {
-            AgoraTextField(reason, { reason = it }, label = { Text(stringResource(R.string.rejection_reason_label)) },
+            AgoraTextField(reason, { reason = it.take(TextLimits.REASON) }, label = { Text(stringResource(R.string.rejection_reason_label)) },
                 placeholder = { Text(stringResource(R.string.request_reject_placeholder)) }, modifier = Modifier.fillMaxWidth())
         }
     }

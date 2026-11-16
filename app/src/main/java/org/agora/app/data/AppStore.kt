@@ -223,10 +223,18 @@ class AppStore(
         try {
             coroutineScope {
                 val old = _data.value
+                // What the server answers: an update to CALDERA brings API v2, which the books are read through
+                val server = async { repo.checkServer() }
                 val fees = async { runCatching { repo.feeSettings() }.getOrDefault(old.fees) }
-                val person = async { runCatching { repo.ownPeople(user.userId).firstOrNull() }.getOrElse { old.ownPerson } }
+                val person = async {
+                    server.await()
+                    runCatching { repo.ownPeople(user.userId).firstOrNull() }.getOrElse { old.ownPerson }
+                }
                 // Members only get their own requests from the server (also decided ones, via their person record)
-                val requests = async { runCatching { repo.allRequests() }.getOrNull() }
+                val requests = async {
+                    server.await()
+                    runCatching { repo.allRequests() }.getOrNull()
+                }
                 val events = async { runCatching { repo.events() }.onFailure { if (it is ApiException) lastError = it.message } .getOrDefault(old.events) }
                 val duties = async { runCatching { repo.myDutyRequests() }.getOrDefault(old.dutyRequests) }
                 val threads = async { runCatching { repo.threads() }.getOrDefault(old.threads) }
