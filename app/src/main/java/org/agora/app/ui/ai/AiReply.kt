@@ -58,7 +58,13 @@ class AiReplyWork {
 /** Interjections a thought often starts with ("Okay, ...", "Gut, ..."): they say nothing about what is being done. */
 private val FILLER = Regex("^(?:(?:ok(?:ay)?|so|alright|all right|well|hmm+|right|also|gut|also gut|alles klar|na gut)[,.!:]\\s*)+", RegexOption.IGNORE_CASE)
 private val MARKS = Regex("[*_`#>]+")
-private val SPACES = Regex("(?U)\\s+")
+/**
+ * A space as the web app's `\s` knows it: every Unicode space, the no-break ones too. Spelled out, as it means the same
+ * on the JVM and on Android - Java's flag for it, `(?U)`, does not exist in Android's regular expressions (ICU): the
+ * pattern was refused there, and the first reply that was drawn closed the app.
+ */
+private const val SPACE = "\\t\\n\\u000B\\f\\r\\p{Z}\\uFEFF"
+private val SPACES = Regex("[$SPACE]+")
 /** A list sign before a line ("- ", "• ", "2. "). */
 private val LIST_SIGN = Regex("^(?:[-•–]|\\d+[.)])\\s+")
 private val TITLE_END = Regex("[\\s.:;,!?…。-]+$")
@@ -69,7 +75,7 @@ private const val MIN_TITLE = 8
  * Where a sentence ends: with its line, or with . ! ? … before the next one, which begins with something else than a
  * small letter ("e.g. the" and "3.50" end nothing).
  */
-private val SENTENCE_END = Regex("(?U)[.!?…]+[\"”“’')\\]]*(?=\\s+[^a-zäöüßàâçéèêëîïôûùÿñæœ\\s])|[。！？]+|\\n+")
+private val SENTENCE_END = Regex("[.!?…]+[\"”“’')\\]]*(?=[$SPACE]+[^a-zäöüßàâçéèêëîïôûùÿñæœ$SPACE])|[。！？]+|\\n+")
 
 /** Headings of the thoughts ("**Calculating the monthly expenses**", "## ..."), once their line is over - or the text. */
 private fun headings(lineEnd: String) = Regex("(?:^|\\n)[ \\t]*(?:#{1,6}[ \\t]+([^\\n]+)|\\*\\*([^*\\n]{3,120})\\*\\*[ \\t]*)$lineEnd")

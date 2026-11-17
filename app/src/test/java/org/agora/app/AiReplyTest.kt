@@ -134,6 +134,15 @@ class AiReplyTest {
     }
 
     @Test
+    fun `spaces of every kind are spaces, the no-break ones too - as the web's`() {
+        // A sentence ends before a no-break space as well (models write them, e.g. before a unit or in French)
+        assertEquals("I need the yearly totals", liveTitle("I need the yearly totals.\u00A0Then I", settled = false))
+        assertEquals("Ich brauche die Summen pro Jahr", liveTitle("Ich brauche die Summen pro Jahr.\u202FDann", settled = false))
+        // Every run of spaces becomes one
+        assertEquals("Finding Nick in the members", lookupStep(AiChunk.Lookup(1, "members", step = "finding\u00A0Nick\u3000in \u2009the\tmembers")))
+    }
+
+    @Test
     fun `the line names the lookup it is on, then the newest thought once it has a finished title`() {
         assertEquals("Finding Nick in the members", lookupStep(AiChunk.Lookup(2, "expenses", step = "  finding   Nick in the members ")))
         assertNull("no words of the model: the screen names what it reads", lookupStep(AiChunk.Lookup(2, "expenses", from = "2019")))
