@@ -161,8 +161,10 @@ class AgoraRepository(val api: AgoraApi) {
             else -> try {
                 v2.offersAll()
             } catch (e: ApiException) {
-                // The network failed in between: as it was (no switching APIs back and forth on a bad connection)
-                if (e.status == 0) api.apiV2 else false
+                // No answer about v2 - the network failed, the server is starting or updating its database (503), too
+                // many requests, an error in between: as it was. No switching APIs back and forth on a bad connection
+                // or a restart, which would also leave what is open on screen with the other API's ids.
+                if (e.status == 0 || e.status == 429 || e.status >= 500) api.apiV2 else false
             }
         }
         return status
@@ -331,11 +333,14 @@ class AgoraRepository(val api: AgoraApi) {
 
     // ---------- monthly fees over time and the fresh start (server CALDERA) ----------
 
-    /** The fees over time; null on a server from before them (it only knows the fee settings above). */
+    /**
+     * The fees over time; null on a server from before them (it only knows the fee settings above). Never null through
+     * v2: such a server has them, and the fee settings would save new fees without showing what they do.
+     */
     suspend fun feePlan(): FeePlan? = v2Or(
         { call("GET", "/fees", V2Fees.serializer()).toPlan() },
-        { untilCaldera { api.get<FeePlan>("/api/fees") } }
-    )?.takeIf { it.entries.isNotEmpty() }
+        { untilCaldera { api.get<FeePlan>("/api/fees") }?.takeIf { it.entries.isNotEmpty() } }
+    )
 
     /** The days the fee accounts were started afresh; null on a server from before them. */
     suspend fun feeResets(): FeeResets? =
@@ -469,13 +474,14 @@ class AgoraRepository(val api: AgoraApi) {
     }
 
     /**
-     * Member -> treasurer application about the member's own record (the server decides whose it is); the client has to
-     * notify the admins itself afterwards.
+     * Member -> treasurer application about the member's own record [person] (through API v2 named by its id where it
+     * was read there, else the server decides whose it is); through the old API the client has to notify the admins
+     * itself afterwards.
      */
     suspend fun submitRequest(user: User, person: Person?, type: String, data: JsonObject) {
         val personName = person?.name ?: user.fullName
         // Through API v2 the server tells the treasurers itself (notify)
-        val told = v2OrOld({ ask(type, data); true }, {
+        val told = v2OrOld({ ask(type, data, person?.memberId); true }, {
             val id = System.currentTimeMillis().toString()
             api.put<JsonObject>("/api/db", buildJsonObject {
                 put("path", "requests/$id")
@@ -608,17 +614,21 @@ class AgoraRepository(val api: AgoraApi) {
         }
     }
 
-    /** Ends a standing order of [person] on [endDate] (also retroactively), see [StandingOrders.end]. */
+    /**
+     * Ends a standing order of [person] on [endDate] (also retroactively), see [StandingOrders.end]. Read through API v2
+     * ([Person.memberId]) the order has v2's id, which the old API does not know: it goes through v2 only - a server
+     * that answers no v2 any more throws [Bookings.GoneException], nothing is written and the card is read anew.
+     */
     suspend fun endStandingOrder(person: Person, order: StandingOrder, endDate: String) {
         val memberId = person.memberId
-        if (memberId != null && v2.available) return changeV2 { endStandingOrder(memberId, person.version, order.id, endDate) }
+        if (memberId != null) return changeV2 { endStandingOrder(memberId, person.version, order.id, endDate) }
         mutatePerson(person.id) { StandingOrders.end(it, order.id, endDate, LocalDate.now()) }
     }
 
-    /** Removes the standing order entry; payments it already booked stay. */
+    /** Removes the standing order entry; payments it already booked stay. Read through v2: as [endStandingOrder]. */
     suspend fun deleteStandingOrder(person: Person, order: StandingOrder) {
         val memberId = person.memberId
-        if (memberId != null && v2.available) return changeV2 { deleteStandingOrder(memberId, person.version, order.id) }
+        if (memberId != null) return changeV2 { deleteStandingOrder(memberId, person.version, order.id) }
         mutatePerson(person.id) { StandingOrders.remove(it, order.id) }
     }
 

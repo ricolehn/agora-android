@@ -110,25 +110,32 @@ private fun momentOf(iso: String?): Long? = iso?.let(::millisOf)?.takeIf { it > 
 
 private fun V2Side?.toSide(): FeeImpactSide = FeeImpactSide(this?.count ?: 0, euros(this?.totalCents))
 
-/** The fees as the settings show them; none at all (a server without fee changes) reads as an empty plan. */
-fun V2Fees.toPlan(): FeePlan = FeePlan(
-    today = today,
-    month = month,
-    current = eurosOf(currentCents),
-    since = since?.ifBlank { null },
-    next = next?.let { FeeChangeAhead(it.fromMonth, eurosOf(it.feesCents)) },
-    entries = feeChanges.map {
-        FeeEntry(
-            from = it.fromMonth?.ifBlank { null },
-            fees = eurosOf(it.feesCents),
-            state = it.state ?: "past",
-            setAt = momentOf(it.setAt),
-            setByName = it.setByName
-        )
-    },
-    log = log.map { FeeLogEntry(it.action, it.fromMonth?.ifBlank { null }, it.feesCents?.let(::eurosOf), it.movedFrom, momentOf(it.at), it.byName) },
-    version = version
-)
+/**
+ * The fees as the settings show them. A server that answers v2 has the fees over time, also before a change of them
+ * was ever saved: one that lists no entry then (it listed only the changes saved, none on an instance updated from a
+ * version before them) counts the fees of this month from the beginning.
+ */
+fun V2Fees.toPlan(): FeePlan {
+    val current = eurosOf(currentCents)
+    return FeePlan(
+        today = today,
+        month = month,
+        current = current,
+        since = since?.ifBlank { null },
+        next = next?.let { FeeChangeAhead(it.fromMonth, eurosOf(it.feesCents)) },
+        entries = feeChanges.map {
+            FeeEntry(
+                from = it.fromMonth?.ifBlank { null },
+                fees = eurosOf(it.feesCents),
+                state = it.state ?: "past",
+                setAt = momentOf(it.setAt),
+                setByName = it.setByName
+            )
+        }.ifEmpty { listOf(FeeEntry(from = null, fees = current, state = "current")) },
+        log = log.map { FeeLogEntry(it.action, it.fromMonth?.ifBlank { null }, it.feesCents?.let(::eurosOf), it.movedFrom, momentOf(it.at), it.byName) },
+        version = version
+    )
+}
 
 fun V2FeePreview.toImpact(): FeeChangeImpact = FeeChangeImpact(
     from = fromMonth?.ifBlank { null },

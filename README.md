@@ -30,7 +30,8 @@ Fees: from server CALDERA on, the app reads the fees over time (`GET /fees` of A
 go through the server's preview first (`POST /fees/preview`, `GET /fresh-starts/preview`) and are saved with what was
 checked (`POST /fees[/remove]` with the preview's `version`, `POST /fresh-starts[/remove]` with the day twice and the
 admin's password) – on a CALDERA beta without the whole of v2 through the old API's `/api/fees`, `/api/fee-reset` and
-`/api/admin/...`. Older servers answer neither: the app then shows the fee settings as before.
+`/api/admin/...`. Older servers answer neither: the app then shows the fee settings as before. Through v2 the app always
+shows the fees over time, also where no change of them was saved yet (an instance updated from a version before them).
 
 ### API v2 (server CALDERA)
 
@@ -51,7 +52,7 @@ The books:
 | Payments | booked on the member's `memberVersion` (`POST /payments`), changed and deleted by their record (`PATCH` / `DELETE /payments/:id`) |
 | Standing orders, status changes | `POST /standing-orders` (the server books its months up to today, as the web app does), ended (`PATCH`, also retroactively) or removed (`DELETE`); `POST /status-changes` – the server rewrites the history by the web app's rule |
 | Donations, expenses | added, changed and deleted by their record with the `listVersion` of the list; receipts as a list (`receipts`, at most 20 – the form says when no more fit), uploaded and read through `/receipts` (also PDFs) |
-| Requests | read, filed (`POST /requests` with `notify`: the server tells the treasurers), and approved in one step (`POST /requests/:id/decision` with `book: true`: booked once as the web app books it – what cannot be booked as it is stays open), rejected once |
+| Requests | read, filed about the own record (`POST /requests` with its `memberId` and `notify`: the server tells the treasurers), and approved in one step (`POST /requests/:id/decision` with `book: true`: booked once as the web app books it – what cannot be booked as it is stays open), rejected once |
 | History, report, cash balance | `GET /finance/ledger` – every booking newest first, a page at a time, searched by the server (`?q=`: who, description, day, amount); the cash balance from `GET /finance/summary` |
 
 A change of a booking is made on the version read for it: a new booking simply goes on the books as they are now, a
@@ -79,8 +80,11 @@ Only what v2 leaves to the old API by design goes there: signing in and the acco
 (`/api/push/...`), the live updates (`/api/stream`), the AI assistant (`/api/ai/...`) and the instance's administration
 (`/api/admin/...`). Servers before CALDERA, the betas of CALDERA whose v2 had only a part of this, and a CALDERA server
 whose database upgrade waits (its previous version serves the instance) are asked the old way throughout; a v2 route
-the server does not know switches back at once, and a lost connection while asking keeps the API it was. A server that
-is starting or upgrading its database (`503`, `ready: false`) gets *try again in a moment*.
+the server does not know switches back at once. An answer that says nothing about v2 keeps the API it was: a lost
+connection while asking, a server that is starting (`503`), too many requests (`429`), an error in between (`5xx`). A
+standing order read through v2 is changed through v2 only – should the server answer no v2 any more, nothing is written
+and the card is read anew. A server that is starting or upgrading its database (`503`, `ready: false`) gets *try again
+in a moment*.
 
 The app's own calls can be checked against a real CALDERA server (`LiveServerTest`: the calendar, the community, the
 media library and the fee settings read through v2 and the old API side by side; only a test instance: with *manage

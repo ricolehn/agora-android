@@ -314,13 +314,17 @@ class BooksV2(private val v2: ApiV2, private val api: AgoraApi) {
     suspend fun requests(): List<V2Request> = v2.all("/requests", V2Request.serializer()).items
 
     /**
-     * Asks the treasury: [type] with what is asked ([details]), about the asking member's own record; the treasurers
-     * are told (push and e-mail, as they chose).
+     * Asks the treasury: [type] with what is asked ([details]), about the asking member's own record [memberId] (null:
+     * the one the server finds for the account); the treasurers are told (push and e-mail, as they chose).
      */
-    suspend fun ask(type: String, details: JsonObject): V2Request =
+    suspend fun ask(type: String, details: JsonObject, memberId: String? = null): V2Request =
         v2.call("POST", "/requests", V2Request.serializer(), buildJsonObject {
             put("type", type)
             put("details", details)
+            // Named where it is known: the server finds a member's own record by the account, but not the one of
+            // someone who manages the finances - whose record can bear another key than the account (made by the
+            // treasury and linked later), and the request could not be booked then
+            memberId?.let { put("memberId", it) }
             put("notify", true)
         })
 

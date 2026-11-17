@@ -420,6 +420,34 @@ class ApiV2AreasTest {
         assertEquals(listOf("2027-01-01", "2027-01-01", "geheim"), listOf(set["day"], set["confirmDay"], set["password"]).map { it!!.jsonPrimitive.content })
     }
 
+    @Test
+    fun `a server that answers v2 shows the fees over time also before a change of them was saved - never the fee settings`() = FakeServer().use { server ->
+        // A server that listed only the changes saved - none on an instance updated from a version before the fees over
+        // time: the app took it for a server without them and showed the old fee settings, which save new fees for
+        // this month on without showing what they do
+        val repo = server.v2Repository(json)
+        server.on("GET", "/api/v2/fees") {
+            200 to """{"today":"2026-11-16","month":"2026-11","currentCents":{"vollverdiener":5000,"geringverdiener":2500,"keinverdiener":1000,"pausiert":0},
+                "since":null,"next":null,"feeChanges":[],"freshStarts":[],"version":"v1","log":[]}"""
+        }
+        val plan = checkNotNull(runBlocking { repo.feePlan() }) { "the fees over time, not the fee settings" }
+        assertEquals(listOf(null to "current"), plan.entries.map { it.from to it.state })
+        assertEquals(plan.current, plan.entries.single().fees)
+        assertEquals(50.0, plan.entries.single().fees["vollverdiener"]!!, 0.0)
+        // As a server lists them now: the fees from the beginning, as they come
+        server.on("GET", "/api/v2/fees") {
+            200 to """{"today":"2026-11-16","month":"2026-11","currentCents":{"vollverdiener":5000},"since":null,"next":null,
+                "feeChanges":[{"fromMonth":"","feesCents":{"vollverdiener":5000},"state":"current","setAt":null,"setByName":""}],"freshStarts":[],"version":"v1","log":[]}"""
+        }
+        assertEquals(listOf(null to 50.0), runBlocking { repo.feePlan() }!!.entries.map { it.from to it.fees["vollverdiener"] })
+        assertTrue("nothing asked the old way", server.calls("GET", "/api/fees").isEmpty())
+
+        // A server from before the fees over time (the old API, which does not know them): the fee settings
+        val old = server.repository(json, signedIn = true)
+        server.on("GET", "/api/fees") { 404 to """{"error":"Not found"}""" }
+        assertNull(runBlocking { old.feePlan() })
+    }
+
     private companion object {
         const val EVENT = """{"id":"e1","title":"Grillfest","date":"2026-12-01","endDate":null,"startTime":"18:00","endTime":null,"location":"Garten","description":"",
             "kind":"termin","status":"scheduled","isPinned":false,"requiresRegistration":true,"minParticipants":0,"maxParticipants":1,"targetGroups":[],

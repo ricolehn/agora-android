@@ -369,7 +369,22 @@ internal fun ManageStandingOrderSheet(person: Person, order: StandingOrder, onDi
     var confirmDelete by remember { mutableStateOf(false) }
     val updatedMsg = stringResource(R.string.toast_so_updated)
     val deletedMsg = stringResource(R.string.toast_so_deleted)
+    val goneMsg = stringResource(R.string.so_gone)
     val retroactive = Dates.parse(endDate)?.isBefore(java.time.LocalDate.now()) == true
+
+    // Also when the card was out of date (nothing is written then): it is read anew and says so. Other errors keep
+    // the sheet open with the message.
+    fun save(doneMsg: String, action: suspend () -> Unit) = runner.run {
+        val message = try {
+            action()
+            doneMsg
+        } catch (e: Bookings.GoneException) {
+            goneMsg
+        }
+        onSaved()
+        sheet.dismiss()
+        runner.show(message)
+    }
     AgoraSheet(
         title = stringResource(R.string.so_manage_title),
         subtitle = "${person.name} · ${Money.format(order.amount)} ${stringResource(R.string.per_month)}",
@@ -380,13 +395,7 @@ internal fun ManageStandingOrderSheet(person: Person, order: StandingOrder, onDi
             SheetActions(
                 confirmLabel = stringResource(R.string.so_end_save),
                 confirmIcon = Icons.Outlined.EventBusy,
-                onConfirm = {
-                    runner.run(updatedMsg) {
-                        container.repo.endStandingOrder(person, order, endDate)
-                        onSaved()
-                        sheet.dismiss()
-                    }
-                },
+                onConfirm = { save(updatedMsg) { container.repo.endStandingOrder(person, order, endDate) } },
                 onCancel = { sheet.dismiss() },
                 enabled = endDate.isNotBlank(),
                 busy = runner.busy
@@ -412,13 +421,7 @@ internal fun ManageStandingOrderSheet(person: Person, order: StandingOrder, onDi
         text = stringResource(R.string.so_delete_confirm),
         confirmLabel = stringResource(R.string.delete),
         destructive = true,
-        onConfirm = {
-            runner.run(deletedMsg) {
-                container.repo.deleteStandingOrder(person, order)
-                onSaved()
-                sheet.dismiss()
-            }
-        },
+        onConfirm = { save(deletedMsg) { container.repo.deleteStandingOrder(person, order) } },
         onDismiss = { confirmDelete = false }
     )
 }

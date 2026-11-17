@@ -433,6 +433,7 @@
     <string name="so_delete_confirm">Remove this standing order completely? Payments it already booked stay.</string>
     <string name="toast_so_updated">Standing order updated</string>
     <string name="toast_so_deleted">Standing order deleted</string>
+    <string name="so_gone">The standing order was not changed: what was shown was out of date – the card now shows the current state. Please try again.</string>
     <string name="home_new_messages">New messages</string>
     <string name="home_messages_all">All</string>
     <string name="home_new_message_fallback">New confidential message</string>

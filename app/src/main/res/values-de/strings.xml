@@ -430,6 +430,7 @@
     <string name="so_delete_confirm">Dauerauftrag wirklich komplett entfernen? Bereits gebuchte Zahlungen bleiben erhalten.</string>
     <string name="toast_so_updated">Dauerauftrag aktualisiert</string>
     <string name="toast_so_deleted">Dauerauftrag gelöscht</string>
+    <string name="so_gone">Der Dauerauftrag wurde nicht geändert: Die Anzeige war nicht mehr aktuell – die Karte zeigt jetzt den aktuellen Stand. Bitte noch einmal versuchen.</string>
     <string name="home_new_messages">Neue Nachrichten</string>
     <string name="home_messages_all">Alle</string>
     <string name="home_new_message_fallback">Neue vertrauliche Nachricht</string>

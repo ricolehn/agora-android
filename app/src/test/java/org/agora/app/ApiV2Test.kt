@@ -96,6 +96,43 @@ class ApiV2Test {
     }
 
     @Test
+    fun `a starting server, too many requests or an error in between leave the API as it was - only an answer about v2 changes it`() = FakeServer().use { server ->
+        val repo = server.repository(json, signedIn = true)
+        val all = ApiV2.NEEDED.joinToString(",") { "\"$it\"" }
+        server.on("GET", "/api/status") { 200 to """{"setupMode":false,"ready":true,"updating":false,"apiVersions":[1,2]}""" }
+        server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":[$all]}""" }
+        runBlocking { repo.checkServer() }
+        assertTrue(repo.v2.available)
+        // A server that starts answers its status, and v2 with 503 until it is ready: one refresh then switched the app
+        // to the old API, with what was open on screen still holding v2's ids
+        val noAnswer = listOf(
+            503 to """{"error":{"code":"unavailable","message":"The server is starting. Please try again in a moment."}}""",
+            429 to """{"error":{"code":"rate_limited","message":"Too many requests. Please wait a moment."}}""",
+            500 to """{"error":{"code":"internal","message":"Something went wrong."}}""",
+            502 to "Bad Gateway"
+        )
+        for ((status, body) in noAnswer) {
+            server.on("GET", "/api/v2") { status to body }
+            runBlocking { repo.checkServer() }
+            assertTrue("$status: still through v2", repo.v2.available)
+        }
+        // ... as the old API stays the old API on them
+        repo.api.apiV2 = false
+        for ((status, body) in noAnswer) {
+            server.on("GET", "/api/v2") { status to body }
+            runBlocking { repo.checkServer() }
+            assertFalse("$status: still the old API", repo.v2.available)
+        }
+        // An answer about v2 changes it: all of it offered, or a server that answers no v2 (any more)
+        server.on("GET", "/api/v2") { 200 to """{"apiVersion":2,"resources":[$all]}""" }
+        runBlocking { repo.checkServer() }
+        assertTrue(repo.v2.available)
+        server.on("GET", "/api/v2") { 404 to """{"error":"Not found"}""" }
+        runBlocking { repo.checkServer() }
+        assertFalse(repo.v2.available)
+    }
+
+    @Test
     fun `the app asks for its messages in its language`() = FakeServer().use { server ->
         val api = AgoraApi(json, "test", null) { "de-DE,en-US" }.apply { baseUrl = server.base }
         server.on("GET", "/api/status") { 200 to "{}" }
@@ -186,16 +223,24 @@ class ApiV2Test {
     }
 
     @Test
-    fun `a member asks through API v2 - the server decides whose record it is and tells the treasury`() = FakeServer().use { server ->
+    fun `a member asks through API v2 about their own record and the server tells the treasury`() = FakeServer().use { server ->
         val repo = server.v2Repository(json)
         server.on("POST", "/api/v2/requests") { 201 to """{"id":"new","type":"payment","status":"pending","userId":"u1","memberId":"m1","memberName":"Paula","amountCents":5000,"details":{}}""" }
-        runBlocking { repo.submitRequest(User(uid = "u1", name = "Paula"), null, "payment", buildJsonObject { put("amount", "50.00"); put("date", "2026-05-05"); put("note", "Mai") }) }
+        val details = buildJsonObject { put("amount", "50.00"); put("date", "2026-05-05"); put("note", "Mai") }
+        runBlocking { repo.submitRequest(User(uid = "u1", name = "Paula"), null, "payment", details) }
         val sent = server.calls("POST", "/api/v2/requests").single().json()
         assertEquals("payment", sent["type"]!!.jsonPrimitive.content)
         assertEquals("50.00", sent["details"]!!.jsonObject["amount"]!!.jsonPrimitive.content)
         assertEquals("true", sent["notify"]!!.jsonPrimitive.content)
-        assertNull("nobody else's record: the server takes the member's own", sent["memberId"])
+        assertNull("no record of their own known: the server takes the one of the account", sent["memberId"])
         assertTrue("told by the server itself", server.calls("POST", "/api/notify-admins").isEmpty())
+
+        // The own record, read through v2, is named: the server finds it by the account only for members who do not
+        // manage the finances - a treasurer's record made by the treasury and linked later bears another key than the
+        // account, and the request could not be booked
+        val treasurer = User(uid = "u-theo", name = "Theo Kasse", canManageFinances = true)
+        runBlocking { repo.submitRequest(treasurer, Person(id = "-NkasseTheo", uid = "u-theo", name = "Theo Kasse", memberId = "m-theo"), "payment", details) }
+        assertEquals("m-theo", server.calls("POST", "/api/v2/requests").last().json()["memberId"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -290,6 +335,35 @@ class ApiV2Test {
         val anna = v2Person()
         assertThrows(Bookings.GoneException::class.java) { runBlocking { repo.endStandingOrder(anna, anna.standingOrders.single(), "2026-10-31") } }
         assertEquals(1, server.calls("PATCH", "/api/v2/standing-orders/so1").size)
+    }
+
+    @Test
+    fun `a standing order read through API v2 is changed there only - the old API does not know its id`() = FakeServer().use { server ->
+        // The card was read through v2, then the app went over to the old API (a server that answers no v2 any more):
+        // ending the order through the member's record found no order of that id, wrote the record back as it was and
+        // said "saved" - the order went on booking. Now nothing is written and the card is read anew.
+        val repo = server.v2Repository(json)
+        repo.api.apiV2 = false
+        val anna = v2Person()
+        assertThrows(Bookings.GoneException::class.java) { runBlocking { repo.endStandingOrder(anna, anna.standingOrders.single(), "2026-10-31") } }
+        assertThrows(Bookings.GoneException::class.java) { runBlocking { repo.deleteStandingOrder(anna, anna.standingOrders.single()) } }
+        // Also when the server turns out to answer no v2 only now
+        repo.api.apiV2 = true
+        server.on("PATCH", "/api/v2/standing-orders/so1") { 404 to """{"error":"Not found"}""" }
+        assertThrows(Bookings.GoneException::class.java) { runBlocking { repo.endStandingOrder(anna, anna.standingOrders.single(), "2026-10-31") } }
+        assertFalse(repo.v2.available)
+        assertTrue("nothing through the member's record", server.calls("GET", "/api/db").isEmpty() && server.calls("POST", "/api/db/transaction").isEmpty())
+
+        // A refresh that met the server while it started leaves the card's orders to v2
+        repo.api.apiV2 = true
+        server.on("GET", "/api/status") { 200 to """{"setupMode":false,"ready":true,"updating":false,"apiVersions":[1,2]}""" }
+        server.on("GET", "/api/v2") { 503 to """{"error":{"code":"unavailable","message":"The server is starting. Please try again in a moment."}}""" }
+        server.on("PATCH", "/api/v2/standing-orders/so1") { 200 to """{"id":"so1"}""" }
+        runBlocking {
+            repo.checkServer()
+            repo.endStandingOrder(anna, anna.standingOrders.single(), "2026-10-31")
+        }
+        assertEquals("2026-10-31", server.calls("PATCH", "/api/v2/standing-orders/so1").last().json()["endDate"]!!.jsonPrimitive.content)
     }
 
     @Test
