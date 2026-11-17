@@ -48,6 +48,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.agora.app.R
+import org.agora.app.ui.ai.AiOrb
+import org.agora.app.ui.ai.AiOrbFrame
 import org.agora.app.ui.components.columnCount
 import org.agora.app.ui.components.pagePadding
 import org.agora.app.ui.components.softShadow
@@ -69,11 +71,11 @@ data class HubApp(
 
 /**
  * The apps of the hub in the web's order (3.3 BA SING SE): the AI chat across the full width on top (when it is on
- * and the person may use it), then Media (only with access to the library), Songbook and Prayer requests. Polls
- * stay off.
+ * and the person may use it; in the sand and lagoon of the assistant's sign, which its tile shows instead of the
+ * icon), then Media (only with access to the library), Songbook and Prayer requests. Polls stay off.
  */
 fun hubApps(aiAvailable: Boolean, mediaAvailable: Boolean = false): List<HubApp> = buildList {
-    if (aiAvailable) add(HubApp("ai", Icons.Outlined.AutoAwesome, Color(0xFFC4B8F5), Color(0xFF7C6FD6), R.string.hub_ai_title, R.string.hub_ai_desc, featured = true))
+    if (aiAvailable) add(HubApp("ai", Icons.Outlined.AutoAwesome, Color(0xFFEBD3AE), Color(0xFF2D625B), R.string.hub_ai_title, R.string.hub_ai_desc, featured = true))
     if (mediaAvailable) add(HubApp("media", Icons.Outlined.Folder, Color(0xFFF6C7A4), Color(0xFFE0874F), R.string.hub_media_title, R.string.hub_media_desc))
     add(HubApp("songbook", Icons.Outlined.MusicNote, Color(0xFFAED6EC), Color(0xFF4A98C4), R.string.hub_songbook_title, R.string.hub_songbook_desc))
     add(HubApp("prayers", Icons.Outlined.FavoriteBorder, Color(0xFFF2B5C0), Color(0xFFD6667C), R.string.hub_prayers_title, R.string.hub_prayers_desc))
@@ -114,7 +116,8 @@ fun HubScreen(apps: List<HubApp>, contentPadding: PaddingValues, onOpen: (String
 /**
  * A tile like the web's `.hub-app`: a faint wash of the app's colour from the upper right, the icon as a flat tinted
  * square with a thin border, the app's sign once more large and faint in the corner, a neutral soft shadow. The
- * featured AI tile gets a little more tint, quiet sparkles and "Start chat". Tiles rise in one after another.
+ * featured AI tile shows the assistant's sign instead of the icon (still and faint once more in its corner), a little
+ * more tint and "Start chat". Tiles rise in one after another.
  */
 @Composable
 private fun HubTile(app: HubApp, index: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -154,8 +157,8 @@ private fun HubTile(app: HubApp, index: Int, modifier: Modifier = Modifier, onCl
             .border(1.dp, Agora.colors.hairline, shape)
             .clickable(onClick = onClick)
     ) {
-        // The app's sign once more, large and faint in the corner (the AI tile has its sparkles instead). It lies in
-        // the tile's own size and spills over its edge, so it never makes the tile taller than its text
+        // The app's sign once more, large and faint in the corner (the AI tile: the assistant's sign, still). It lies
+        // in the tile's own size and spills over its edge, so it never makes the tile taller than its text
         if (!app.featured) Box(Modifier.matchParentSize()) {
             Icon(
                 app.icon, null,
@@ -163,15 +166,16 @@ private fun HubTile(app: HubApp, index: Int, modifier: Modifier = Modifier, onCl
                 tint = tone.copy(alpha = if (dark) 0.06f else 0.05f)
             )
         }
-        else Box(Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 40.dp).size(width = 60.dp, height = 44.dp)) {
-            val sparkle = tone.copy(alpha = if (dark) 0.25f else 0.3f)
-            Icon(Icons.Outlined.AutoAwesome, null, Modifier.align(Alignment.TopEnd).size(24.dp), tint = sparkle)
-            Icon(Icons.Outlined.AutoAwesome, null, Modifier.align(Alignment.TopEnd).offset(x = (-28).dp, y = 20.dp).size(14.dp), tint = sparkle.copy(alpha = sparkle.alpha * 0.7f))
-            Icon(Icons.Outlined.AutoAwesome, null, Modifier.align(Alignment.TopEnd).offset(x = (-36).dp).size(10.dp), tint = sparkle.copy(alpha = sparkle.alpha * 0.5f))
+        else Box(Modifier.matchParentSize()) {
+            AiOrbFrame(
+                132.dp, time = { 9f }, glow = false,
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = 38.dp, y = (-58).dp).requiredSize(132.dp).graphicsLayer { alpha = if (dark) 0.07f else 0.08f }
+            )
         }
         Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             val iconShape = RoundedCornerShape(14.dp)
-            Box(
+            if (app.featured) Box(Modifier.size(46.dp), contentAlignment = Alignment.Center) { AiOrb(42.dp) }
+            else Box(
                 Modifier.size(46.dp).clip(iconShape)
                     .background(app.deep.copy(alpha = if (dark) 0.18f else 0.12f).compositeOver(surface))
                     .border(1.dp, app.deep.copy(alpha = if (dark) 0.30f else 0.22f), iconShape),

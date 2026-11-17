@@ -12,7 +12,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -27,7 +26,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,7 +55,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Euro
@@ -100,7 +97,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -266,32 +262,6 @@ class AiChatViewModel(private val c: AppContainer) : ViewModel() {
     }
 }
 
-// --- The orb: the assistant's sign (web: .ai-orb) - soft colours slowly turning, faster while it thinks ---
-
-private val OrbColors = listOf(Color(0xFF7C6FD6), Color(0xFF9B8CF0), Color(0xFF5FA8D3), Color(0xFF5DBFAA), Color(0xFF9B8CF0), Color(0xFF7C6FD6))
-
-@Composable
-fun AiOrb(size: Dp, thinking: Boolean = false, glow: Boolean = size >= 48.dp) {
-    val transition = rememberInfiniteTransition(label = "orb")
-    val turn by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(if (thinking) 2_200 else 12_000, easing = LinearEasing)), label = "turn")
-    val breathe by transition.animateFloat(0.92f, 1.06f, infiniteRepeatable(tween(if (thinking) 800 else 2_250, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe")
-    val twinkle by transition.animateFloat(1f, if (thinking) 0.82f else 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "twinkle")
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        if (glow || thinking) Box(
-            Modifier.size(size * 1.5f).graphicsLayer { scaleX = breathe; scaleY = breathe; alpha = if (glow) 0.7f else 0.5f }
-                .background(Brush.radialGradient(listOf(Color(0xFF9B8CF0).copy(alpha = 0.45f), Color(0xFF5DBFAA).copy(alpha = 0.18f), Color.Transparent)), CircleShape)
-        )
-        Canvas(Modifier.size(size).clip(CircleShape)) {
-            rotate(turn) { drawCircle(Brush.sweepGradient(OrbColors), radius = this.size.minDimension) }
-            // Depth: light from the upper left, a little shade below
-            drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.42f), Color.Transparent), center = Offset(this.size.width * 0.32f, this.size.height * 0.24f), radius = this.size.minDimension * 0.62f))
-            drawCircle(Brush.radialGradient(listOf(Color(0xFF281E5A).copy(alpha = 0.28f), Color.Transparent), center = Offset(this.size.width * 0.6f, this.size.height * 1.05f), radius = this.size.minDimension * 0.6f))
-        }
-        Box(Modifier.size(size).border(1.dp, Color.White.copy(alpha = 0.22f), CircleShape))
-        Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(size * 0.4f).graphicsLayer { scaleX = twinkle; scaleY = twinkle; rotationZ = (1f - twinkle) * 110f }, tint = Color.White)
-    }
-}
-
 /**
  * Fades and lifts in once, [delayMs] after it first shows (the web's aiWelcomeUp / aiMsgIn); with [enabled] false
  * it is simply there (a message scrolled back into view).
@@ -345,7 +315,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
             .fillMaxSize()
             .padding(top = contentPadding.calculateTopPadding(), bottom = maxOf(contentPadding.calculateBottomPadding(), keyboard))
     ) {
-        // The small orb before the title, "New chat" as a quiet M3 button (web: .ai-chat-title, .ai-new-chat-btn)
+        // The small sign before the title, "New chat" as a quiet M3 button (web: .ai-chat-title, .ai-new-chat-btn)
         Row(Modifier.fillMaxWidth().padding(start = if (onBack != null) 8.dp else 20.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             // Back to Extras (the chat is one of its apps)
             if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back), tint = Agora.colors.heading) }
@@ -377,7 +347,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
                     val fresh = index >= shown[0]
                     if (fresh) shown[0] = index + 1
                     Box(Modifier.riseIn(delayMs = if (index < 2) 140 + index * 80 else 0, enabled = fresh)) {
-                        AiBubble(entry, onReport = if (reportable) ({ reporting = index }) else null)
+                        AiBubble(entry, seed = index * 7.3f, onReport = if (reportable) ({ reporting = index }) else null)
                     }
                 }
             }
@@ -455,16 +425,15 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
     }
 }
 
-/** Colours of the three suggestion cards (web: .ai-chat-idea:nth-child). */
-private val IdeaColors = listOf(Color(0xFF7C6FD6), Color(0xFF4A98C4), Color(0xFF479F82))
+/** Colours of the three suggestion cards (web: .ai-chat-idea:nth-child): the sign's lagoon and sand, and stone. */
+private val IdeaColors = listOf(Color(0xFF2D6A62), Color(0xFFA8743F), Color(0xFF6D6861))
 
 /**
- * A new chat (web: .ai-chat-welcome): the orb, "Hi Enrico, how can I help?" with the question in the orb's
- * colours, what can be asked and three suggestion cards; everything rises in one after another.
+ * A new chat (web: .ai-chat-welcome): the sign, "Hi Enrico, how can I help?", what can be asked and three suggestion
+ * cards; everything rises in one after another.
  */
 @Composable
 private fun AiWelcome(firstName: String, hint: String, ideas: List<Pair<ImageVector, Int>>, enabled: Boolean, onAsk: (String) -> Unit) {
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -477,16 +446,8 @@ private fun AiWelcome(firstName: String, hint: String, ideas: List<Pair<ImageVec
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
             )
             Text(
-                stringResource(R.string.ai_chat_hello),
-                style = MaterialTheme.typography.headlineMedium.merge(
-                    TextStyle(
-                        brush = Brush.linearGradient(
-                            if (dark) listOf(Color(0xFFA99CF5), Color(0xFF9D90F2), Color(0xFF6CC3D8), Color(0xFF63C7B2))
-                            else listOf(Color(0xFF6C5FD0), Color(0xFF7D6FE0), Color(0xFF3F9FB8), Color(0xFF2F9E8C))
-                        )
-                    )
-                ),
-                textAlign = TextAlign.Center
+                stringResource(R.string.ai_chat_hello), style = MaterialTheme.typography.headlineMedium,
+                color = Agora.colors.heading, textAlign = TextAlign.Center
             )
         }
         Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -530,7 +491,7 @@ private fun IdeaCard(
 }
 
 @Composable
-private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
+private fun AiBubble(entry: AiEntry, seed: Float = 0f, onReport: (() -> Unit)? = null) {
     val mine = entry.role == "user"
     if (mine || entry.error) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
@@ -551,11 +512,12 @@ private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
         }
         return
     }
-    // The reply: plain text beside the small orb, which turns faster while the AI works
+    // The reply: plain text beside the small sign, which moves livelier while the AI works and comes to rest once
+    // the reply is complete
     val split = splitThinkingFull(entry.content)
     val line = rememberLine(entry, split.thinking)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        AiOrb(28.dp, thinking = line.live)
+        AiOrb(28.dp, thinking = line.live, resting = !entry.streaming, seed = seed)
         Column(Modifier.weight(1f).widthIn(max = 640.dp).padding(start = 10.dp, top = 2.dp).animateContentSize()) {
             ThinkingLine(entry, split.thinking, line)
             if (split.answer.isNotBlank()) SelectionContainer { org.agora.app.ui.components.AgoraMarkdown(split.answer) }
@@ -584,7 +546,7 @@ private sealed interface LineTitle {
     data class Done(val lookups: Int) : LineTitle
 }
 
-/** The title on the line and whether the AI still works ([live]: the title shimmers and ends in "…", the orb turns faster). */
+/** The title on the line and whether the AI still works ([live]: the title shimmers and ends in "…", the sign moves livelier). */
 @Stable
 private class LineState(first: LineTitle, live: Boolean, scope: CoroutineScope) {
     var title by mutableStateOf(first)
@@ -733,7 +695,7 @@ private fun LineLabel(title: String, live: Boolean, modifier: Modifier = Modifie
 /** [base] in [color] with a soft light running through it while the AI works (web: aiShimmer). */
 @Composable
 private fun shimmer(base: TextStyle, color: Color): TextStyle {
-    val light = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFFB4AAF7) else Color(0xFF8F84E6)
+    val light = aiColors().shimmer
     val x by rememberInfiniteTransition(label = "shimmer").animateFloat(1f, -1.5f, infiniteRepeatable(tween(1_800, easing = LinearEasing)), label = "x")
     return base.merge(
         TextStyle(brush = Brush.linearGradient(
@@ -763,13 +725,14 @@ private fun ThinkingSteps(steps: List<AiStep>, live: Boolean, expanded: Boolean,
     }
     val scope = rememberCoroutineScope()
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val rail = aiColors().rail
     Column(Modifier.padding(bottom = 10.dp)) {
         Column(
             Modifier
                 .padding(start = 6.dp)
                 .then(if (expanded) Modifier else Modifier.heightIn(max = if (screenWidthDp() >= 768) 320.dp else 232.dp).fadeEdges(scroll))
-                // A thin line in the orb's violet on the left
-                .drawBehind { drawRect(Color(0xFF7C6FD6).copy(alpha = 0.3f), size = Size(2.dp.toPx(), size.height)) }
+                // A thin line in the sign's sand on the left
+                .drawBehind { drawRect(rail, size = Size(2.dp.toPx(), size.height)) }
                 .padding(start = 14.dp)
                 .then(if (expanded) Modifier else Modifier.verticalScroll(scroll))
                 .padding(vertical = 2.dp),
@@ -845,14 +808,15 @@ private fun throttled(text: String, ms: Long = 90): String {
 @Composable
 private fun LookupStep(step: AiStep.Lookup, live: Boolean) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val colors = aiColors()
     val heading = Agora.colors.heading
     val style = stepStyle().copy(fontWeight = FontWeight.Medium)
     Row(verticalAlignment = Alignment.Top) {
         Box(
             Modifier.padding(top = 1.dp).size(22.dp).clip(RoundedCornerShape(7.dp))
-                .background(Color(0xFF7C6FD6).copy(alpha = if (dark) 0.26f else 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
+                .background(colors.tint.copy(alpha = if (dark) 0.26f else 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
             contentAlignment = Alignment.Center
-        ) { Icon(lookupIcon(step.lookup.tool), null, Modifier.size(13.dp), tint = if (dark) Color(0xFFB4AAF7) else Color(0xFF6C5FD0)) }
+        ) { Icon(lookupIcon(step.lookup.tool), null, Modifier.size(13.dp), tint = colors.accent) }
         Column(Modifier.padding(start = 9.dp)) {
             Text(lookupTitle(step.lookup), style = if (live && step.done == null) shimmer(style, heading) else style.copy(color = heading))
             // What it read, when the model named it in its own words above, and what it found
