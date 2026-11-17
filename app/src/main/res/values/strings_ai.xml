@@ -5,6 +5,8 @@
     <string name="ai_thinking">Thinking</string>
     <string name="ai_thought">Thought</string>
     <string name="ai_thinking_seconds">%1$d s</string>
+    <string name="ai_steps_more">Show more</string>
+    <string name="ai_steps_less">Show less</string>
     <string name="ai_only_thought">The AI thought about it but sent no answer. Please try again.</string>
     <string name="ai_no_answer">No answer came back. Please try again.</string>
     <string name="ai_timeout">The AI stopped answering. Please try again.</string>

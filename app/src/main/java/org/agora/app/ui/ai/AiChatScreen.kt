@@ -1,18 +1,31 @@
 package org.agora.app.ui.ai
 
+import android.os.SystemClock
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -34,6 +47,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,11 +61,16 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Euro
-import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.NorthEast
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Poll
+import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Icon
@@ -60,22 +81,31 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -85,19 +115,22 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.agora.app.AppContainer
@@ -113,6 +146,7 @@ import org.agora.app.ui.components.frostSource
 import org.agora.app.ui.components.frostSurface
 import org.agora.app.ui.components.frosted
 import org.agora.app.ui.components.rememberActionRunner
+import org.agora.app.ui.components.screenWidthDp
 import org.agora.app.ui.components.softShadow
 import org.agora.app.ui.theme.Agora
 
@@ -132,11 +166,7 @@ data class AiEntry(
     val startedAt: Long = 0,
     val thoughtMs: Long? = null,
     @param:StringRes val errorText: Int? = null
-) {
-    /** The lookup the AI is on right now (see [AiReplyWork.currentLookup]). */
-    val currentLookup: AiStep.Lookup?
-        get() = if (splitThinkingFull(content).answer.isNotBlank()) null else steps.lastOrNull() as? AiStep.Lookup
-}
+)
 
 /** A reply split into the answer and the thought process; [open]: a `<think>` block is still running. */
 data class ThinkingSplit(val answer: String, val thinking: String, val open: Boolean)
@@ -521,12 +551,13 @@ private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
         }
         return
     }
-    // The reply: plain text beside the small orb, which turns faster while the model thinks
+    // The reply: plain text beside the small orb, which turns faster while the AI works
+    val split = splitThinkingFull(entry.content)
+    val line = rememberLine(entry, split.thinking)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        AiOrb(28.dp, thinking = entry.streaming && entry.thoughtMs == null)
+        AiOrb(28.dp, thinking = line.live)
         Column(Modifier.weight(1f).widthIn(max = 640.dp).padding(start = 10.dp, top = 2.dp).animateContentSize()) {
-            val split = splitThinkingFull(entry.content)
-            if (entry.streaming || split.thinking.isNotBlank() || entry.steps.isNotEmpty() || entry.thoughtMs != null) ThinkingLine(entry, split.thinking)
+            ThinkingLine(entry, split.thinking, line)
             if (split.answer.isNotBlank()) SelectionContainer { org.agora.app.ui.components.AgoraMarkdown(split.answer) }
             if (onReport != null) Row(
                 Modifier.padding(top = 8.dp).clip(RoundedCornerShape(50)).border(1.dp, Agora.colors.hairline, RoundedCornerShape(50))
@@ -541,90 +572,314 @@ private fun AiBubble(entry: AiEntry, onReport: (() -> Unit)? = null) {
     }
 }
 
+// --- The line above a reply and the steps below it (web: createAiReply in app.js, .ai-thinking in polish.css) ---
+
+/** The app's easing (web: --ease). */
+private val AiEase = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+/** What the line says: "Thinking", what the AI is on ([LiveLabel]), or "Thought" once the answer runs. */
+private sealed interface LineTitle {
+    data object Thinking : LineTitle
+    data class Live(val label: LiveLabel) : LineTitle
+    data class Done(val lookups: Int) : LineTitle
+}
+
+/** The title on the line and whether the AI still works ([live]: the title shimmers and ends in "…", the orb turns faster). */
+@Stable
+private class LineState(first: LineTitle, live: Boolean, scope: CoroutineScope) {
+    var title by mutableStateOf(first)
+        private set
+    var live by mutableStateOf(live)
+        private set
+    val pacer = TitlePacer<LineTitle>(
+        show = { title, tag ->
+            this.title = title
+            this.live = tag
+        },
+        later = { ms, run -> scope.launch { delay(ms); run() } },
+        cancel = { (it as Job).cancel() },
+        // The time since boot: a clock set back meanwhile does not hold a title for an hour
+        now = SystemClock::uptimeMillis
+    ).apply { want(first, live) }
+}
+
 /**
- * One quiet line (web: .ai-thinking): "Thinking · 4 s" with a shimmer while the model thinks - or, from server CALDERA
- * on, what the server looks up for it right now ("Finding Nick among the members", in the model's own words where it
- * gave some) - then "Thought · 12 s" ("Thought · looked up 2×"). A tap shows the steps in order once there are some:
- * thoughts, notes on the way, every lookup with what it found ([inlineThinking]: a `<think>` block of the answer).
+ * Paces what the line above [entry] says, as the web's does: "Thinking", then what the AI is on - the title of its
+ * newest thought or the lookup it runs - each long enough to be read; "Thought" once the answer has run for a moment
+ * (text the AI writes right before a lookup is only a note on the way), at once when the reply is complete.
  */
 @Composable
-private fun ThinkingLine(entry: AiEntry, inlineThinking: String) {
+private fun rememberLine(entry: AiEntry, inlineThinking: String): LineState {
+    val answering = entry.thoughtMs != null
+    val working = entry.streaming && !answering
+    val wanted = if (!working) LineTitle.Done(entry.lookups)
+        else liveLabel(entry.steps, entry.content, inlineThinking)?.let { LineTitle.Live(it) } ?: LineTitle.Thinking
+    val scope = rememberCoroutineScope()
+    val line = remember { LineState(wanted, working, scope) }
+    val shown = lineTitle(line.title)
+    val hold = when {
+        !entry.streaming -> 0L
+        answering -> null
+        // A "Thought" that came too early makes room at once, "Thinking" soon for the first real title
+        !line.live -> 0L
+        line.title == LineTitle.Thinking -> 400L
+        else -> readingTime(shown)
+    }
+    val grace = if (entry.streaming && answering) 700L else 0L
+    LaunchedEffect(wanted, working, hold, grace) { line.pacer.want(wanted, working, hold, grace) }
+    return line
+}
+
+@Composable
+private fun lineTitle(title: LineTitle): String = when (title) {
+    LineTitle.Thinking -> stringResource(R.string.ai_thinking)
+    is LineTitle.Live -> when (val label = title.label) {
+        is LiveLabel.Thought -> label.title
+        is LiveLabel.Lookup -> lookupTitle(label.lookup)
+    }
+    is LineTitle.Done -> if (title.lookups > 0) stringResource(R.string.ai_thought_lookups, title.lookups) else stringResource(R.string.ai_thought)
+}
+
+/**
+ * One quiet line above a reply (web: .ai-thinking): what the AI is doing right now - "Thinking", the title of its
+ * newest thought ("Calculating the monthly expenses"), or, from server CALDERA on, the lookup the server makes for it,
+ * in the model's own words where it gave some - with the seconds; then "Thought · 12 s" ("Thought · looked up 2×").
+ * It is one line high whatever it says, and its words change with a short fade while its width glides along. A tap
+ * opens the steps below it ([ThinkingSteps]). A reply without thoughts or lookups only needed the line while it
+ * waited: once the answer runs, it folds away. [inlineThinking]: a `<think>` block of the answer.
+ */
+@Composable
+private fun ThinkingLine(entry: AiEntry, inlineThinking: String, line: LineState) {
     var open by rememberSaveable { mutableStateOf(false) }
-    val live = entry.streaming && entry.thoughtMs == null
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val working = entry.streaming && entry.thoughtMs == null
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(live) {
-        while (live) {
+    LaunchedEffect(working) {
+        while (working) {
             now = System.currentTimeMillis()
             delay(1_000)
         }
     }
     val millis = entry.thoughtMs ?: (now - entry.startedAt)
-    val seconds = (millis / 1000).coerceAtLeast(1).toInt()
+    val seconds = ((millis + 500) / 1_000).coerceAtLeast(1).toInt()
     val steps = entry.steps + listOfNotNull(inlineThinking.takeIf { it.isNotBlank() }?.let { AiStep.Thought(it) })
-    val canOpen = steps.isNotEmpty()
-    val lookup = if (live) entry.currentLookup else null
-    val label = when {
-        lookup != null -> lookupTitle(lookup.lookup)
-        live -> stringResource(R.string.ai_thinking) + "…"
-        entry.lookups > 0 -> stringResource(R.string.ai_thought_lookups, entry.lookups)
-        else -> stringResource(R.string.ai_thought)
-    }
+    // Something to open: a lookup, a note or a thought with words
+    val empty = steps.none { it !is AiStep.Thought || it.text.isNotBlank() }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
-    val labelStyle = if (live) {
-        val shimmer by rememberInfiniteTransition(label = "shimmer").animateFloat(1f, -1.5f, infiniteRepeatable(tween(1_800, easing = LinearEasing)), label = "x")
-        MaterialTheme.typography.labelMedium.merge(
-            TextStyle(brush = Brush.linearGradient(
-                0f to secondary, 0.35f to secondary, 0.5f to Color(0xFF8F84E6), 0.65f to secondary, 1f to secondary,
-                start = Offset(shimmer * 300f, 0f), end = Offset(shimmer * 300f + 300f, 0f)
-            ))
-        )
-    } else MaterialTheme.typography.labelMedium.copy(color = secondary)
-    Row(
-        Modifier.padding(bottom = 10.dp).clip(CircleShape).border(1.dp, Agora.colors.hairline, CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(enabled = canOpen) { open = !open }
-            .padding(start = 11.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
-            .heightIn(min = 22.dp)
-            .animateContentSize(),
-        verticalAlignment = Alignment.CenterVertically
+    val pill = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    AnimatedVisibility(
+        visible = line.live || !empty,
+        enter = EnterTransition.None,
+        exit = shrinkVertically(tween(240, easing = AiEase)) + fadeOut(tween(240, easing = AiEase))
     ) {
-        // One line high whatever it says: a long step is cut, the seconds stay
-        Text(label, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        Text(" · " + stringResource(R.string.ai_thinking_seconds, seconds), style = MaterialTheme.typography.labelMedium, color = secondary.copy(alpha = 0.85f), maxLines = 1)
-        if (canOpen) Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, Modifier.padding(start = 2.dp).size(16.dp), tint = secondary)
-    }
-    if (open && canOpen) Column(
-        Modifier.padding(start = 6.dp, bottom = 10.dp)
-            // A thin line in the orb's violet on the left (web: .ai-thinking-content)
-            .drawBehind { drawRect(Color(0xFF7C6FD6).copy(alpha = 0.3f), size = Size(2.dp.toPx(), size.height)) }
-            .padding(start = 14.dp)
-            .heightIn(max = 260.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        steps.forEach { step ->
-            when (step) {
-                is AiStep.Thought -> Text(step.text.trim(), style = MaterialTheme.typography.bodySmall, color = secondary)
-                is AiStep.Note -> Text(step.text.trim(), style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic), color = secondary)
-                is AiStep.Lookup -> Row(verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Outlined.Search, null, Modifier.padding(top = 1.dp).size(14.dp), tint = Color(0xFF7C6FD6))
-                    Column(Modifier.padding(start = 6.dp)) {
-                        Text(lookupTitle(step.lookup), style = MaterialTheme.typography.labelMedium, color = Agora.colors.heading)
-                        // What it read, when the model named it in its own words above
-                        if (step.lookup.step != null) Text(lookupWhat(step.lookup), style = MaterialTheme.typography.labelSmall, color = secondary)
-                        lookupFound(step.done)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = secondary) }
+        Column {
+            Row(
+                Modifier.padding(bottom = 10.dp).bringIntoViewRequester(pill)
+                    .clip(CircleShape).border(1.dp, Agora.colors.hairline, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable(enabled = !empty) {
+                        open = !open
+                        if (!open) expanded = false
                     }
+                    .padding(start = 11.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)
+                    .heightIn(min = 22.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // One line high whatever it says: a long title is cut, the seconds and the arrow stay
+                LineLabel(lineTitle(line.title), line.live, Modifier.weight(1f, fill = false))
+                // The seconds glide in after the first one
+                AnimatedVisibility(!working || now - entry.startedAt >= 1_000, enter = expandHorizontally(tween(260, easing = AiEase)) + fadeIn(tween(260, easing = AiEase))) {
+                    Text(" · " + stringResource(R.string.ai_thinking_seconds, seconds), style = MaterialTheme.typography.labelMedium, color = secondary.copy(alpha = 0.85f), maxLines = 1)
+                }
+                // The arrow once there is something to open
+                AnimatedVisibility(!empty, enter = expandHorizontally(tween(250, easing = AiEase)) + fadeIn(tween(250, easing = AiEase))) {
+                    val turn by animateFloatAsState(if (open) 180f else 0f, tween(250, easing = AiEase), label = "arrow")
+                    Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = 2.dp).size(16.dp).graphicsLayer { rotationZ = turn }, tint = secondary)
+                }
+            }
+            if (open && !empty) ThinkingSteps(steps, line.live, expanded) { more ->
+                expanded = more
+                // "Show less" far down in long steps: back to the line
+                if (!more) scope.launch {
+                    withFrameNanos {}
+                    pill.bringIntoView()
                 }
             }
         }
     }
 }
 
+/** What the line says. The words change inside it: the old ones leave upwards, the new ones come from below (web: showTitle). */
+@Composable
+private fun LineLabel(title: String, live: Boolean, modifier: Modifier = Modifier) {
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = if (live) shimmer(MaterialTheme.typography.labelMedium, secondary) else MaterialTheme.typography.labelMedium.copy(color = secondary)
+    AnimatedContent(
+        targetState = title,
+        transitionSpec = {
+            (slideInVertically(tween(260, 70, AiEase)) { it * 3 / 5 } + fadeIn(tween(260, 70, AiEase)))
+                .togetherWith(slideOutVertically(tween(170, easing = EaseIn)) { -it * 3 / 5 } + fadeOut(tween(170, easing = EaseIn)))
+                .using(SizeTransform { _, _ -> tween(300, easing = AiEase) })
+        },
+        modifier = modifier.clipToBounds(),
+        label = "title"
+    ) { words ->
+        // While the AI works the title ends in "…" (unless it was cut and has one)
+        Text(if (live && !words.endsWith("…")) "$words…" else words, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** [base] in [color] with a soft light running through it while the AI works (web: aiShimmer). */
+@Composable
+private fun shimmer(base: TextStyle, color: Color): TextStyle {
+    val light = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFFB4AAF7) else Color(0xFF8F84E6)
+    val x by rememberInfiniteTransition(label = "shimmer").animateFloat(1f, -1.5f, infiniteRepeatable(tween(1_800, easing = LinearEasing)), label = "x")
+    return base.merge(
+        TextStyle(brush = Brush.linearGradient(
+            0f to color, 0.35f to color, 0.5f to light, 0.65f to color, 1f to color,
+            start = Offset(x * 300f, 0f), end = Offset(x * 300f + 300f, 0f)
+        ))
+    )
+}
+
+/**
+ * The steps below the line (web: .ai-steps): the thoughts and the notes written on the way as markdown, every lookup
+ * with what it read and found, in order. They open as a window of a few lines that follows the newest step while the
+ * AI works - what is hidden above or below fades out, a finger scrolls it; "Show more" opens them in full.
+ */
+@Composable
+private fun ThinkingSteps(steps: List<AiStep>, live: Boolean, expanded: Boolean, onExpand: (Boolean) -> Unit) {
+    val scroll = rememberScrollState()
+    val edge = with(LocalDensity.current) { 24.dp.toPx() }
+    // Whoever reads the newest step keeps seeing it while the AI works; whoever scrolled back stays there
+    var follow by remember { mutableStateOf(live) }
+    val working by rememberUpdatedState(live)
+    LaunchedEffect(scroll) {
+        snapshotFlow { scroll.isScrollInProgress }.drop(1).collect { moving -> if (!moving) follow = scroll.maxValue - scroll.value < edge }
+    }
+    LaunchedEffect(scroll) {
+        snapshotFlow { scroll.maxValue }.collect { if (working && follow) scroll.scrollTo(it) }
+    }
+    val scope = rememberCoroutineScope()
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.padding(bottom = 10.dp)) {
+        Column(
+            Modifier
+                .padding(start = 6.dp)
+                .then(if (expanded) Modifier else Modifier.heightIn(max = if (screenWidthDp() >= 768) 320.dp else 232.dp).fadeEdges(scroll))
+                // A thin line in the orb's violet on the left
+                .drawBehind { drawRect(Color(0xFF7C6FD6).copy(alpha = 0.3f), size = Size(2.dp.toPx(), size.height)) }
+                .padding(start = 14.dp)
+                .then(if (expanded) Modifier else Modifier.verticalScroll(scroll))
+                .padding(vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            steps.forEach { step ->
+                when (step) {
+                    is AiStep.Thought -> if (step.text.isNotBlank()) StepText(step.text, secondary)
+                    is AiStep.Note -> StepText(step.text, Agora.colors.heading)
+                    is AiStep.Lookup -> LookupStep(step, live)
+                }
+            }
+        }
+        // "Show more" while something is hidden, "Show less" once it is all there
+        if (expanded || scroll.maxValue in 3 until Int.MAX_VALUE) Row(
+            Modifier.padding(start = 18.dp, top = 6.dp).clip(RoundedCornerShape(6.dp))
+                .clickable {
+                    if (expanded) {
+                        follow = false
+                        scope.launch { scroll.scrollTo(0) }
+                    }
+                    onExpand(!expanded)
+                }
+                .padding(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(stringResource(if (expanded) R.string.ai_steps_less else R.string.ai_steps_more), style = MaterialTheme.typography.labelMedium, color = secondary)
+            val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(250, easing = AiEase), label = "more")
+            Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = 3.dp).size(14.dp).graphicsLayer { rotationZ = turn }, tint = secondary.copy(alpha = 0.7f))
+        }
+    }
+}
+
+/** What is hidden above or below the window fades out (web: .ai-steps.has-above / .has-below). */
+private fun Modifier.fadeEdges(scroll: ScrollState): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val fade = 26.dp.toPx()
+        if (scroll.value > 2) drawRect(
+            Brush.verticalGradient(listOf(Color.Transparent, Color.Black), endY = fade),
+            size = Size(size.width, fade), blendMode = BlendMode.DstIn
+        )
+        if (scroll.maxValue - scroll.value in 3 until Int.MAX_VALUE) drawRect(
+            Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
+            topLeft = Offset(0f, size.height - fade), size = Size(size.width, fade), blendMode = BlendMode.DstIn
+        )
+    }
+
+/** The size of the steps (web: .ai-thinking-content). */
+@Composable
+private fun stepStyle() = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp, lineHeight = 21.sp)
+
+/** A thought or a note as markdown (summaries put a bold title above every step), in [color]. */
+@Composable
+private fun StepText(text: String, color: Color) =
+    org.agora.app.ui.components.AgoraSmallMarkdown(throttled(text.trim()), stepStyle(), color)
+
+/** [text] as it was at most [ms] ago: a growing thought is laid out anew about ten times a second at most (web: AI_STEP_TEXT_MS). */
+@Composable
+private fun throttled(text: String, ms: Long = 90): String {
+    val latest by rememberUpdatedState(text)
+    var shown by remember { mutableStateOf(text) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { latest }.collect {
+            shown = it
+            delay(ms)
+        }
+    }
+    return shown
+}
+
+/** A lookup: its icon, the model's words (shimmering while it runs) and below them what it read and what it found. */
+@Composable
+private fun LookupStep(step: AiStep.Lookup, live: Boolean) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val heading = Agora.colors.heading
+    val style = stepStyle().copy(fontWeight = FontWeight.Medium)
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            Modifier.padding(top = 1.dp).size(22.dp).clip(RoundedCornerShape(7.dp))
+                .background(Color(0xFF7C6FD6).copy(alpha = if (dark) 0.26f else 0.12f).compositeOver(MaterialTheme.colorScheme.surface)),
+            contentAlignment = Alignment.Center
+        ) { Icon(lookupIcon(step.lookup.tool), null, Modifier.size(13.dp), tint = if (dark) Color(0xFFB4AAF7) else Color(0xFF6C5FD0)) }
+        Column(Modifier.padding(start = 9.dp)) {
+            Text(lookupTitle(step.lookup), style = if (live && step.done == null) shimmer(style, heading) else style.copy(color = heading))
+            // What it read, when the model named it in its own words above, and what it found
+            val detail = listOfNotNull(lookupWhat(step.lookup).takeIf { lookupStep(step.lookup) != null }, lookupFound(step.done)).joinToString(" · ")
+            if (detail.isNotEmpty()) Text(
+                detail, style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp, lineHeight = 17.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 1.dp)
+            )
+        }
+    }
+}
+
+/** The icon of each lookup (web: AI_LOOKUP_ICONS). */
+private fun lookupIcon(tool: String): ImageVector = when (tool) {
+    "payments", "money" -> Icons.Outlined.Payments
+    "expenses" -> Icons.Outlined.Receipt
+    "donations" -> Icons.Outlined.FavoriteBorder
+    "members" -> Icons.Outlined.Group
+    "events" -> Icons.Outlined.CalendarMonth
+    "money_totals" -> Icons.Outlined.Poll
+    "finance_changes" -> Icons.Outlined.History
+    else -> Icons.Outlined.Search
+}
+
 /** A lookup's line: the model's own words for what it does, when it gave some - else what is looked up. */
 @Composable
-private fun lookupTitle(lookup: AiChunk.Lookup): String =
-    lookup.step?.trim()?.takeIf { it.isNotEmpty() }?.let { it.replaceFirstChar { first -> first.uppercase() } }
-        ?: stringResource(R.string.ai_looking_up, lookupWhat(lookup))
+private fun lookupTitle(lookup: AiChunk.Lookup): String = lookupStep(lookup) ?: stringResource(R.string.ai_looking_up, lookupWhat(lookup))
 
 /** What a lookup reads: "expenses 2019–2024 “Christmas”" (web: lookupWhat). */
 @Composable

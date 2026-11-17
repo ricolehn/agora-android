@@ -74,12 +74,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -295,6 +299,31 @@ fun AgoraMarkdown(content: String, modifier: Modifier = Modifier) {
                 h6 = t.titleSmall.copy(color = heading),
                 text = t.bodyLarge,
                 paragraph = t.bodyLarge
+            )
+        )
+    }
+}
+
+/**
+ * Small markdown in one [color] (the AI's thoughts): headings, lists and links in the size of the text, links opened
+ * as in [AgoraMarkdown].
+ */
+@Composable
+fun AgoraSmallMarkdown(content: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val uriHandler = remember(context) { MarkdownUriHandler(context) }
+    val strong = style.copy(fontWeight = FontWeight.SemiBold)
+    val code = style.copy(fontFamily = FontFamily.Monospace)
+    CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+        Markdown(
+            content,
+            colors = markdownColor(text = color),
+            modifier = modifier,
+            typography = markdownTypography(
+                h1 = strong, h2 = strong, h3 = strong, h4 = strong, h5 = strong, h6 = strong,
+                text = style, code = code, inlineCode = code, quote = style.copy(fontStyle = FontStyle.Italic),
+                paragraph = style, ordered = style, bullet = style, list = style,
+                link = style.copy(fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)
             )
         )
     }
