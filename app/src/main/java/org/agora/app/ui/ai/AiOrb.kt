@@ -96,8 +96,8 @@ private fun DrawScope.drawSign(t: Float, e: Float, dark: Boolean, glow: Boolean,
     // The sand form behind, up and right; the lagoon form in front, down and left - the two overlap in the middle
     val backAt = c + Offset(r * (0.2f + 0.06f * wander(t, 0.46f, 0.4f)), r * (-0.17f + 0.06f * wander(t, 0.36f, 1.7f)))
     val frontAt = c + Offset(r * (-0.17f + 0.06f * wander(t, 0.39f, 2.9f)), r * (0.16f + 0.06f * wander(t, 0.54f, 0.8f)))
-    form(back, backAt, r * 0.74f, t, 0.09f * amp, seed = 1.3f)
-    form(front, frontAt, r * 0.76f, t, 0.085f * amp, seed = 4.1f)
+    softForm(back, backAt, r * 0.74f, t, 0.09f * amp, seed = 1.3f)
+    softForm(front, frontAt, r * 0.76f, t, 0.085f * amp, seed = 4.1f)
     // Each form a gentle fall of its colour, whose direction sways a little
     val sway = 0.35f * wander(t, 0.29f, 1.1f)
     fun across(angle: Float) = Offset(cos(angle), sin(angle)) * r
@@ -137,9 +137,10 @@ private fun DrawScope.halo(colors: List<Color>, strength: Float, t: Float, e: Fl
 
 /**
  * A closed soft outline through seven points around [at]: the points keep their directions and only move in and out,
- * each on its own slow path - the form changes, it never turns.
+ * each on its own slow path - the form changes, it never turns. At a fixed [t] it is still: the quiet forms in the
+ * painted fields of the Extras hub (HubArt.kt).
  */
-private fun form(path: Path, at: Offset, radius: Float, t: Float, amp: Float, seed: Float) {
+internal fun softForm(path: Path, at: Offset, radius: Float, t: Float, amp: Float, seed: Float) {
     val n = FORM_POINTS
     val points = Array(n) { i ->
         val angle = (2 * PI * i / n - PI / 2).toFloat()
