@@ -19,9 +19,32 @@ fun breadcrumb(path: String): List<Pair<String, String>> {
     return parts.mapIndexed { index, name -> name to parts.take(index + 1).joinToString("/") }
 }
 
+/**
+ * A step of the path above the library: [target] the folder it opens ("" the base folder), [folded] the folders it
+ * stands for when the middle of a deep path is folded into one ("…").
+ */
+data class PathStep(val target: String, val name: String, val folded: List<Pair<String, String>> = emptyList()) {
+    val root: Boolean get() = target.isEmpty() && folded.isEmpty()
+}
+
+/**
+ * The steps of the path from the base folder ([rootName]) down to [path]: all of them up to three folders down;
+ * deeper, the folders between the base folder and the last two are folded into one step (Media › … › Stage › Band).
+ */
+fun pathSteps(path: String, rootName: String): List<PathStep> {
+    val crumbs = breadcrumb(path)
+    val root = PathStep("", rootName)
+    if (crumbs.size < 4) return listOf(root) + crumbs.map { (name, target) -> PathStep(target, name) }
+    val folded = crumbs.dropLast(2).map { (name, target) -> target to name }
+    return listOf(root, PathStep("", "…", folded)) + crumbs.takeLast(2).map { (name, target) -> PathStep(target, name) }
+}
+
 fun parentPath(path: String): String = path.split('/').filter { it.isNotEmpty() }.dropLast(1).joinToString("/")
 
 fun folderName(path: String): String = path.substringAfterLast('/')
+
+/** How deep a folder lies: "" 0, "Photos" 1, "Photos/2026" 2. */
+fun depth(path: String): Int = path.split('/').count { it.isNotEmpty() }
 
 /** The server's preview sizes: asking for exactly these lets Nextcloud and the caches reuse what they made. */
 val PREVIEW_SIZES = listOf(64, 128, 256, 512, 1024, 2048, 4096)
@@ -83,6 +106,13 @@ fun formatSize(bytes: Long?, locale: Locale = Locale.getDefault()): String {
 
 /** The type shown on a tile: the file's extension ("DOCX"), at most 4 letters, or nothing. */
 fun typeLabel(name: String): String = Regex("\\.([A-Za-z0-9]{1,4})$").find(name)?.groupValues?.get(1)?.uppercase().orEmpty()
+
+/** A file's name as its tile shows it: without the type its tile names ("Gemeindebrief.pdf" → "Gemeindebrief"). */
+fun shownName(name: String): String {
+    val type = typeLabel(name)
+    if (type.isEmpty()) return name
+    return name.dropLast(type.length + 1).ifBlank { name }
+}
 
 /** What the app shows itself: pictures in the viewer, PDFs page by page, videos and music in the player. */
 fun opensInViewer(file: MediaFile) = file.kind == "image"

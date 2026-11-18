@@ -1,12 +1,13 @@
-package org.agora.app.ui.hub
+package org.agora.app.ui.components
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.CacheDrawScope
@@ -19,7 +20,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.lerp
@@ -29,57 +32,62 @@ import androidx.compose.ui.unit.dp
 import org.agora.app.ui.ai.softForm
 
 /**
- * The motif of an app of the hub: a small picture in the manner of an emoji, one thing each - a picture, two notes, a
- * heart -, a little three-dimensional through soft gradients and a little light, without a shadow. Drawn here, so it
- * is sharp at every size and needs no image files. [seed]: where the still forms of its painted field lie.
+ * A small picture in the manner of an emoji (the Extras hub, the media library): one thing each, a little
+ * three-dimensional through soft gradients and a little light, without a shadow. Drawn here, so it is sharp at every
+ * size and needs no image files. [seed]: where the still forms of a [PaintedField] behind it lie.
  */
-enum class HubMotif(internal val seed: Float) { Picture(0.7f), Notes(2.6f), Heart(5.1f) }
+enum class Motif(val seed: Float) { Picture(0.7f), Notes(2.6f), Heart(5.1f), Folder(1.6f), Document(3.8f), Film(4.4f) }
 
-/** A motif standing alone, [size] square. Decorative: the tile's text says what it is. */
+/** A motif standing alone, [size] square; [accent] colours a document's folded corner. Decorative: text says what it is. */
 @Composable
-fun HubMotifIcon(motif: HubMotif, size: Dp, modifier: Modifier = Modifier) {
+fun MotifIcon(motif: Motif, size: Dp, modifier: Modifier = Modifier, accent: Color = Color(0xFF8A837A)) {
     Spacer(modifier.size(size).drawWithCache {
         val draw = when (motif) {
-            HubMotif.Picture -> picture()
-            HubMotif.Notes -> notes()
-            HubMotif.Heart -> heart()
+            Motif.Picture -> picture()
+            Motif.Notes -> notes()
+            Motif.Heart -> heart()
+            Motif.Folder -> folder()
+            Motif.Document -> document(accent)
+            Motif.Film -> film()
         }
         onDrawBehind(draw)
     })
 }
 
+/** The colours of a painted field: its [light] tone, its [deep] one (the dark theme) and a neighbouring [hint]. */
+@Immutable
+data class FieldColors(val light: Color, val deep: Color, val hint: Color = light)
+
 /**
- * An app's [motif] in its painted field, [fieldSize] square: a soft fall of the app's light colour, lighter up left, a
- * breath of a neighbouring hue ([HubApp.hint]) down right - deep and quiet in the dark theme - with two still soft forms
- * in the language of the AI's sign, set into the tile with round corners and a fine light edge.
+ * A field painted in [colors]: a soft fall of the light tone, lighter up left, a breath of the [FieldColors.hint] down
+ * right - deep and quiet in the dark theme - with two still soft forms in the language of the AI's sign ([seed] places
+ * them), cut to [shape] with a fine light edge. What it holds lies in the middle unless placed otherwise.
  */
 @Composable
-fun HubMotifField(app: HubApp, motif: HubMotif, modifier: Modifier = Modifier, fieldSize: Dp = 76.dp) {
+fun PaintedField(colors: FieldColors, seed: Float, shape: Shape, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
     val surface = MaterialTheme.colorScheme.surface
     val dark = surface.luminance() < 0.5f
-    val shape = RoundedCornerShape(fieldSize * 0.2f)
     Box(
         modifier
-            .size(fieldSize)
             .clip(shape)
             .drawWithCache {
                 val w = size.width
                 val h = size.height
                 val reach = maxOf(w, h)
                 val fall = Brush.linearGradient(
-                    if (dark) listOf(lerp(surface, app.deep, 0.38f), lerp(surface, app.deep, 0.16f))
-                    else listOf(lerp(app.light, Color.White, 0.50f), lerp(app.light, Color.White, 0.08f)),
+                    if (dark) listOf(lerp(surface, colors.deep, 0.38f), lerp(surface, colors.deep, 0.16f))
+                    else listOf(lerp(colors.light, Color.White, 0.50f), lerp(colors.light, Color.White, 0.08f)),
                     start = Offset.Zero, end = Offset(w, h)
                 )
-                val hint = app.hint.copy(alpha = if (dark) 0.16f else 0.60f)
+                val hint = colors.hint.copy(alpha = if (dark) 0.16f else 0.60f)
                 val hintLight = Brush.radialGradient(listOf(hint, hint.copy(alpha = 0f)), center = Offset(w * 0.95f, h), radius = reach * 0.62f)
-                val glow = if (dark) app.light.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.80f)
+                val glow = if (dark) colors.light.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.80f)
                 val glowLight = Brush.radialGradient(listOf(glow, glow.copy(alpha = 0f)), center = Offset(w * 0.08f, 0f), radius = reach * 0.55f)
                 val r = minOf(w, h) * 0.62f
-                val upper = Path().also { softForm(it, Offset(w - r * 0.30f, r * 0.10f), r, 9f + motif.seed, 0.11f, 2.2f + motif.seed) }
-                val lower = Path().also { softForm(it, Offset(r * 0.15f, h + r * 0.25f), r * 0.8f, 9f + motif.seed, 0.11f, 5.4f + motif.seed) }
+                val upper = Path().also { softForm(it, Offset(w - r * 0.30f, r * 0.10f), r, 9f + seed, 0.11f, 2.2f + seed) }
+                val lower = Path().also { softForm(it, Offset(r * 0.15f, h + r * 0.25f), r * 0.8f, 9f + seed, 0.11f, 5.4f + seed) }
                 val upperColor = Color.White.copy(alpha = if (dark) 0.035f else 0.30f)
-                val lowerColor = (if (dark) app.light else app.deep).copy(alpha = if (dark) 0.06f else 0.07f)
+                val lowerColor = (if (dark) colors.light else colors.deep).copy(alpha = if (dark) 0.06f else 0.07f)
                 onDrawBehind {
                     drawRect(fall)
                     drawRect(hintLight)
@@ -89,8 +97,9 @@ fun HubMotifField(app: HubApp, motif: HubMotif, modifier: Modifier = Modifier, f
                 }
             }
             .border(1.dp, Color.White.copy(alpha = if (dark) 0.05f else 0.6f), shape),
-        contentAlignment = Alignment.Center
-    ) { HubMotifIcon(motif, fieldSize * 0.6f) }
+        contentAlignment = Alignment.Center,
+        content = content
+    )
 }
 
 // The motifs, each drawn into a square: the shapes are made once per size, the drawing only paints them
@@ -108,6 +117,11 @@ private fun DrawScope.gloss(center: Offset, rx: Float, ry: Float, angle: Float, 
             topLeft = Offset(center.x - rx, center.y - ry), size = Size(2 * rx, 2 * ry)
         )
     }
+}
+
+/** A light that falls from the top edge of a part (from [top] down to [bottom]), drawn inside its [path]. */
+private fun DrawScope.shine(path: Path, top: Float, bottom: Float, alpha: Float) = clipPath(path) {
+    drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = alpha), Color.White.copy(alpha = 0f)), startY = top, endY = bottom))
 }
 
 /** A picture: a light frame, a little turned, around a warm sky with its sun and two hills. */
@@ -200,6 +214,67 @@ private fun CacheDrawScope.heart(): DrawScope.() -> Unit {
     }
 }
 
+/** A folder: its back with the tab in amber, a sheet of paper peeking out, the lighter front with a light along its top. */
+private fun CacheDrawScope.folder(): DrawScope.() -> Unit {
+    val w = size.width
+    val h = size.height
+    val back = roundedPolygon(listOf(at(0.07f, 0.19f), at(0.38f, 0.19f), at(0.47f, 0.285f), at(0.93f, 0.285f), at(0.93f, 0.83f), at(0.07f, 0.83f)), w * 0.07f)
+    val backFill = Brush.verticalGradient(listOf(Color(0xFFF0A955), Color(0xFFD7833B)), startY = h * 0.19f, endY = h * 0.83f)
+    val paper = Path().apply { addRoundRect(RoundRect(w * 0.15f, h * 0.27f, w * 0.85f, h * 0.70f, CornerRadius(w * 0.04f))) }
+    val paperFill = Brush.verticalGradient(listOf(Color.White, Color(0xFFF2EBE3)), startY = h * 0.27f, endY = h * 0.46f)
+    val front = roundedPolygon(listOf(at(0.07f, 0.385f), at(0.93f, 0.385f), at(0.93f, 0.83f), at(0.07f, 0.83f)), w * 0.07f)
+    val frontFill = Brush.verticalGradient(listOf(Color(0xFFFFD58F), Color(0xFFF3A24D)), startY = h * 0.385f, endY = h * 0.83f)
+    val rimColor = Color(0xFFB8642A)
+    val rim = Brush.verticalGradient(listOf(rimColor.copy(alpha = 0f), rimColor.copy(alpha = 0.22f)), startY = h * 0.62f, endY = h * 0.83f)
+    val tilt = Offset(w * 0.5f, h * 0.5f)
+    return {
+        drawPath(back, backFill)
+        withTransform({ rotate(-4f, tilt) }) { drawPath(paper, paperFill) }
+        drawPath(front, frontFill)
+        drawPath(front, rim)
+        shine(front, h * 0.385f, h * 0.52f, 0.45f)
+    }
+}
+
+/** A sheet of paper with a folded corner in [accent] and a few lines in its tone. */
+private fun CacheDrawScope.document(accent: Color): DrawScope.() -> Unit {
+    val w = size.width
+    val h = size.height
+    val sheet = roundedPolygon(listOf(at(0.20f, 0.10f), at(0.60f, 0.10f), at(0.80f, 0.30f), at(0.80f, 0.90f), at(0.20f, 0.90f)), w * 0.06f)
+    val paper = Brush.linearGradient(listOf(Color.White, Color(0xFFEEE8E1)), start = at(0.2f, 0.1f), end = at(0.8f, 0.9f))
+    val shadeColor = Color(0xFFB9AC9E)
+    val shade = Brush.verticalGradient(listOf(shadeColor.copy(alpha = 0f), shadeColor.copy(alpha = 0.18f)), startY = h * 0.6f, endY = h * 0.9f)
+    val fold = roundedPolygon(listOf(at(0.60f, 0.10f), at(0.80f, 0.30f), at(0.60f, 0.30f)), w * 0.025f)
+    val foldFill = Brush.linearGradient(listOf(lerp(accent, Color.White, 0.30f), accent), start = at(0.60f, 0.30f), end = at(0.74f, 0.13f))
+    val edge = Stroke(w * 0.012f)
+    val lineColor = lerp(accent, Color.White, 0.62f)
+    val lines = listOf(0.62f to 0.46f, 0.66f to 0.58f, 0.52f to 0.70f).map { (right, y) ->
+        Path().apply { addRoundRect(RoundRect(w * 0.30f, h * y, w * right, h * (y + 0.05f), CornerRadius(w * 0.025f))) }
+    }
+    val title = Path().apply { addRoundRect(RoundRect(w * 0.30f, h * 0.33f, w * 0.50f, h * 0.385f, CornerRadius(w * 0.025f))) }
+    return {
+        drawPath(sheet, paper)
+        drawPath(sheet, shade)
+        drawPath(sheet, Color.Black.copy(alpha = 0.07f), style = edge)
+        drawPath(title, accent.copy(alpha = 0.85f))
+        lines.forEach { drawPath(it, lineColor) }
+        drawPath(fold, foldFill)
+    }
+}
+
+/** A screen in lilac with a rounded play sign in the middle, a light along its top. */
+private fun CacheDrawScope.film(): DrawScope.() -> Unit {
+    val h = size.height
+    val screen = Path().apply { addRoundRect(RoundRect(size.width * 0.10f, h * 0.20f, size.width * 0.90f, h * 0.80f, CornerRadius(size.width * 0.13f))) }
+    val fill = Brush.linearGradient(listOf(Color(0xFFA79CF0), Color(0xFF6A5BD0), Color(0xFF4F42B0)), start = at(0.1f, 0.2f), end = at(0.9f, 0.8f))
+    val play = roundedPolygon(listOf(at(0.42f, 0.355f), at(0.665f, 0.50f), at(0.42f, 0.645f)), size.width * 0.04f)
+    return {
+        drawPath(screen, fill)
+        shine(screen, h * 0.20f, h * 0.42f, 0.30f)
+        drawPath(play, Color.White.copy(alpha = 0.95f))
+    }
+}
+
 /** A closed outline through [points] whose corners are rounded with [radius]. */
 private fun roundedPolygon(points: List<Offset>, radius: Float): Path = Path().apply {
     val n = points.size
@@ -209,8 +284,10 @@ private fun roundedPolygon(points: List<Offset>, radius: Float): Path = Path().a
         val next = points[(i + 1) % n]
         val into = (corner - previous) / (corner - previous).getDistance()
         val out = (next - corner) / (next - corner).getDistance()
-        val from = corner - into * radius
-        val to = corner + out * radius
+        // Never more than half an edge, so short edges (a tab's slope) stay whole
+        val r = minOf(radius, (corner - previous).getDistance() / 2f, (next - corner).getDistance() / 2f)
+        val from = corner - into * r
+        val to = corner + out * r
         if (i == 0) moveTo(from.x, from.y) else lineTo(from.x, from.y)
         quadraticTo(corner.x, corner.y, to.x, to.y)
     }

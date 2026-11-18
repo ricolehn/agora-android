@@ -45,6 +45,10 @@ import androidx.compose.ui.unit.dp
 import org.agora.app.R
 import org.agora.app.ui.ai.AiOrb
 import org.agora.app.ui.ai.AiOrbFrame
+import org.agora.app.ui.components.FieldColors
+import org.agora.app.ui.components.Motif
+import org.agora.app.ui.components.MotifIcon
+import org.agora.app.ui.components.PaintedField
 import org.agora.app.ui.components.columnCount
 import org.agora.app.ui.components.pagePadding
 import org.agora.app.ui.components.softShadow
@@ -52,7 +56,7 @@ import org.agora.app.ui.theme.Agora
 
 /**
  * An app of the Extras hub (web: HUB_APPS). [light] and [deep] are the two tones of its colour: the deep one draws its
- * arrow in light mode, the light one in dark mode, and both paint the field behind its [motif] (HubArt.kt), [hint] a
+ * arrow in light mode, the light one in dark mode, and both paint the field behind its [motif] (Motifs.kt), [hint] a
  * breath of a neighbouring hue in that field. [featured]: across the full width on top, with the assistant's sign
  * instead of a motif.
  */
@@ -62,7 +66,7 @@ data class HubApp(
     val deep: Color,
     val title: Int,
     val desc: Int,
-    val motif: HubMotif? = null,
+    val motif: Motif? = null,
     val hint: Color = light,
     val featured: Boolean = false
 )
@@ -74,9 +78,9 @@ data class HubApp(
  */
 fun hubApps(aiAvailable: Boolean, mediaAvailable: Boolean = false): List<HubApp> = buildList {
     if (aiAvailable) add(HubApp("ai", Color(0xFFEBD3AE), Color(0xFF2D625B), R.string.hub_ai_title, R.string.hub_ai_desc, featured = true))
-    if (mediaAvailable) add(HubApp("media", Color(0xFFF6C7A4), Color(0xFFE0874F), R.string.hub_media_title, R.string.hub_media_desc, HubMotif.Picture, Color(0xFFF9DA9E)))
-    add(HubApp("songbook", Color(0xFFAED6EC), Color(0xFF4A98C4), R.string.hub_songbook_title, R.string.hub_songbook_desc, HubMotif.Notes, Color(0xFFC9C6F3)))
-    add(HubApp("prayers", Color(0xFFF2B5C0), Color(0xFFD6667C), R.string.hub_prayers_title, R.string.hub_prayers_desc, HubMotif.Heart, Color(0xFFF8C6AE)))
+    if (mediaAvailable) add(HubApp("media", Color(0xFFF6C7A4), Color(0xFFE0874F), R.string.hub_media_title, R.string.hub_media_desc, Motif.Picture, Color(0xFFF9DA9E)))
+    add(HubApp("songbook", Color(0xFFAED6EC), Color(0xFF4A98C4), R.string.hub_songbook_title, R.string.hub_songbook_desc, Motif.Notes, Color(0xFFC9C6F3)))
+    add(HubApp("prayers", Color(0xFFF2B5C0), Color(0xFFD6667C), R.string.hub_prayers_title, R.string.hub_prayers_desc, Motif.Heart, Color(0xFFF8C6AE)))
 }
 
 /** Extras: one permanent nav entry for further apps of the community (web: #hub). */
@@ -159,7 +163,11 @@ private fun HubTile(app: HubApp, index: Int, modifier: Modifier = Modifier, onCl
     ) {
         if (app.featured) AiTileContent(app, tone, dark, surface)
         else Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            app.motif?.let { HubMotifField(app, it) }
+            app.motif?.let { motif ->
+                PaintedField(FieldColors(app.light, app.deep, app.hint), motif.seed, RoundedCornerShape(15.2.dp), Modifier.size(76.dp)) {
+                    MotifIcon(motif, 45.6.dp)
+                }
+            }
             TileTexts(app, Modifier.weight(1f).padding(start = 14.dp, end = 8.dp))
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(end = 8.dp).size(18.dp), tint = tone.copy(alpha = 0.8f))
         }

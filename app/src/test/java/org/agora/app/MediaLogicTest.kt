@@ -12,6 +12,7 @@ import org.agora.app.ui.ai.splitThinkingFull
 import org.agora.app.ui.media.ALL_MEMBERS
 import org.agora.app.ui.media.MediaSort
 import org.agora.app.ui.media.MediaTransfer
+import org.agora.app.ui.media.PathStep
 import org.agora.app.ui.media.RightsRow
 import org.agora.app.ui.media.addableTargets
 import org.agora.app.ui.media.breadcrumb
@@ -19,6 +20,9 @@ import org.agora.app.ui.media.canDeleteSelection
 import org.agora.app.ui.media.compareNames
 import org.agora.app.ui.media.formatSize
 import org.agora.app.ui.media.parentPath
+import org.agora.app.ui.media.pathSteps
+import org.agora.app.ui.media.depth
+import org.agora.app.ui.media.shownName
 import org.agora.app.ui.media.removableRow
 import org.agora.app.ui.media.rightsPayload
 import org.agora.app.ui.media.rightsRows
@@ -35,6 +39,34 @@ import java.util.Locale
 
 /** The media library's helpers, ported from the web app (assets/media.js, tests/media.test.js), and its answers. */
 class MediaLogicTest {
+    @Test
+    fun `the path folds its middle when deep`() {
+        assertEquals(listOf(PathStep("", "Media")), pathSteps("", "Media"))
+        assertEquals(
+            listOf(PathStep("", "Media"), PathStep("Photos", "Photos"), PathStep("Photos/2026", "2026")),
+            pathSteps("Photos/2026", "Media")
+        )
+        assertEquals(listOf("Medien", "Fotos", "2026", "Sommerfest"), pathSteps("Fotos/2026/Sommerfest", "Medien").map { it.name })
+        assertEquals(listOf("Medien", "…", "Sommerfest", "Samstag"), pathSteps("Fotos/2026/Sommerfest/Samstag", "Medien").map { it.name })
+        // Seven down: the base folder, the five between folded into one step, the last two
+        val deep = pathSteps("Fotos/2026/Sommerfest/Samstag/Nachmittag/Bühne/Band", "Medien")
+        assertEquals(listOf("Medien", "…", "Bühne", "Band"), deep.map { it.name })
+        assertEquals(listOf("Fotos", "Fotos/2026", "Fotos/2026/Sommerfest", "Fotos/2026/Sommerfest/Samstag", "Fotos/2026/Sommerfest/Samstag/Nachmittag"), deep[1].folded.map { it.first })
+        assertEquals(listOf("Fotos", "2026", "Sommerfest", "Samstag", "Nachmittag"), deep[1].folded.map { it.second })
+        assertEquals("Fotos/2026/Sommerfest/Samstag/Nachmittag/Bühne", deep[2].target)
+        assertEquals(listOf(true, false, false, false), deep.map { it.root })
+    }
+
+    @Test
+    fun `names on the tiles leave out the type their tile shows`() {
+        assertEquals("Gemeindebrief November", shownName("Gemeindebrief November.pdf"))
+        assertEquals("archive.tar", shownName("archive.tar.gz"))
+        assertEquals("README", shownName("README"))
+        assertEquals(".htaccess", shownName(".htaccess"))
+        assertEquals(0, depth(""))
+        assertEquals(2, depth("Photos/2026"))
+    }
+
     @Test
     fun `paths and the breadcrumb`() {
         assertEquals(listOf("Photos" to "Photos", "2026" to "Photos/2026"), breadcrumb("Photos/2026"))

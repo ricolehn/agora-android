@@ -560,6 +560,8 @@ fun SubPageHeader(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     leading: (@Composable () -> Unit)? = null,
+    // In place of the title's text, e.g. one that moves when it changes (the media library's folders)
+    titleContent: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
@@ -585,7 +587,8 @@ fun SubPageHeader(
         }
         if (leading != null) Box(Modifier.padding(start = 12.dp)) { leading() }
         Column(Modifier.weight(1f).padding(start = if (leading != null) 10.dp else 14.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (titleContent != null) titleContent()
+            else Text(title, style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         actions()

@@ -33,7 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The Extras hub (HubScreen.kt): every tile opens its app, Media only with access to the library, and the hand-drawn
- * motifs and painted fields (HubArt.kt) draw in the light and the dark theme, on phones and on tablets (two columns).
+ * motifs and painted fields (Motifs.kt) draw in the light and the dark theme, on phones and on tablets (two columns).
  * With -PscreenshotsOut=<dir> the drawings are also saved there as pictures.
  */
 @RunWith(RobolectricTestRunner::class)

@@ -14,9 +14,10 @@ internal class Call(val method: String, val path: String, val query: Map<String,
     fun json(): JsonObject = Json.parseToJsonElement(body).jsonObject
 }
 
-/** A server for the tests: answers by method and path ([on]) and records every call. */
+/** A server for the tests: answers by method and path ([on], [onBytes] for files like pictures) and records every call. */
 internal class FakeServer : AutoCloseable {
     private val handlers = mutableMapOf<String, (Map<String, String>) -> Pair<Int, String>>()
+    private val files = mutableMapOf<String, (Map<String, String>) -> Pair<String, ByteArray>>()
     private val recorded = mutableListOf<Call>()
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange ->
@@ -26,8 +27,17 @@ internal class FakeServer : AutoCloseable {
             }
             val headers = exchange.requestHeaders.mapValues { it.value.joinToString(",") }
             val call = Call(exchange.requestMethod, uri.path, query, headers, exchange.requestBody.readBytes().decodeToString())
-            val (code, text) = synchronized(recorded) {
+            val file = synchronized(recorded) {
                 recorded += call
+                files["${call.method} ${call.path}"]
+            }?.invoke(query)
+            if (file != null) {
+                exchange.responseHeaders.add("Content-Type", file.first)
+                exchange.sendResponseHeaders(200, file.second.size.toLong())
+                exchange.responseBody.use { it.write(file.second) }
+                return@createContext
+            }
+            val (code, text) = synchronized(recorded) {
                 handlers["${call.method} ${call.path}"]
             }?.invoke(query) ?: (500 to """{"error":"unexpected call ${call.method} ${call.path}"}""")
             val bytes = text.toByteArray()
@@ -40,6 +50,8 @@ internal class FakeServer : AutoCloseable {
     val base = "http://127.0.0.1:${server.address.port}"
 
     fun on(method: String, path: String, answer: (Map<String, String>) -> Pair<Int, String>) = synchronized(recorded) { handlers["$method $path"] = answer }
+    /** Answers with a file: its type ("image/png") and its bytes. */
+    fun onBytes(method: String, path: String, answer: (Map<String, String>) -> Pair<String, ByteArray>) = synchronized(recorded) { files["$method $path"] = answer }
     fun calls(method: String, path: String): List<Call> = synchronized(recorded) { recorded.filter { it.method == method && it.path == path } }
 
     fun repository(json: Json, signedIn: Boolean = false) =

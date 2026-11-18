@@ -138,7 +138,7 @@ private fun DrawScope.halo(colors: List<Color>, strength: Float, t: Float, e: Fl
 /**
  * A closed soft outline through seven points around [at]: the points keep their directions and only move in and out,
  * each on its own slow path - the form changes, it never turns. At a fixed [t] it is still: the quiet forms in the
- * painted fields of the Extras hub (HubArt.kt).
+ * painted fields of the Extras hub and the media library (Motifs.kt).
  */
 internal fun softForm(path: Path, at: Offset, radius: Float, t: Float, amp: Float, seed: Float) {
     val n = FORM_POINTS

@@ -10,11 +10,29 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -22,11 +40,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,17 +56,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.automirrored.outlined.Sort
@@ -56,17 +77,10 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -79,20 +93,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -102,6 +121,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -125,18 +145,23 @@ import org.agora.app.data.mediaPreviewUrl
 import org.agora.app.data.remote.ApiException
 import org.agora.app.ui.components.AgoraFabMenu
 import org.agora.app.ui.components.AgoraSnackbar
+import org.agora.app.ui.components.CapsLabel
 import org.agora.app.ui.components.ConfirmSheet
-import org.agora.app.ui.components.EmptyState
 import org.agora.app.ui.components.FabAction
+import org.agora.app.ui.components.FieldColors
 import org.agora.app.ui.components.FrostScaffold
 import org.agora.app.ui.components.LoadingBox
 import org.agora.app.ui.components.LocalContainer
 import org.agora.app.ui.components.LocalSnackbar
+import org.agora.app.ui.components.Motif
+import org.agora.app.ui.components.MotifIcon
+import org.agora.app.ui.components.PaintedField
 import org.agora.app.ui.components.SecondaryButton
 import org.agora.app.ui.components.SubPageHeader
 import org.agora.app.ui.components.TextInputSheet
 import org.agora.app.ui.components.containerViewModel
 import org.agora.app.ui.components.frosted
+import org.agora.app.ui.components.pageGutter
 import org.agora.app.ui.components.pagePadding
 import org.agora.app.ui.components.rememberActionRunner
 import org.agora.app.ui.components.softShadow
@@ -153,13 +178,32 @@ internal fun kindColor(kind: String): Color = when (kind) {
     else -> Color(0xFF8A837A)
 }
 
-internal fun kindIcon(kind: String): ImageVector = when (kind) {
-    "pdf" -> Icons.Outlined.PictureAsPdf
-    "video" -> Icons.Outlined.Movie
-    "audio" -> Icons.Outlined.MusicNote
-    "image" -> Icons.Outlined.Image
-    else -> Icons.AutoMirrored.Outlined.InsertDriveFile
+/** The painted field of folders and pictures: the library's warm colours (its Extras tile). */
+private val MediaField = FieldColors(Color(0xFFF6C7A4), MediaAccent, Color(0xFFF9DA9E))
+
+/** A file's field in the colours of its kind; documents by their type (text blue, tables green, slides orange). */
+private fun fileField(file: MediaFile): FieldColors = when (file.kind) {
+    "image" -> MediaField
+    "pdf" -> FieldColors(Color(0xFFF2B5C0), Color(0xFFD6667C), Color(0xFFF8C6AE))
+    "audio" -> FieldColors(Color(0xFFAED6EC), Color(0xFF4A98C4), Color(0xFFC9C6F3))
+    "video" -> FieldColors(Color(0xFFCFC8F3), Color(0xFF7C6FD6), Color(0xFFF0C6E6))
+    else -> when (typeLabel(file.name).lowercase()) {
+        "doc", "docx", "odt", "rtf", "txt", "md", "pages" -> FieldColors(Color(0xFFB9CCF2), Color(0xFF4A7FD6), Color(0xFFC3E2F0))
+        "xls", "xlsx", "ods", "csv", "numbers" -> FieldColors(Color(0xFFB5DEC6), Color(0xFF3E9B6A), Color(0xFFD9EAB4))
+        "ppt", "pptx", "odp", "key" -> FieldColors(Color(0xFFF7C9A8), Color(0xFFE07B42), Color(0xFFF6DD9E))
+        else -> FieldColors(Color(0xFFE3DCD3), Color(0xFF8A837A), Color(0xFFEDE3CF))
+    }
 }
+
+private fun fileMotif(file: MediaFile): Motif = when (file.kind) {
+    "image" -> Motif.Picture
+    "audio" -> Motif.Notes
+    "video" -> Motif.Film
+    else -> Motif.Document
+}
+
+/** Where the still forms of a field lie: every name its own. */
+private fun seedOf(name: String): Float = (name.hashCode() and 0xFFFF) / 6553.5f
 
 private const val MAX_UPLOAD_FILES = 50
 private const val MAX_UPLOAD_BYTES = 1024L * 1024 * 1024
@@ -195,12 +239,16 @@ internal fun openInOtherApp(context: Context, file: java.io.File, type: String, 
     context.startActivity(if (share) Intent.createChooser(intent, null) else intent)
 }
 
+@Composable
+private fun darkTheme() = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
 /**
  * The media library (Extras → Media) like the web app 3.3: the community's Nextcloud folder with its folders and
- * thumbnails, the path above, "Folders" and "Files". Pictures open in a full-screen viewer, PDFs page by page,
- * videos and music in the player, anything else in another app. Holding an entry selects; the selection downloads
- * as one ZIP or, with write access, is deleted. Back goes up a folder; members with extended media rights set the
- * rights of every folder with the shield.
+ * thumbnails, the path as pills under the title, "Folders" as rows like the apps in Extras and "Files" three to a row
+ * with their names under them. A folder that opens rises from below, going back it comes down again. Pictures open in a full-screen viewer, PDFs page by page, videos and music in the player, anything
+ * else in another app. Holding an entry selects; the selection downloads as one ZIP or, with write access, is
+ * deleted. Back goes up a folder; members with extended media rights set the rights of the open folder with the
+ * shield and see every folder's rights in the list - the folders themselves carry no marks of their rights.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -236,6 +284,8 @@ fun MediaScreen(onBack: () -> Unit) {
     val files = remember(listing, sort) { sortFiles(listing?.files.orEmpty(), sort) }
     val access = listing?.access ?: "none"
     val selecting = selected.isNotEmpty()
+    // Where each folder was scrolled to: going back up a folder shows it where it was left, a folder opened anew starts on top
+    val scrolled = remember { mutableMapOf<String, Pair<Int, Int>>() }
 
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
     var rightsFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -304,12 +354,17 @@ fun MediaScreen(onBack: () -> Unit) {
         }
     }
 
+    // A folder opened anew starts on top; going up (back, the path) finds the folder where it was left
+    fun openFolder(path: String) {
+        scrolled.remove(path)
+        vm.open(path)
+    }
     val openEntry: (String) -> Unit = { name ->
         val folder = folders.firstOrNull { it.name == name }
         val file = files.firstOrNull { it.name == name }
         when {
             selecting -> vm.toggle(name)
-            folder != null -> vm.open(folder.path)
+            folder != null -> openFolder(folder.path)
             file == null -> Unit
             opensInViewer(file) || opensAsPdf(file) || opensInPlayer(file) -> viewing = file.name
             else -> openElsewhere(file)
@@ -319,30 +374,34 @@ fun MediaScreen(onBack: () -> Unit) {
     val title = if (page.path.isEmpty()) stringResource(R.string.media_title) else folderName(page.path)
     FrostScaffold(
         topBar = {
-            if (selecting) SelectionHeader(
-                count = selected.size,
-                allSelected = selected.size >= folders.size + files.size,
-                canDelete = canDeleteSelection(access, folders, selected),
-                showDelete = access == "write",
-                onClear = vm::clearSelection,
-                onToggleAll = { if (selected.size >= folders.size + files.size) vm.clearSelection() else vm.selectAll(folders.map { it.name } + files.map { it.name }) },
-                onDownload = { downloadSelection(selected.toList()) },
-                onDelete = { confirmDelete = selected.toList() }
-            )
-            else SubPageHeader(
-                title,
-                onBack = { if (page.path.isNotEmpty()) vm.open(parentPath(page.path)) else onBack() },
-                actions = {
-                    SortMenu(sort, vm::setSort)
-                    // Managers: the rights of the open folder (shield) and of every folder that has some (list)
-                    if (canManage && listing != null) IconButton(onClick = { rightsFor = page.path }) {
-                        Icon(Icons.Outlined.Shield, stringResource(R.string.media_rights_title), tint = Agora.colors.heading)
+            Column {
+                if (selecting) SelectionHeader(
+                    count = selected.size,
+                    allSelected = selected.size >= folders.size + files.size,
+                    canDelete = canDeleteSelection(access, folders, selected),
+                    showDelete = access == "write",
+                    onClear = vm::clearSelection,
+                    onToggleAll = { if (selected.size >= folders.size + files.size) vm.clearSelection() else vm.selectAll(folders.map { it.name } + files.map { it.name }) },
+                    onDownload = { downloadSelection(selected.toList()) },
+                    onDelete = { confirmDelete = selected.toList() }
+                )
+                else SubPageHeader(
+                    title,
+                    onBack = { if (page.path.isNotEmpty()) vm.open(parentPath(page.path)) else onBack() },
+                    titleContent = { FolderTitle(page.path) },
+                    actions = {
+                        SortMenu(sort, vm::setSort)
+                        // Managers: the rights of the open folder (shield) and of every folder that has some (list)
+                        if (canManage && listing != null) IconButton(onClick = { rightsFor = page.path }) {
+                            Icon(Icons.Outlined.Shield, stringResource(R.string.media_rights_title), tint = Agora.colors.heading)
+                        }
+                        if (canManage) IconButton(onClick = { overview = true }) {
+                            Icon(Icons.AutoMirrored.Outlined.ListAlt, stringResource(R.string.media_rules_overview), tint = Agora.colors.heading)
+                        }
                     }
-                    if (canManage) IconButton(onClick = { overview = true }) {
-                        Icon(Icons.AutoMirrored.Outlined.ListAlt, stringResource(R.string.media_rules_overview), tint = Agora.colors.heading)
-                    }
-                }
-            )
+                )
+                PathBar(page.path) { vm.open(it) }
+            }
         },
         snackbarHost = { SnackbarHost(LocalSnackbar.current) { AgoraSnackbar(it) } }
     ) { padding ->
@@ -351,71 +410,19 @@ fun MediaScreen(onBack: () -> Unit) {
         val phone = screenWidth < 600
         // Thumbnails as sharp as the tile (about a third of the screen on phones), from the server's fixed sizes
         val thumb = with(density) { thumbSize(((if (phone) screenWidth / 3 else 200).dp).roundToPx()) }
-        val grid = rememberLazyGridState()
-        PrefetchPreviews(files, grid) { container.repo.mediaPreviewUrl(it, thumb, crop = true) }
+        // Three pictures side by side on phones, tiles of at least 150dp on tablets
+        val fileColumns = if (phone) 3 else ((screenWidth.dp - pageGutter() * 2 + 8.dp) / 158.dp).toInt().coerceAtLeast(4)
         Box(Modifier.fillMaxSize()) {
-            LazyVerticalGrid(
-                // Three pictures side by side on phones
-                columns = if (phone) GridCells.Fixed(3) else GridCells.Adaptive(150.dp),
-                state = grid,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = pagePadding(padding.calculateTopPadding() + 4.dp, padding.calculateBottomPadding() + 112.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val full: (androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope) -> GridItemSpan = { GridItemSpan(it.maxLineSpan) }
-                item(key = "crumbs", span = full) {
-                    Crumbs(page.path, access = if (listing == null) null else access, showWrite = !canManage) { vm.open(it) }
-                }
-                when {
-                    page.error != null -> item(key = "error", span = full) {
-                        EmptyState(
-                            Icons.Outlined.FolderOpen,
-                            if (page.error == MediaViewModel.UNAVAILABLE) stringResource(R.string.media_unavailable)
-                            else page.error?.takeIf { it.isNotBlank() } ?: stringResource(R.string.media_load_failed)
-                        ) { SecondaryButton(onClick = { vm.load() }) { Text(stringResource(R.string.media_retry)) } }
-                    }
-                    listing == null -> item(key = "loading", span = full) { LoadingBox(Modifier.fillMaxWidth().padding(top = 48.dp)) }
-                    folders.isEmpty() && files.isEmpty() -> item(key = "empty", span = full) {
-                        EmptyState(
-                            Icons.Outlined.FolderOpen,
-                            stringResource(R.string.media_empty),
-                            subtitle = if (access == "write") stringResource(R.string.media_empty_hint) else null
-                        )
-                    }
-                    else -> {
-                        if (folders.isNotEmpty()) {
-                            item(key = "folders-head", span = full) { SectionLabel(stringResource(R.string.media_section_folders), folders.size) }
-                            items(folders, key = { "d:" + it.name }, span = { GridItemSpan(if (maxLineSpan >= 4) maxLineSpan / 2 else maxLineSpan) }) { folder ->
-                                FolderCard(
-                                    folder,
-                                    selected = folder.name in selected,
-                                    selecting = selecting,
-                                    canManage = canManage,
-                                    onOpen = { openEntry(folder.name) },
-                                    onSelect = { vm.toggle(folder.name) },
-                                    onRights = { rightsFor = folder.path },
-                                    // Only moving, no fading: the fade's layer is cut to the card and would swallow its shadow
-                                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
-                                )
-                            }
-                        }
-                        if (files.isNotEmpty()) {
-                            item(key = "files-head", span = full) { SectionLabel(stringResource(R.string.media_section_files), files.size) }
-                            items(files, key = { "f:" + it.name }) { file ->
-                                FileTile(
-                                    file,
-                                    previewUrl = if (file.hasPreview) container.repo.mediaPreviewUrl(file, thumb, crop = true) else null,
-                                    selected = file.name in selected,
-                                    selecting = selecting,
-                                    onOpen = { openEntry(file.name) },
-                                    onSelect = { vm.toggle(file.name) },
-                                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
-                                )
-                            }
-                        }
-                    }
-                }
+            AnimatedContent(
+                targetState = page,
+                contentKey = { it.path },
+                transitionSpec = { folderTransition(initialState.path, targetState.path) },
+                label = "folder"
+            ) { shown ->
+                FolderGrid(
+                    shown, sort, selected, canManage, fileColumns, thumb, padding, scrolled,
+                    onOpen = openEntry, onSelect = vm::toggle, onRetry = { vm.load() }
+                )
             }
             Column(Modifier.align(Alignment.BottomCenter).padding(bottom = padding.calculateBottomPadding())) {
                 TransferBanner(transfer, opening, onCancel = vm::cancelTransfer)
@@ -498,207 +505,389 @@ fun MediaScreen(onBack: () -> Unit) {
         currentPath = page.path,
         onDismiss = { overview = false },
         onRights = { rightsFor = it },
-        onOpen = { vm.open(it) }
+        onOpen = { openFolder(it) }
     )
 }
 
-/** The path above the list: Media › Photos › 2026 (each step opens), and what the member may do here. */
+/**
+ * The open folder's page: what the member may do here, then "Folders" and "Files". Its grid remembers where it was
+ * scrolled to ([scrolled]) when the page moves on, for coming back up.
+ */
 @Composable
-private fun Crumbs(path: String, access: String?, showWrite: Boolean, onOpen: (String) -> Unit) {
-    val crumbs = breadcrumb(path)
-    Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-            if (crumbs.isNotEmpty()) {
-                CrumbButton(stringResource(R.string.media_title), current = false, icon = Icons.Outlined.Folder) { onOpen("") }
-                crumbs.forEachIndexed { index, (name, target) ->
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
-                    CrumbButton(name, current = index == crumbs.lastIndex) { onOpen(target) }
+private fun FolderGrid(
+    page: MediaPage,
+    sort: MediaSort,
+    selected: Set<String>,
+    canManage: Boolean,
+    fileColumns: Int,
+    thumb: Int,
+    padding: PaddingValues,
+    scrolled: MutableMap<String, Pair<Int, Int>>,
+    onOpen: (String) -> Unit,
+    onSelect: (String) -> Unit,
+    onRetry: () -> Unit
+) {
+    val container = LocalContainer.current
+    val listing = page.listing
+    val folders = remember(listing, sort) { sortFolders(listing?.folders.orEmpty(), sort) }
+    val files = remember(listing, sort) { sortFiles(listing?.files.orEmpty(), sort) }
+    val access = listing?.access ?: "none"
+    val selecting = selected.isNotEmpty()
+    val grid = rememberLazyGridState(scrolled[page.path]?.first ?: 0, scrolled[page.path]?.second ?: 0)
+    DisposableEffect(Unit) { onDispose { scrolled[page.path] = grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset } }
+    PrefetchPreviews(files, grid) { container.repo.mediaPreviewUrl(it, thumb, crop = true) }
+    // Half columns: a file takes two, so on tablets two folder rows stand side by side above the files
+    val columns = fileColumns * 2
+    val folderSpan = if (fileColumns == 3) columns else fileColumns
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        state = grid,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = pagePadding(padding.calculateTopPadding() + 6.dp, padding.calculateBottomPadding() + 112.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (listing != null && (access == "read" || access == "write" && !canManage)) item(key = "access", span = { GridItemSpan(maxLineSpan) }) { AccessNote(access) }
+        when {
+            page.error != null -> item(key = "error", span = { GridItemSpan(maxLineSpan) }) {
+                FolderMessage(
+                    if (page.error == MediaViewModel.UNAVAILABLE) stringResource(R.string.media_unavailable)
+                    else page.error.takeIf { it.isNotBlank() } ?: stringResource(R.string.media_load_failed)
+                ) { SecondaryButton(onClick = onRetry) { Text(stringResource(R.string.media_retry)) } }
+            }
+            listing == null -> item(key = "loading", span = { GridItemSpan(maxLineSpan) }) { LoadingBox(Modifier.fillMaxWidth().padding(top = 48.dp)) }
+            folders.isEmpty() && files.isEmpty() -> item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                FolderMessage(stringResource(R.string.media_empty), if (access == "write") stringResource(R.string.media_empty_hint) else null)
+            }
+            else -> {
+                if (folders.isNotEmpty()) {
+                    item(key = "folders-head", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(stringResource(R.string.media_section_folders), folders.size) }
+                    items(folders, key = { "d:" + it.name }, span = { GridItemSpan(folderSpan) }) { folder ->
+                        // Only moving, no fading: the fade's layer is cut to the card and would swallow its shadow
+                        val modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                        FolderRow(folder, folder.name in selected, selecting, { onOpen(folder.name) }, { onSelect(folder.name) }, modifier)
+                    }
+                }
+                if (files.isNotEmpty()) {
+                    item(key = "files-head", span = { GridItemSpan(maxLineSpan) }) { SectionLabel(stringResource(R.string.media_section_files), files.size) }
+                    items(files, key = { "f:" + it.name }, span = { GridItemSpan(2) }) { file ->
+                        val previewUrl = if (file.hasPreview) container.repo.mediaPreviewUrl(file, thumb, crop = true) else null
+                        val modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                        FileTile(file, previewUrl, file.name in selected, selecting, { onOpen(file.name) }, { onSelect(file.name) }, modifier)
+                    }
                 }
             }
         }
-        when {
-            access == "read" -> AccessBadge(stringResource(R.string.media_access_read), Icons.Outlined.Visibility, highlight = false)
-            access == "write" && showWrite -> AccessBadge(stringResource(R.string.media_access_write), Icons.Outlined.UploadFile, highlight = true)
+    }
+}
+
+/** How a folder replaces the one before: a deeper one rises from below, going back it comes down from above. */
+private fun folderTransition(from: String, to: String): ContentTransform {
+    val way = if (depth(to) >= depth(from)) 1 else -1
+    val enter = slideInVertically(tween(340, easing = FastOutSlowInEasing)) { way * it / 7 } + fadeIn(tween(240, delayMillis = 60))
+    val exit = slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { -way * it / 12 } + fadeOut(tween(140))
+    // No clipping: the cards' shadows reach over the page's edge
+    return ContentTransform(enter, exit, sizeTransform = SizeTransform(clip = false))
+}
+
+/** The open folder's name in the header, moving along with the page. */
+@Composable
+private fun FolderTitle(path: String) {
+    val root = stringResource(R.string.media_title)
+    AnimatedContent(
+        targetState = path,
+        transitionSpec = {
+            val way = if (depth(targetState) >= depth(initialState)) 1 else -1
+            (slideInVertically(tween(320, easing = FastOutSlowInEasing)) { way * it } + fadeIn(tween(200, delayMillis = 60)))
+                .togetherWith(slideOutVertically(tween(260)) { -way * it } + fadeOut(tween(120)))
+                .using(SizeTransform(clip = false))
+        },
+        contentAlignment = Alignment.CenterStart,
+        label = "title"
+    ) { shown ->
+        Text(
+            if (shown.isEmpty()) root else folderName(shown),
+            style = MaterialTheme.typography.titleLarge, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * The way down to the open folder under the title: pills with a small arrow between them, each one opens its folder,
+ * the open one painted in the library's warm colours. From three folders down the base folder shows only its sign;
+ * deeper than three the middle is folded into "…" (its folders in a menu), so the way home, the folder above and the
+ * open one stay in sight on a phone. What still does not fit fades out at the edges.
+ */
+@Composable
+private fun PathBar(path: String, onOpen: (String) -> Unit) {
+    val rootName = stringResource(R.string.media_title)
+    val steps = remember(path, rootName) { pathSteps(path, rootName) }
+    // From three folders down the base folder makes room
+    val compactRoot = steps.size >= 4
+    val list = rememberLazyListState()
+    // The open folder always in sight
+    LaunchedEffect(steps) { list.animateScrollToItem(steps.lastIndex) }
+    Box(Modifier.fillMaxWidth().frosted().padding(top = 2.dp, bottom = 10.dp)) {
+        LazyRow(
+            Modifier.fillMaxWidth().fadingEdges({ list.canScrollBackward }, { list.canScrollForward }),
+            state = list,
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            itemsIndexed(steps, key = { _, step -> if (step.folded.isEmpty()) step.target else "…" }) { index, step ->
+                Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
+                    if (index > 0) Icon(
+                        Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(horizontal = 4.dp).size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                    if (step.folded.isNotEmpty()) FoldedSteps(step.folded, onOpen)
+                    else PathPill(step, open = index == steps.lastIndex, compact = step.root && compactRoot) { onOpen(step.target) }
+                }
+            }
         }
     }
 }
 
+/** A step of the path; [compact]: the base folder only as its sign. */
 @Composable
-private fun CrumbButton(text: String, current: Boolean, icon: ImageVector? = null, onClick: () -> Unit) {
+private fun PathPill(step: PathStep, open: Boolean, compact: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !current, onClick = onClick).padding(horizontal = 6.dp, vertical = 6.dp),
+        Modifier
+            .animateContentSize()
+            .then(
+                if (open) Modifier.openStep(CircleShape)
+                else Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).border(1.dp, Agora.colors.hairline, CircleShape)
+            )
+            .clickable(enabled = !open, onClick = onClick)
+            .semantics { if (compact) contentDescription = step.name }
+            .padding(start = if (step.root) 8.dp else 14.dp, end = if (compact) 8.dp else 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (icon != null) Icon(icon, null, Modifier.padding(end = 4.dp).size(15.dp), tint = MediaAccent)
-        Text(
-            text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = if (current) Agora.colors.heading else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 180.dp)
+        if (step.root) MotifIcon(Motif.Folder, 20.dp, Modifier.padding(end = if (compact) 0.dp else 6.dp))
+        if (!compact) Text(
+            step.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            fontWeight = if (open) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (open) Agora.colors.heading else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = 200.dp)
         )
     }
 }
 
+/** The folded middle of a deep path: "…", its folders in a menu, each a little further in, like the way down. */
 @Composable
-private fun AccessBadge(text: String, icon: ImageVector, highlight: Boolean) {
-    val color = if (highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Row(
-        Modifier.padding(start = 8.dp).clip(CircleShape)
-            .background(if (highlight) color.copy(alpha = 0.08f) else Agora.colors.surfaceAlt)
-            .border(1.dp, if (highlight) color.copy(alpha = 0.25f) else Agora.colors.hairline, CircleShape)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, Modifier.size(12.dp), tint = color)
-        Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1, modifier = Modifier.padding(start = 5.dp))
+private fun FoldedSteps(folders: List<Pair<String, String>>, onOpen: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).border(1.dp, Agora.colors.hairline, CircleShape)
+                .clickable { open = true }.padding(horizontal = 10.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Outlined.MoreHoriz, stringResource(R.string.media_path_between), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(16.dp)) {
+            folders.forEachIndexed { level, (target, name) ->
+                DropdownMenuItem(
+                    text = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { MotifIcon(Motif.Folder, 20.dp, Modifier.padding(start = (level * 12).dp)) },
+                    onClick = {
+                        open = false
+                        onOpen(target)
+                    }
+                )
+            }
+        }
     }
 }
 
-@Composable
-private fun SectionLabel(text: String, count: Int) {
-    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, letterSpacing = 0.6.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            count.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp).clip(CircleShape).background(Agora.colors.surfaceAlt).padding(horizontal = 7.dp, vertical = 1.dp)
+/** Lets what scrolls out at an edge fade instead of being cut ([start] / [end]: there is more on that side). */
+private fun Modifier.fadingEdges(start: () -> Boolean, end: () -> Boolean): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val fade = 28.dp.toPx()
+        if (start()) drawRect(
+            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = 0f, endX = fade),
+            size = Size(fade, size.height), blendMode = BlendMode.DstIn
         )
+        if (end()) drawRect(
+            Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width),
+            topLeft = Offset(size.width - fade, 0f), size = Size(fade, size.height), blendMode = BlendMode.DstIn
+        )
+    }
+
+/** The open step: painted in the library's warm colours. */
+@Composable
+private fun Modifier.openStep(shape: Shape): Modifier {
+    val dark = darkTheme()
+    val surface = MaterialTheme.colorScheme.surface
+    val warm = Color(0xFFF6C7A4)
+    val fill = if (dark) Brush.horizontalGradient(listOf(lerp(surface, MediaAccent, 0.34f), lerp(surface, MediaAccent, 0.20f)))
+    else Brush.horizontalGradient(listOf(lerp(warm, Color.White, 0.38f), lerp(warm, Color.White, 0.12f)))
+    return clip(shape).background(fill).border(1.dp, Color.White.copy(alpha = if (dark) 0.06f else 0.7f), shape)
+}
+
+/** Pressed things give a little, like paper under a finger. */
+@Composable
+private fun Modifier.pressScale(interaction: InteractionSource): Modifier {
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium), label = "press")
+    return graphicsLayer {
+        scaleX = scale
+        scaleY = scale
     }
 }
 
 @Composable
 private fun entryMeta(size: Long?, modified: String?): String {
     val locale = Dates.locale(LocalContext.current)
-    return listOf(formatSize(size, locale), modified?.let { Dates.short(it, locale) }.orEmpty()).filter { it.isNotBlank() }.joinToString(" · ")
+    return listOf(modified?.let { Dates.short(it, locale) }.orEmpty(), formatSize(size, locale)).filter { it.isNotBlank() }.joinToString(" · ")
 }
 
-/** A folder: flat icon with a thin border, name (two lines at most), size and date; the shield for managers. */
+/** A folder: a row like the apps in Extras - the folder in a painted field, its name and date, an arrow. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FolderCard(
-    folder: MediaFolder,
-    selected: Boolean,
-    selecting: Boolean,
-    canManage: Boolean,
-    onOpen: () -> Unit,
-    onSelect: () -> Unit,
-    onRights: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun FolderRow(folder: MediaFolder, selected: Boolean, selecting: Boolean, onOpen: () -> Unit, onSelect: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
-    val shape = RoundedCornerShape(18.dp)
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(20.dp)
     val surface = MaterialTheme.colorScheme.surface
     val primary = MaterialTheme.colorScheme.primary
     Row(
         modifier.fillMaxWidth()
-            .softShadow(Agora.colors.shadow.copy(alpha = 0.06f), blur = 6.dp, shape = shape, offsetY = 1.dp)
+            .pressScale(interaction)
+            .softShadow(if (darkTheme()) Color.Black.copy(alpha = 0.35f) else Color(0xFF1C1917).copy(alpha = 0.07f), blur = 12.dp, shape = shape, offsetY = 4.dp)
             .clip(shape)
             .background(if (selected) primary.copy(alpha = 0.08f).compositeOver(surface) else surface)
-            .border(1.dp, if (selected) primary.copy(alpha = 0.45f) else Agora.colors.hairline, shape)
-            .combinedClickable(onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() })
-            .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)
-            .heightIn(min = 44.dp),
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) primary.copy(alpha = 0.6f) else Agora.colors.hairline, shape)
+            .combinedClickable(interactionSource = interaction, indication = ripple(), onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() })
+            .padding(7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val tileShape = RoundedCornerShape(12.dp)
-        Box(
-            Modifier.size(42.dp).clip(tileShape).background(MediaAccent.copy(alpha = 0.12f).compositeOver(surface))
-                .border(1.dp, MediaAccent.copy(alpha = 0.22f), tileShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Outlined.Folder, null, Modifier.size(22.dp), tint = MediaAccent)
-            if (folder.hiddenFor.isNotEmpty()) Icon(
-                Icons.Outlined.VisibilityOff, stringResource(R.string.media_hidden_for_some),
-                Modifier.align(Alignment.BottomEnd).padding(2.dp).size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp, end = 4.dp)) {
+        PaintedField(MediaField, seedOf(folder.name), RoundedCornerShape(14.dp), Modifier.size(56.dp)) { MotifIcon(Motif.Folder, 36.dp) }
+        Column(Modifier.weight(1f).padding(start = 14.dp, end = 8.dp)) {
             Text(folder.name, style = MaterialTheme.typography.titleSmall, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val meta = entryMeta(folder.size, folder.modified)
-            if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(top = 2.dp))
         }
-        when {
-            selecting -> SelectMark(selected, Modifier.padding(end = 8.dp))
-            canManage -> IconButton(onClick = onRights) {
-                // One shield per folder: blue with rights of its own
-                Icon(
-                    Icons.Outlined.Shield,
-                    stringResource(if (folder.hasRules) R.string.media_has_rights else R.string.media_rights_title),
-                    Modifier.size(20.dp),
-                    tint = if (folder.hasRules) Color(0xFF4A98C4) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                )
-            }
-            else -> Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(end = 8.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+        if (selecting || selected) SelectMark(selected, Modifier.padding(end = 8.dp))
+        else Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(end = 8.dp).size(18.dp), tint = MediaAccent.copy(alpha = 0.8f))
+    }
+}
+
+/** The type of a file on its tile ("PDF"), in the colour of its kind. */
+@Composable
+private fun TypePill(label: String, color: Color, modifier: Modifier = Modifier) {
+    if (label.isEmpty()) return
+    Text(
+        label, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, color = Color.White, maxLines = 1,
+        modifier = modifier.clip(RoundedCornerShape(5.dp)).background(color.copy(alpha = 0.92f)).padding(horizontal = 5.dp, vertical = 1.dp)
+    )
+}
+
+@Composable
+private fun PlayBadge() = Box(
+    Modifier.size(34.dp)
+        .softShadow(Color.Black.copy(alpha = 0.25f), blur = 8.dp, shape = CircleShape, offsetY = 2.dp)
+        .clip(CircleShape)
+        .background(Color.White.copy(alpha = 0.9f)),
+    contentAlignment = Alignment.Center
+) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(21.dp), tint = Color(0xFF2A2830)) }
+
+/**
+ * What a tile shows of a file: its preview (a play button on videos) over the painted field of its kind, which shows
+ * through while it loads - or, without a preview, the kind's motif with its type.
+ */
+@Composable
+private fun FileFace(file: MediaFile, previewUrl: String?, shape: Shape, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val colors = fileField(file)
+    PaintedField(colors, seedOf(file.name), shape, modifier) {
+        if (previewUrl != null) {
+            MotifIcon(fileMotif(file), 34.dp, Modifier.fillMaxSize(0.32f), accent = colors.deep)
+            AsyncImage(
+                model = remember(previewUrl) { ImageRequest.Builder(context).data(previewUrl).crossfade(true).build() },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+            if (file.kind == "video") PlayBadge()
+        } else {
+            // As large as the tile allows: a third of a phone's row, more on tablets
+            MotifIcon(fileMotif(file), 46.dp, Modifier.fillMaxSize(0.42f), accent = colors.deep)
+            TypePill(typeLabel(file.name), colors.deep, Modifier.align(Alignment.TopStart).padding(8.dp))
         }
     }
 }
 
-/** A file: its thumbnail over a tile in the colour of its kind (the kind's icon without one), name and size. */
+/** A file: its square, its name (without the type its tile shows) and size under it. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FileTile(
-    file: MediaFile,
-    previewUrl: String?,
-    selected: Boolean,
-    selecting: Boolean,
-    onOpen: () -> Unit,
-    onSelect: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
+private fun FileTile(file: MediaFile, previewUrl: String?, selected: Boolean, selecting: Boolean, onOpen: () -> Unit, onSelect: () -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
-    val color = kindColor(file.kind)
-    val surface = MaterialTheme.colorScheme.surface
-    val primary = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(16.dp)
     val interaction = remember { MutableInteractionSource() }
-    Box(modifier) {
-        Column(
-            Modifier
-                .combinedClickable(
-                    interactionSource = interaction, indication = null,
-                    onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() }
-                )
-                .padding(bottom = 4.dp)
-        ) {
-            Box(
-                Modifier.fillMaxWidth().aspectRatio(1f)
-                    .softShadow(Agora.colors.shadow.copy(alpha = 0.07f), blur = 6.dp, shape = shape, offsetY = 1.dp)
-                    .clip(shape)
-                    .background(color.copy(alpha = 0.10f).compositeOver(surface))
-                    .border(if (selected) 2.dp else 1.dp, if (selected) primary else Agora.colors.hairline, shape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(kindIcon(file.kind), null, Modifier.size(34.dp), tint = color.copy(alpha = 0.85f))
-                if (previewUrl != null) AsyncImage(
-                    model = remember(previewUrl) { ImageRequest.Builder(context).data(previewUrl).crossfade(true).build() },
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                if (file.kind == "video" && previewUrl != null) Box(
-                    Modifier.size(38.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
-                    contentAlignment = Alignment.Center
-                ) { Icon(Icons.Filled.PlayArrow, null, Modifier.size(22.dp), tint = Color.White) }
-                // Photos and videos show what they are (the picture, the play button): the type only for the rest
-                val label = if (file.kind == "image" || file.kind == "video") "" else typeLabel(file.name)
-                if (label.isNotEmpty()) Text(
-                    label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.4.sp, color = Color.White,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(RoundedCornerShape(6.dp))
-                        .background(color.copy(alpha = 0.92f)).padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-                if (selecting || selected) SelectMark(selected, Modifier.align(Alignment.TopEnd).padding(8.dp), onImage = true)
+    val shape = RoundedCornerShape(12.dp)
+    val chosen by animateFloatAsState(if (selected) 0.9f else 1f, label = "chosen")
+    Column(
+        modifier.pressScale(interaction)
+            .combinedClickable(interactionSource = interaction, indication = null, onClick = onOpen, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() })
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(Modifier.matchParentSize().graphicsLayer { scaleX = chosen; scaleY = chosen }) {
+                FileFace(file, previewUrl, shape, Modifier.matchParentSize())
+                Box(Modifier.matchParentSize().clip(shape).indication(interaction, ripple()))
+                if (selected) Box(Modifier.matchParentSize().border(2.5.dp, MaterialTheme.colorScheme.primary, shape))
             }
+            if (selecting || selected) SelectMark(selected, Modifier.align(Alignment.TopEnd).padding(6.dp), onImage = true)
+        }
+        Text(
+            shownName(file.name), style = MaterialTheme.typography.labelMedium, color = Agora.colors.heading, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 2.dp, end = 2.dp, top = 6.dp)
+        )
+        val size = formatSize(file.size, Dates.locale(LocalContext.current))
+        if (size.isNotBlank()) Text(size, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(horizontal = 2.dp))
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String, count: Int) {
+    Row(Modifier.padding(start = 2.dp, top = 10.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        CapsLabel(text)
+        Text(
+            count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+/** What the member may do in the open folder: only look, or also add (managers know it). */
+@Composable
+private fun AccessNote(access: String) {
+    val read = access == "read"
+    val color = if (read) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.clip(CircleShape).background(if (read) Agora.colors.surfaceAlt else color.copy(alpha = 0.08f)).padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(if (read) Icons.Outlined.Visibility else Icons.Outlined.UploadFile, null, Modifier.size(13.dp), tint = color)
             Text(
-                file.name, style = MaterialTheme.typography.labelLarge, color = Agora.colors.heading, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp)
-            )
-            val meta = entryMeta(file.size, file.modified)
-            if (meta.isNotBlank()) Text(
-                meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp)
+                stringResource(if (read) R.string.media_access_read else R.string.media_access_write),
+                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = color, modifier = Modifier.padding(start = 6.dp)
             )
         }
-        // The ripple in the tile's rounded shape, on its own: clipping the whole tile cut off the picture's shadow
-        Box(Modifier.matchParentSize().clip(RoundedCornerShape(18.dp)).indication(interaction, ripple()))
+    }
+}
+
+/** An empty folder or one that could not be loaded: the folder motif with a word, and what can be done. */
+@Composable
+private fun FolderMessage(title: String, subtitle: String? = null, action: @Composable () -> Unit = {}) {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        MotifIcon(Motif.Folder, 76.dp, Modifier.padding(bottom = 6.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, color = Agora.colors.heading, textAlign = TextAlign.Center)
+        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        action()
     }
 }
 

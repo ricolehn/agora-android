@@ -17,6 +17,7 @@
     <string name="media_empty_hint">Füge Dateien mit dem Plus unten rechts hinzu.</string>
     <string name="media_section_folders">Ordner</string>
     <string name="media_section_files">Dateien</string>
+    <string name="media_path_between">Ordner dazwischen</string>
     <string name="media_access_read">Nur lesen</string>
     <string name="media_access_write">Du kannst hier Dateien hinzufügen</string>
     <string name="media_download">Herunterladen</string>
@@ -77,8 +78,6 @@
     <string name="media_level_groups">Wie Gruppen</string>
     <string name="media_level_all">Wie alle Mitglieder</string>
     <string name="media_from_above">Von %1$s: %2$s</string>
-    <string name="media_has_rights">Hat eigene Rechte</string>
-    <string name="media_hidden_for_some">Für manche ohne Zugriff</string>
     <string name="media_rights_save">Speichern</string>
     <string name="media_rights_saved">Ordnerrechte gespeichert</string>
     <string name="media_rights_load_failed">Die Ordnerrechte konnten nicht geladen werden</string>

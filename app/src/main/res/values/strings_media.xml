@@ -18,6 +18,7 @@
     <string name="media_empty_hint">Add files with the plus at the bottom right.</string>
     <string name="media_section_folders">Folders</string>
     <string name="media_section_files">Files</string>
+    <string name="media_path_between">Folders in between</string>
     <string name="media_access_read">Read only</string>
     <string name="media_access_write">You can add files here</string>
     <string name="media_download">Download</string>
@@ -78,8 +79,6 @@
     <string name="media_level_groups">As their groups</string>
     <string name="media_level_all">As all members</string>
     <string name="media_from_above">From %1$s: %2$s</string>
-    <string name="media_has_rights">Has rights of its own</string>
-    <string name="media_hidden_for_some">No access for some</string>
     <string name="media_rights_save">Save</string>
     <string name="media_rights_saved">Folder rights saved</string>
     <string name="media_rights_load_failed">The folder rights could not be loaded</string>
