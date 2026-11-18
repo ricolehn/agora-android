@@ -9,13 +9,25 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -34,10 +46,14 @@ import org.agora.app.data.MediaFile
 import org.agora.app.data.MediaFolder
 import org.agora.app.data.MediaListing
 import org.agora.app.data.local.ThemeMode
+import org.agora.app.ui.components.LocalSharedTransition
 import org.agora.app.ui.components.ProvideAppLocals
 import org.agora.app.ui.media.MediaScreen
+import org.agora.app.ui.media.pathSteps
 import org.agora.app.ui.theme.AgoraTheme
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -47,12 +63,16 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
 import java.util.Random
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The media library (MediaScreen.kt) against a [FakeServer] with folders, pictures, a video, music and documents: a
  * folder opens with a tap and back goes up again, and it draws light, dark and on a tablet. With
  * -PscreenshotsOut=<dir> the drawings are also saved there as pictures.
  */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, sdk = [35], qualifiers = "de-w390dp-h844dp-xxhdpi")
@@ -63,19 +83,29 @@ class MediaScreenTest {
     private val out = System.getProperty("agora.screenshots.out").orEmpty()
     private val server = FakeServer()
     private var theme by mutableStateOf(ThemeMode.LIGHT)
+    /** The folders the server knows. */
+    private var library = LIBRARY
+    /** Folders whose answer waits until the test lets it go (as on a slow connection). */
+    private val held = ConcurrentHashMap<String, CountDownLatch>()
 
     @Before
     fun serve() {
         server.on("GET", "/api/media/list") { query ->
-            LIBRARY[query["path"].orEmpty()]?.let { 200 to Json.encodeToString(MediaListing.serializer(), it) } ?: (404 to """{"error":"Not found"}""")
+            val path = query["path"].orEmpty()
+            held[path]?.await(20, TimeUnit.SECONDS)
+            library[path]?.let { 200 to Json.encodeToString(MediaListing.serializer(), it) } ?: (404 to """{"error":"Not found"}""")
         }
         server.onBytes("GET", "/api/media/preview") { query -> "image/png" to photo(query["path"].orEmpty(), query["size"]?.toIntOrNull() ?: 256) }
     }
 
     @After
-    fun stop() = server.close()
+    fun stop() {
+        held.values.forEach { it.countDown() }
+        server.close()
+    }
 
-    private fun show() {
+    /** [lookahead]: inside a SharedTransitionLayout like in the app (AgoraApp), where layout runs ahead and then follows. */
+    private fun show(lookahead: Boolean = false) {
         val container = AppContainer(context).apply {
             api.baseUrl = server.base
             api.token = "token"
@@ -89,7 +119,11 @@ class MediaScreenTest {
         }
         compose.setContent {
             AgoraTheme(theme) {
-                ProvideAppLocals(container, SnackbarHostState()) { MediaScreen(onBack = {}) }
+                ProvideAppLocals(container, SnackbarHostState()) {
+                    if (lookahead) SharedTransitionLayout {
+                        CompositionLocalProvider(LocalSharedTransition provides this) { MediaScreen(onBack = {}) }
+                    } else MediaScreen(onBack = {})
+                }
             }
         }
         settle()
@@ -223,6 +257,137 @@ class MediaScreenTest {
         draw("media-deep-dark")
     }
 
+    /**
+     * Going back the path loses its last pill at once and the folder above becomes the open one: in every frame exactly
+     * the pills of the new path, and one painted as open. (The pills were a LazyRow with animated items: the pill going
+     * away faded on its own while the row jumped to the open pill, which stopped the fading - on a phone it then stayed
+     * half behind the open pill until the next folder.)
+     */
+    @Test
+    fun goingBackThePathHasOneOpenFolder() {
+        show(lookahead = true)
+        val way = listOf("Fotos", "2026", "Sommerfest", "Samstag", "Nachmittag")
+        way.forEach { name ->
+            compose.onAllNodesWithText(name).onFirst().performClick()
+            settle(4)
+        }
+        compose.mainClock.autoAdvance = false
+        for (level in way.size - 1 downTo 0) {
+            val above = way.take(level).joinToString("/")
+            compose.onNodeWithContentDescription(context.getString(R.string.back)).performClick()
+            repeat(20) { frame ->
+                compose.mainClock.advanceTimeBy(16)
+                assertEquals("frame $frame, back to \"$above\"", pathOf(above), path())
+                if (frame < 6 || frame % 4 == 0) assertEquals("open pills drawn, frame $frame, back to \"$above\"", 1, openPillsDrawn())
+            }
+            compose.mainClock.advanceTimeBy(1000)
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** While a folder seen for the first time loads, the header keeps the shield (its rights) and the list of all rights. */
+    @Test
+    fun theHeaderKeepsItsIconsWhileAFolderLoads() {
+        show(lookahead = true)
+        held["Fotos"] = CountDownLatch(1)
+        compose.onAllNodesWithText("Fotos").onFirst().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Sommerfest 2026").assertDoesNotExist()
+        compose.onNodeWithContentDescription(context.getString(R.string.media_rights_title)).assertExists()
+        compose.onNodeWithContentDescription(context.getString(R.string.media_rules_overview)).assertExists()
+        held.getValue("Fotos").countDown()
+        settle()
+        compose.onNodeWithText("Sommerfest 2026").assertIsDisplayed()
+    }
+
+    /**
+     * The title keeps its place when the header's room shrinks while it moves - here the rights come only with the opened
+     * folder's answer, so the shield and the list appear while the long name still rises. (Its width was animated:
+     * wider than the header then allowed, it was centred - onto the back button - and slid back.)
+     */
+    @Test
+    fun theTitleStaysInPlaceWhenTheHeaderNarrowsWhileItMoves() {
+        library = mapOf(
+            "" to MediaListing(access = "write", canManage = false, folders = listOf(folder(LONG, "2026-08-23", 120_000_000))),
+            LONG to MediaListing(path = LONG, name = LONG, access = "write", canManage = true, files = pictures(LONG, "Bild", 3, "2026-08-23"))
+        )
+        show(lookahead = true)
+        compose.onNodeWithContentDescription(context.getString(R.string.media_rights_title)).assertDoesNotExist()
+        held[LONG] = CountDownLatch(1)
+        compose.mainClock.autoAdvance = false
+        compose.onAllNodesWithText(LONG).onFirst().performClick()
+        val lefts = mutableListOf<Float>()
+        repeat(40) { frame ->
+            // The answer comes while the title is on its way
+            if (frame == 12) {
+                held.getValue(LONG).countDown()
+                Thread.sleep(400)
+            }
+            compose.mainClock.advanceTimeBy(16)
+            lefts += title(LONG).boundsInRoot.left
+        }
+        compose.mainClock.autoAdvance = true
+        settle()
+        compose.onNodeWithContentDescription(context.getString(R.string.media_rights_title)).assertExists()
+        val place = title(LONG).boundsInRoot.left
+        assertTrue("the title left its place ($place): $lefts", lefts.all { it >= place - 1f })
+    }
+
+    /** What lies in the path under the title (the one row that scrolls sideways). */
+    private val inPath = hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+
+    /** The pills of the path as they stand, left to right: their names, the base folder's sign and "…" by what they say. */
+    private fun path(): List<String> = pathNodes().map { it.second }
+
+    private fun pathNodes(): List<Pair<SemanticsNode, String>> =
+        compose.onAllNodes(inPath).fetchSemanticsNodes().mapNotNull { node ->
+            val text = node.config.getOrNull(SemanticsProperties.Text)?.joinToString { it.text }
+            val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()
+            (text?.takeIf { it.isNotEmpty() } ?: said?.takeIf { it.isNotEmpty() })?.let { node to it }
+        }.sortedBy { it.first.boundsInRoot.left }
+
+    /** The pills [path] should have. */
+    private fun pathOf(path: String): List<String> = pathSteps(path, context.getString(R.string.media_title)).map { step ->
+        if (step.folded.isNotEmpty()) context.getString(R.string.media_path_between) else step.name
+    }
+
+    /**
+     * How many pills are painted as the open folder (its warm fill), along the line through the middle of the path - in
+     * the picture as drawn, where a pill on its way out still shows.
+     */
+    private fun openPillsDrawn(): Int {
+        val middle = pathNodes().first().first.boundsInRoot.center.y.toInt()
+        val picture = compose.onRoot().captureToImage().toPixelMap()
+        var pills = 0
+        var warm = 0
+        var gap = Int.MAX_VALUE
+        for (x in 0 until picture.width) {
+            if (isOpenFill(picture[x, middle])) {
+                // Letters interrupt a pill's fill briefly; the arrow between two pills is wider
+                if (gap > 40 && warm > 0) {
+                    if (warm >= 30) pills++
+                    warm = 0
+                }
+                warm++
+                gap = 0
+            } else gap++
+        }
+        if (warm >= 30) pills++
+        return pills
+    }
+
+    /** The open pill's fill in the light theme: F6C7A4 brought 12 to 38 % towards white (MediaScreen.openStep). */
+    private fun isOpenFill(color: Color): Boolean {
+        val r = color.red * 255
+        val g = color.green * 255
+        val b = color.blue * 255
+        return r >= 243 && g in 200f..225f && b in 168f..205f && r - b >= 40
+    }
+
+    /** The open folder's name in the header - not its pill in the path, not its row in the list. */
+    private fun title(name: String): SemanticsNode =
+        compose.onAllNodes(hasText(name) and !hasClickAction() and !inPath).fetchSemanticsNodes().single()
+
     @Test
     @Config(qualifiers = "de-w800dp-h1280dp-xhdpi")
     fun drawsOnTablets() {
@@ -231,6 +396,9 @@ class MediaScreenTest {
     }
 
     private companion object {
+        /** A name too long for the header, cut with the icons beside it and without. */
+        const val LONG = "Gemeindefreizeit am See, Samstagabend"
+
         fun folder(path: String, modified: String, size: Long, rules: Boolean = false, hiddenFor: List<String> = emptyList()) = MediaFolder(
             name = path.substringAfterLast('/'), path = path, size = size, modified = "${modified}T10:00:00.000Z",
             access = "write", canDelete = true, hasRules = rules, hiddenFor = hiddenFor

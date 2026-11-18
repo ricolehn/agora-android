@@ -14,7 +14,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -24,6 +23,8 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -39,6 +40,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,15 +58,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -95,6 +95,8 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -263,7 +265,8 @@ fun MediaScreen(onBack: () -> Unit) {
     val sort by vm.sort.collectAsStateWithLifecycle()
     val transfer by vm.transfer.collectAsStateWithLifecycle()
     val data by store.data.collectAsStateWithLifecycle()
-    val canManage = data.media.canManage || page.listing?.canManage == true
+    // Also while a folder loads (its page keeps what the folder before said)
+    val canManage = data.media.canManage || page.manages
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()
     val runner = rememberActionRunner()
@@ -391,8 +394,10 @@ fun MediaScreen(onBack: () -> Unit) {
                     titleContent = { FolderTitle(page.path) },
                     actions = {
                         SortMenu(sort, vm::setSort)
-                        // Managers: the rights of the open folder (shield) and of every folder that has some (list)
-                        if (canManage && listing != null) IconButton(onClick = { rightsFor = page.path }) {
+                        // Managers: the rights of the open folder (shield) and of every folder that has some (list).
+                        // The shield stays while the folder loads (not only once it is there): gone and back with
+                        // the answer, it narrowed the title in the middle of its move
+                        if (canManage && page.error == null) IconButton(onClick = { rightsFor = page.path }) {
                             Icon(Icons.Outlined.Shield, stringResource(R.string.media_rights_title), tint = Agora.colors.heading)
                         }
                         if (canManage) IconButton(onClick = { overview = true }) {
@@ -590,7 +595,12 @@ private fun folderTransition(from: String, to: String): ContentTransform {
     return ContentTransform(enter, exit, sizeTransform = SizeTransform(clip = false))
 }
 
-/** The open folder's name in the header, moving along with the page. */
+/**
+ * The open folder's name in the header, moving along with the page. Its width is not animated (no SizeTransform): it
+ * has the header's room anyway, and an animated width could outgrow that room when it narrows during the move - when
+ * the shield came back with the folder's answer, Compose centred the too-wide title, so it jumped onto the back button
+ * and slid back.
+ */
 @Composable
 private fun FolderTitle(path: String) {
     val root = stringResource(R.string.media_title)
@@ -600,7 +610,7 @@ private fun FolderTitle(path: String) {
             val way = if (depth(targetState) >= depth(initialState)) 1 else -1
             (slideInVertically(tween(320, easing = FastOutSlowInEasing)) { way * it } + fadeIn(tween(200, delayMillis = 60)))
                 .togetherWith(slideOutVertically(tween(260)) { -way * it } + fadeOut(tween(120)))
-                .using(SizeTransform(clip = false))
+                .using(null)
         },
         contentAlignment = Alignment.CenterStart,
         label = "title"
@@ -617,6 +627,11 @@ private fun FolderTitle(path: String) {
  * the open one painted in the library's warm colours. From three folders down the base folder shows only its sign;
  * deeper than three the middle is folded into "…" (its folders in a menu), so the way home, the folder above and the
  * open one stay in sight on a phone. What still does not fit fades out at the edges.
+ *
+ * A plain row that keeps its end in sight (scrolled from the end) instead of a LazyRow with animated items: going
+ * back, its jump to the open pill (animateScrollToItem ends in snapToItem) reset the items' animations while the pill
+ * that went away was fading - it stayed, nearly opaque, half behind the open pill until the next folder - and folding
+ * into "…" slid pills across each other. A pill that comes with a new path fades in, one that goes away goes at once.
  */
 @Composable
 private fun PathBar(path: String, onOpen: (String) -> Unit) {
@@ -624,36 +639,55 @@ private fun PathBar(path: String, onOpen: (String) -> Unit) {
     val steps = remember(path, rootName) { pathSteps(path, rootName) }
     // From three folders down the base folder makes room
     val compactRoot = steps.size >= 4
-    val list = rememberLazyListState()
-    // The open folder always in sight
-    LaunchedEffect(steps) { list.animateScrollToItem(steps.lastIndex) }
+    // 0 is the end of the way: the open folder stays in sight however the path changes
+    val scroll = rememberScrollState()
+    LaunchedEffect(steps) { if (scroll.value != 0) scroll.animateScrollTo(0) }
+    // The pills there when the library opens just stand; later ones fade in
+    val opened = remember { booleanArrayOf(false) }
+    SideEffect { opened[0] = true }
     Box(Modifier.fillMaxWidth().frosted().padding(top = 2.dp, bottom = 10.dp)) {
-        LazyRow(
-            Modifier.fillMaxWidth().fadingEdges({ list.canScrollBackward }, { list.canScrollForward }),
-            state = list,
-            contentPadding = PaddingValues(horizontal = 20.dp),
+        Row(
+            Modifier
+                .fadingEdges({ scroll.value < scroll.maxValue }, { scroll.value > 0 })
+                .horizontalScroll(scroll, reverseScrolling = true)
+                .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            itemsIndexed(steps, key = { _, step -> if (step.folded.isEmpty()) step.target else "…" }) { index, step ->
-                Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
-                    if (index > 0) Icon(
-                        Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(horizontal = 4.dp).size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                    if (step.folded.isNotEmpty()) FoldedSteps(step.folded, onOpen)
-                    else PathPill(step, open = index == steps.lastIndex, compact = step.root && compactRoot) { onOpen(step.target) }
+            steps.forEachIndexed { index, step ->
+                key(stepKey(step)) {
+                    Row(Modifier.appearing(fade = opened[0]), verticalAlignment = Alignment.CenterVertically) {
+                        if (index > 0) Icon(
+                            Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.padding(horizontal = 4.dp).size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                        if (step.folded.isNotEmpty()) FoldedSteps(step.folded, onOpen)
+                        else PathPill(step, open = index == steps.lastIndex, compact = step.root && compactRoot) { onOpen(step.target) }
+                    }
                 }
             }
         }
     }
 }
 
-/** A step of the path; [compact]: the base folder only as its sign. */
+/** A step's key in the path: the folder it opens, the folded middle always the same one. */
+private fun stepKey(step: PathStep): Any = if (step.folded.isEmpty()) step.target else "…"
+
+/** Fades in once when it comes ([fade]) - at once: the pills it replaces are already gone. */
+@Composable
+private fun Modifier.appearing(fade: Boolean): Modifier {
+    val alpha = remember { Animatable(if (fade) 0f else 1f) }
+    LaunchedEffect(alpha) { alpha.animateTo(1f, tween(180, easing = LinearOutSlowInEasing)) }
+    return graphicsLayer { this.alpha = alpha.value }
+}
+
+/**
+ * A step of the path; [compact]: the base folder only as its sign. Its width changes at once, not animated: the row
+ * keeps its end in sight, so a base folder still shrinking made the row too wide for a moment and pushed it out.
+ */
 @Composable
 private fun PathPill(step: PathStep, open: Boolean, compact: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
-            .animateContentSize()
             .then(
                 if (open) Modifier.openStep(CircleShape)
                 else Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).border(1.dp, Agora.colors.hairline, CircleShape)

@@ -35,8 +35,17 @@ import org.agora.app.data.uploadMedia
 import java.io.File
 import java.security.MessageDigest
 
-/** The open folder: its listing (null until the first answer), or the error shown instead. */
-data class MediaPage(val path: String = "", val listing: MediaListing? = null, val error: String? = null)
+/**
+ * The open folder: its listing (null until the first answer), or the error shown instead. [manages]: the member sets
+ * the folders' rights - the same in every folder, so a folder still loading keeps what the folder before said (the
+ * header keeps its shield instead of losing it and getting it back with the answer, in the middle of the move).
+ */
+data class MediaPage(
+    val path: String = "",
+    val listing: MediaListing? = null,
+    val error: String? = null,
+    val manages: Boolean = listing?.canManage == true
+)
 
 /** An upload or download in progress; [total] < 0 while the length is unknown. */
 data class MediaTransfer(val upload: Boolean, val done: Long = 0, val total: Long = -1) {
@@ -79,7 +88,8 @@ class MediaViewModel(private val c: AppContainer, context: Context) : ViewModel(
     /** Opens [path]: the folder seen before shows at once, the server is asked in any case. */
     fun open(path: String) {
         if (path != _page.value.path) _selected.value = emptySet()
-        _page.value = MediaPage(path, cache[path])
+        val seen = cache[path]
+        _page.value = MediaPage(path, seen, manages = seen?.canManage ?: _page.value.manages)
         load()
     }
 
@@ -93,7 +103,7 @@ class MediaViewModel(private val c: AppContainer, context: Context) : ViewModel(
                 cache[path] = listing
                 if (_page.value.path != path) return@launch
                 // Unchanged: nothing redraws (the same data class compares equal)
-                _page.update { if (it.listing == listing && it.error == null) it else it.copy(listing = listing, error = null) }
+                _page.update { if (it.listing == listing && it.error == null) it else it.copy(listing = listing, error = null, manages = listing.canManage) }
                 val present = (listing.folders.map { it.name } + listing.files.map { it.name }).toSet()
                 _selected.update { it intersect present }
             } catch (e: CancellationException) {
