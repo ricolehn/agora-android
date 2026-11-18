@@ -23,8 +23,8 @@ android {
         // Set only by the Release APK workflow (.github/workflows/release-apk.yml), not by hand and not by
         // AI agents: when a release is published, it sets versionName to the tag (without v), raises versionCode
         // to the next number and commits both to the release's branch. Keep both lines as plain literals.
-        versionCode = 29
-        versionName = "1.4.0-beta3"
+        versionCode = 30
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
