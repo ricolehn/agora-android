@@ -310,11 +310,10 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
     // sum, which left it floating above the keyboard by the height of the navigation bar
     val density = LocalDensity.current
     val keyboard = with(density) { WindowInsets.ime.getBottom(density).toDp() }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(top = contentPadding.calculateTopPadding(), bottom = maxOf(contentPadding.calculateBottomPadding(), keyboard))
-    ) {
+    // That room lies inside the input bar's glass, which so runs down to the screen's edge like the bottom bars of
+    // the other pages: kept free under the bar, a strip of the plain page stood between the glass and the edge
+    val below = maxOf(contentPadding.calculateBottomPadding(), keyboard)
+    Column(Modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
         // The small sign before the title, "New chat" as a quiet M3 button (web: .ai-chat-title, .ai-new-chat-btn)
         Row(Modifier.fillMaxWidth().padding(start = if (onBack != null) 8.dp else 20.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             // Back to Extras (the chat is one of its apps)
@@ -337,7 +336,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
           Box(Modifier.fillMaxSize().frostSource(frost).background(MaterialTheme.colorScheme.background)) {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp + inputHeight),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp + inputHeight + below),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -356,7 +355,7 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
                 visible = entries.isEmpty(),
                 exit = fadeOut(tween(340)) + slideOutVertically(tween(340)) { -it / 12 } + scaleOut(tween(340), targetScale = 0.97f),
                 enter = androidx.compose.animation.fadeIn(tween(250)),
-                modifier = Modifier.fillMaxSize().padding(bottom = inputHeight)
+                modifier = Modifier.fillMaxSize().padding(bottom = inputHeight + below)
             ) {
                 AiWelcome(
                     firstName = user.firstName.ifBlank { user.fullName }.trim().substringBefore(' '),
@@ -376,12 +375,11 @@ fun AiChatScreen(user: User, contentPadding: PaddingValues, onBack: (() -> Unit)
           }
         Surface(
             color = Color.Transparent,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .onSizeChanged { inputHeight = with(density) { it.height.toDp() } }
-                .frosted(frost, tint = frostSurface())
+            modifier = Modifier.align(Alignment.BottomCenter).frosted(frost, tint = frostSurface())
         ) {
-          Column {
+          // The bar's own height is measured without the room under it: that one moves with the keyboard, and the
+          // messages' end follows it in the same frame instead of one later
+          Column(Modifier.padding(bottom = below).onSizeChanged { inputHeight = with(density) { it.height.toDp() } }) {
             // Transparency for AI-generated content (Google Play AI policy)
             Text(
                 stringResource(R.string.ai_disclaimer), style = MaterialTheme.typography.labelSmall,
