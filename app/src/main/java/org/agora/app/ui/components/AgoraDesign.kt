@@ -562,13 +562,16 @@ fun SubPageHeader(
     leading: (@Composable () -> Unit)? = null,
     // In place of the title's text, e.g. one that moves when it changes (the media library's folders)
     titleContent: (@Composable () -> Unit)? = null,
+    // false: the header lies on a glass it shares with what stands under it (the media library's path) - two
+    // glasses of their own showed a seam between them when pictures scrolled through underneath
+    glass: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
         modifier
             .fillMaxWidth()
             // Glass over the content running on underneath (opaque page colour when the page has no source)
-            .frosted()
+            .then(if (glass) Modifier.frosted() else Modifier)
             .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .heightIn(min = 48.dp),
