@@ -377,7 +377,9 @@ fun MediaScreen(onBack: () -> Unit) {
     val title = if (page.path.isEmpty()) stringResource(R.string.media_title) else folderName(page.path)
     FrostScaffold(
         topBar = {
-            Column {
+            // One glass for the header and the path under it: each with its own, the two blurred their part of
+            // the pictures on their own and a seam showed between them while scrolling
+            Column(Modifier.fillMaxWidth().frosted()) {
                 if (selecting) SelectionHeader(
                     count = selected.size,
                     allSelected = selected.size >= folders.size + files.size,
@@ -392,6 +394,7 @@ fun MediaScreen(onBack: () -> Unit) {
                     title,
                     onBack = { if (page.path.isNotEmpty()) vm.open(parentPath(page.path)) else onBack() },
                     titleContent = { FolderTitle(page.path) },
+                    glass = false,
                     actions = {
                         SortMenu(sort, vm::setSort)
                         // Managers: the rights of the open folder (shield) and of every folder that has some (list).
@@ -645,7 +648,8 @@ private fun PathBar(path: String, onOpen: (String) -> Unit) {
     // The pills there when the library opens just stand; later ones fade in
     val opened = remember { booleanArrayOf(false) }
     SideEffect { opened[0] = true }
-    Box(Modifier.fillMaxWidth().frosted().padding(top = 2.dp, bottom = 10.dp)) {
+    // No glass of its own: it lies on the one it shares with the header
+    Box(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 10.dp)) {
         Row(
             Modifier
                 .fadingEdges({ scroll.value < scroll.maxValue }, { scroll.value > 0 })
@@ -991,7 +995,7 @@ private fun SortMenu(sort: MediaSort, onSort: (MediaSort) -> Unit) {
     }
 }
 
-/** In the header's place while entries are selected: how many, all / none, download and delete. */
+/** In the header's place while entries are selected: how many, all / none, download and delete. On the header's glass. */
 @Composable
 private fun SelectionHeader(
     count: Int,
@@ -1007,7 +1011,7 @@ private fun SelectionHeader(
     val snackbar = LocalSnackbar.current
     val scope = rememberCoroutineScope()
     Row(
-        Modifier.fillMaxWidth().frosted().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp).heightIn(min = 48.dp),
+        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp).heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onClear) { Icon(Icons.Outlined.Close, stringResource(R.string.media_select_clear), tint = Agora.colors.heading) }
